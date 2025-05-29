@@ -1,6 +1,6 @@
 # Benchmarking Pipeline
 
-A flexible and modular benchmarking pipeline for machine learning models, with support for both Prefect and Dagster orchestration.
+A flexible and modular benchmarking pipeline for machine learning models.
 
 ## Project Structure
 
@@ -11,7 +11,7 @@ benchmarking_pipeline/
 │   └── my_model/
 │       └── model.py
 ├── pipeline/             # Core pipeline components
-│   ├── data_loader.py    # Data loading functionality
+│   ├── data_loader.py    # Data loading functionality (HuggingFace datasets)
 │   ├── preprocessing.py   # Data preprocessing
 │   ├── feature_extraction.py  # Feature extraction
 │   ├── trainer.py        # Model training
@@ -40,14 +40,7 @@ pip install -r requirements.txt
 
 2. Run the benchmark using the CLI:
 ```bash
-# Run with Prefect (default)
 python benchmarking_pipeline/cli.py --config configs/default_config.yaml
-
-# Run with Dagster
-python benchmarking_pipeline/cli.py --config configs/default_config.yaml --orchestrator dagster
-
-# Launch Dagster UI (Dagit)
-dagit -f benchmarking_pipeline/orchestration/dagster_job.py
 ```
 
 ## Configuration
@@ -59,8 +52,8 @@ The pipeline is configured using YAML files in the `configs/` directory. See `co
 - Flexible model benchmarking pipeline
 - Support for HuggingFace datasets
 - Modular preprocessing and feature extraction
-- Multiple orchestration options (Prefect/Dagster)
 - Comprehensive logging and metrics tracking
+- Configurable model training and evaluation
 
 ## Contributing
 
