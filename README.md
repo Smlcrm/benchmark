@@ -7,6 +7,7 @@ A flexible and modular benchmarking pipeline for machine learning models.
 ```
 benchmarking_pipeline/
 ├── configs/                # User-defined YAML/JSON files for test configuration
+├── datasets/              # User-extendable dataset chunks 
 ├── models/               # User-pluggable models as Python classes
 │   └── my_model/
 │       └── model.py
