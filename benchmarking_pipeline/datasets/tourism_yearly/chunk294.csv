@@ -1,2 +1,3 @@
-item_id,start,freq,target
-T399,1981-12-31 00:00:00,A-DEC,"[[144.0, 208.0, 204.0, 196.0, 244.0, 200.0, 263.0, 281.0, 394.0, 374.0, 535.0, 470.0, 732.0, 712.0, 963.0, 675.0, 745.0, 918.0, 885.0, 777.0]]"
+version https://git-lfs.github.com/spec/v1
+oid sha256:94a7884bbebb9f87f86abac7cdb16c9265f5cec305cde1c0d34019953e9bc8e9
+size 200
