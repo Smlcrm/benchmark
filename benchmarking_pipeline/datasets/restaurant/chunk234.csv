@@ -1,2 +1,3 @@
-item_id,start,target,freq
-air_5b704df317ed1962,2017-01-10 00:00:00,"[[2.0, 1.0, 3.0, nan, 2.0, 1.0, 1.0, 2.0, nan, 2.0, 1.0, 1.0, 1.0, 2.0, nan, 2.0, nan, 2.0, 1.0, 1.0, 2.0, 2.0, nan, 2.0, nan, 2.0, 3.0, 1.0, 1.0, 4.0, 1.0, 2.0, 1.0, 3.0, nan, 2.0, 1.0, 3.0, nan, 2.0, 2.0, nan, 2.0, 1.0, 2.0]]",D
+version https://git-lfs.github.com/spec/v1
+oid sha256:13fc6f6d8d2e37895b8cb011eb2c336bb6d56a2550151ceeb36652e43a7f6ebb
+size 306
