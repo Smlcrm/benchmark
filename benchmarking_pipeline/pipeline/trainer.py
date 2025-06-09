@@ -122,17 +122,15 @@ class Trainer:
             exog = data[self.exog_cols] if self.exog_cols and self.exog_cols in data.columns else None
             
             # Re-initialize the model with data, as this is the statsmodels pattern
-            # The passed 'model' object mainly serves to define the type and params
+            # The passed 'model' object serves to define the type and params
             model_class = model.__class__
             model_params = model.get_params() # Assumes a get_params method or access to params
             
-            # This part is a bit tricky as statsmodels models are initialized differently
-            # A simpler approach is to expect the user to pass an un-fitted but data-attached model
-            # For this example, let's assume the model passed is just for type-checking and params
+            # Statsmodels models are initialized with the data
+            # We assume the model we are passed is just a template for the parameters we want, ignoring the data the model was initialized with
             if isinstance(model, (ARIMA, SARIMAX)):
                  fitted_model = model_class(endog=endog, exog=exog, **model_params).fit()
             elif isinstance(model, ExponentialSmoothing):
-                 # ExponentialSmoothing has a slightly different init signature
                  fitted_model = model_class(endog=endog, trend=model.trend, seasonal=model.seasonal, seasonal_periods=model.seasonal_periods, damped_trend=model.damped_trend).fit()
             return fitted_model
 
