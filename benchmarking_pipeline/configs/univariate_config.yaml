@@ -1,0 +1,42 @@
+test_type: univariate
+
+dataset:
+  name: bdg-2_bear
+  path: datasets//bdg-2_bear
+  frequency: H
+  forecast_horizon: 144
+  split_ratio: [0.6, 0.2, 0.2]
+  normalize: true
+  handle_missing: interpolate
+
+features:
+  lags: [1, 2, 3, 24, 168]  # For tree/linear models
+  rolling_windows: [7, 30]
+  seasonal_features: true
+  trend_features: true
+
+training:
+  cross_validation:
+    method: "time_series_split"
+    n_splits: 3
+    test_size: 0.2
+  
+  early_stopping:
+    patience: 10
+    monitor: "val_loss"
+
+model:
+  name: all
+
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse, smape]
+
+logging:
+  group: "univariate-tests"
+  seed: 42
+
+output:
+  save_predictions: true
+  save_path: outputs/elecdemand_naive_short/
+
