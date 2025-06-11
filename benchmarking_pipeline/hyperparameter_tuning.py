@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import ast
 from statsmodels.tsa.arima.model import ARIMA
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error as MSE
 import itertools
 
 def intake_dataset(dataset_name, num_chunks):
@@ -86,21 +86,21 @@ def hyperparameter_grid_search(time_series, p_list, d_list, q_list, model_type):
       if aic < lowest_score:
         lowest_score = aic
         best_hyperparameters = hyperparameter_setting
-        best_model = model
+        best_model = model_fit
     print(f"Lowest Score: {lowest_score}")
   else:
     raise NotImplementedError("This has not been implemented yet, or is an invalid model type.")
   assert best_model != None, "This method was unable to train a good model."
-  return best_hyperparameters, best_model
-
-
+  return best_model, best_hyperparameters
 
 
 if __name__ == "__main__":
   """
   This main function contains a proof of concept procedure where we do hyperparameter grid search using the ARIMA model. 
   """
-  list_of_dataframes = intake_dataset('australian_electricity_demand', 5)
+  desired_dataset = 'australian_electricity_demand'
+  num_chunks = 5
+  list_of_dataframes = intake_dataset(desired_dataset, num_chunks)
   #print(f"Australian Electricity Demand Dataset: {intake_dataset('australian_electricity_demand', 5)}")
   preprocessed_dataset_chunks = dataset_preprocess(list_of_dataframes,"ARIMA")
   list_of_tuples_of_splits_per_chunk = []
@@ -110,9 +110,33 @@ if __name__ == "__main__":
   p_values = range(0, 4)
   d_values = range(0, 2)
   q_values = range(0, 4)
-  list_of_best_arima_model_per_chunk_train_split = []
+  list_of_best_arima_hyperparameters_per_chunk_train_split = []
+  list_of_best_arima_models_per_chunk_train_split = []
   for tuple_split in list_of_tuples_of_splits_per_chunk:
     train, val, test = tuple_split
     best_model, best_hyperparameters = hyperparameter_grid_search(train,p_values,d_values, q_values,"ARIMA")
-    list_of_best_arima_model_per_chunk_train_split.append(best_model)
-  print(f"List of best ARIMA models: {list_of_best_arima_model_per_chunk_train_split}")
+    list_of_best_arima_models_per_chunk_train_split.append(best_model)
+    list_of_best_arima_hyperparameters_per_chunk_train_split.append(best_hyperparameters)
+  print(f"List of best ARIMA models per chunk: {list_of_best_arima_models_per_chunk_train_split}")
+  print(f"List of best ARIMA hyperparameters per chunk: {list_of_best_arima_hyperparameters_per_chunk_train_split}")
+  average_validation_scores = np.empty(num_chunks)
+  model_idx = 0
+  for testing_model in list_of_best_arima_models_per_chunk_train_split:
+    # Go over every split
+    print(f"Model Index: {model_idx}")
+    score_sum = 0
+    for tuple_split in list_of_tuples_of_splits_per_chunk:
+      train, val, test = tuple_split
+
+      val_forecast = testing_model.forecast(len(val))
+      current_score = MSE(val, val_forecast)
+      print(f"Current Model's Validation MSE: {current_score}")
+      score_sum += current_score
+    average_validation_scores[model_idx] = score_sum / num_chunks
+    model_idx += 1
+  best_arima_model_overall = list_of_best_arima_models_per_chunk_train_split[average_validation_scores.argmin()]
+  print(f"List of best ARIMA models per chunk: {list_of_best_arima_models_per_chunk_train_split}")
+  print(f"List of best ARIMA hyperparameters per chunk: {list_of_best_arima_hyperparameters_per_chunk_train_split}")
+  print(f"Average ARIMA model validations scores:{average_validation_scores}")
+  print(f"Best ARIMA model overall: {best_arima_model_overall}")
+    
