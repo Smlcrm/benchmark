@@ -23,6 +23,7 @@ from sktime.forecasting.theta import ThetaForecaster
 from sktime.forecasting.base import BaseForecaster
 
 # Baseline Models
+# Maybe move these to the models folder later
 
 class NaiveForecaster(BaseForecaster):
     """
