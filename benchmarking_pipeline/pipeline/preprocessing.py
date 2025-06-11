@@ -30,10 +30,7 @@ class Preprocessor:
         - univariate_config.yaml: dataset.normalize, dataset.handle_missing
         - default_config.yaml: preprocessing.normalize, preprocessing.remove_outliers
         """
-        # Start with preprocessing section if it exists
-        preprocessing_config = self.config.get('preprocessing', {})
         
-        # Override/supplement with dataset-level config if it exists
         dataset_config = self.config.get('dataset', {})
         if dataset_config:
             # Map dataset-level configs to preprocessing configs
@@ -66,7 +63,6 @@ class Preprocessor:
         elif strategy == 'backward_fill':
             return df.fillna(method='bfill')
         else:
-            # Default to forward fill then backward fill
             return df.fillna(method='ffill').fillna(method='bfill')
             
     def _normalize_features(self, df: pd.DataFrame, is_training: bool = True) -> pd.DataFrame:
