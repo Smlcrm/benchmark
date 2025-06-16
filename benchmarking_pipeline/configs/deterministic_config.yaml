@@ -1,4 +1,4 @@
-test_type: univariate
+test_type: deterministic
 dataset:
   name: taxi_30min
   path: datasets/taxi_30min
