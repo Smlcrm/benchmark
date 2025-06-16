@@ -9,48 +9,12 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from sktime.forecasting.theta import ThetaForecaster
 from sktime.forecasting.base import BaseForecaster
-
-# Define Baseline Forecasters
-class NaiveForecaster(BaseForecaster):
-    def _fit(self, y, X=None, fh=None):
-        self.last_value = y.iloc[-1]
-        return self
-
-    def _predict(self, fh=None, X=None):
-        return pd.Series(self.last_value, index=self.fh.to_absolute(self.cutoff))
-
-class SeasonalNaiveForecaster(BaseForecaster):
-    def __init__(self, sp=1):
-        super().__init__()
-        self.sp = sp
-
-    def _fit(self, y, X=None, fh=None):
-        self.y_train = y
-        return self
-
-    def _predict(self, fh=None, X=None):
-        fh_index = self.fh.to_absolute(self.cutoff)
-        predictions = []
-        for i in range(len(fh)):
-            pred_idx = len(self.y_train) - self.sp + i
-            predictions.append(self.y_train.iloc[pred_idx])
-        return pd.Series(predictions, index=fh_index)
-
-class DriftForecaster(BaseForecaster):
-    def _fit(self, y, X=None, fh=None):
-        self.y_1 = y.iloc[0]
-        self.y_t = y.iloc[-1]
-        self.t = len(y)
-        self.drift = (self.y_t - self.y_1) / (self.t - 1)
-        return self
-
-    def _predict(self, fh=None, X=None):
-        fh_index = self.fh.to_absolute(self.cutoff)
-        predictions = [self.y_t + h * self.drift for h in fh.to_relative(self.cutoff)]
-        return pd.Series(predictions, index=fh_index)
+from statsmodels.tsa.stattools import adfuller
+import warnings
+import itertools
 
 # Define the Trainer class
-class Trainer:
+class Trainer: #need to update this - move code to individual models.
     def __init__(self, config=None):
         self.config = config if config is not None else {}
         self.target_col = self.config.get('target_col', 'y')
@@ -66,17 +30,34 @@ class Trainer:
             model.fit(X_train, y_train)
             return model
 
-        elif isinstance(model, (ARIMA, SARIMAX, ExponentialSmoothing)):
+        elif isinstance(model, (ARIMA, SARIMAX)):
+            if not isinstance(data, pd.DataFrame):
+                raise ValueError(f"Data for {model_type} must be a Pandas DataFrame.")
+            
+            endog = data[self.target_col]
+            exog = data[self.exog_cols] if self.exog_cols and self.exog_cols in data.columns else None
+            
+            # Use grid search for ARIMA
+            best_model, best_hyperparameters = self._arima_grid_search(endog)
+            return best_model
+
+        elif isinstance(model, ExponentialSmoothing):
             if not isinstance(data, pd.DataFrame):
                 raise ValueError(f"Data for {model_type} must be a Pandas DataFrame.")
             endog = data[self.target_col]
-            exog = data[self.exog_cols] if self.exog_cols and self.exog_cols in data.columns else None
-            model_class = model.__class__
-
-            if isinstance(model, (ARIMA, SARIMAX)):
-                fitted_model = model_class(endog=endog, exog=exog).fit()
-            elif isinstance(model, ExponentialSmoothing):
-                fitted_model = model_class(endog=endog, trend="add", seasonal=None).fit()
+            
+            # Get ETS parameters from config
+            ets_params = self.config.get('model', {}).get('parameters', {})
+            trend = ets_params.get('trend', 'add')
+            seasonal = ets_params.get('seasonal', None)
+            seasonal_periods = ets_params.get('seasonal_periods', None)
+            
+            fitted_model = ExponentialSmoothing(
+                endog=endog,
+                trend=trend,
+                seasonal=seasonal,
+                seasonal_periods=seasonal_periods
+            ).fit()
             return fitted_model
 
         elif isinstance(model, BaseForecaster):
@@ -94,17 +75,3 @@ class Trainer:
 
         else:
             raise TypeError(f"Model type '{model_type}' is not supported by this trainer.")
-
-# Dry run for ARIMA
-np.random.seed(42)
-n = 50
-df = pd.DataFrame({'y': np.random.randn(n).cumsum()})
-
-config = {'target_col': 'y', 'model': {'name': 'ARIMA'}}
-model = ARIMA(endog=df['y'])
-trainer = Trainer(config)
-fitted_model = trainer.train(model, df)
-
-# Display the ARIMA model summary as a string
-summary_text = fitted_model.summary().as_text()
-print(summary_text)

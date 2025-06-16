@@ -1,0 +1,14 @@
+test_type: regularly_sampled
+dataset:
+  name: saugeenday
+  path: datasets/saugeenday
+  frequency: D
+  forecast_horizon: 144
+  split_ratio: [0.6, 0.2, 0.2]
+  normalize: true
+  handle_missing: interpolate
+model:
+  name: ARIMA
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse]
