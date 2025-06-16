@@ -3,7 +3,7 @@ Main script for orchestrating the end-to-end benchmarking pipeline.
 """
 
 from pipeline.data_loader import DataLoader
-from pipeline.preprocessing import Preprocessor
+from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from pipeline.feature_extraction import FeatureExtractor
 from pipeline.trainer import Trainer
 from pipeline.evaluator import Evaluator
