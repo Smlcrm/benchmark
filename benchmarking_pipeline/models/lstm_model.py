@@ -2,142 +2,242 @@
 LSTM model implementation.
 """
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping
-from .my_model.model import BaseModel
+from typing import Dict, Any, Union, Tuple
+import pickle
+import os
+from .base_model import BaseModel
+
 
 class LSTMModel(BaseModel):
-    def __init__(self, config):
+    def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize LSTM model with given configuration.
         
         Args:
             config: Configuration dictionary containing model parameters
-                - input_shape: tuple, shape of input sequences (sequence_length, n_features)
-                - lstm_units: list of int, number of LSTM units in each layer
-                - dense_units: list of int, number of dense units in each layer
-                - dropout_rate: float, dropout rate between layers
-                - learning_rate: float, learning rate for optimization
-                - loss: str, loss function name
-                - metrics: list of str, metrics to track
-                - early_stopping: bool, whether to use early stopping
-                - patience: int, patience for early stopping
+                - units: int, number of LSTM units
+                - layers: int, number of LSTM layers
+                - dropout: float, dropout rate
+                - learning_rate: float, learning rate for optimizer
+                - batch_size: int, batch size for training
+                - epochs: int, number of training epochs
+                - sequence_length: int, length of input sequences
+                - target_col: str, name of target column
+                - feature_cols: list of str, names of feature columns
+                - loss_functions: List[str], list of loss function names to use
+                - primary_loss: str, primary loss function for training
+                - forecast_horizon: int, number of steps to forecast ahead
+            config_file: Path to a JSON configuration file
         """
-        super().__init__(config)
+        super().__init__(config, config_file)
+        self.units = self.config.get('units', 50)
+        self.layers = self.config.get('layers', 1)
+        self.dropout = self.config.get('dropout', 0.2)
+        self.learning_rate = self.config.get('learning_rate', 0.001)
+        self.batch_size = self.config.get('batch_size', 32)
+        self.epochs = self.config.get('epochs', 100)
+        self.sequence_length = self.config.get('sequence_length', 10)
+        self.target_col = self.config.get('target_col', 'y')
+        self.feature_cols = self.config.get('feature_cols', None)
         self.model = None
-        self._build_model()
         
-    def _build_model(self):
-        """Build the LSTM model architecture."""
-        input_shape = self.config.get('input_shape', (10, 1))
-        lstm_units = self.config.get('lstm_units', [50, 30])
-        dense_units = self.config.get('dense_units', [20, 1])
-        dropout_rate = self.config.get('dropout_rate', 0.2)
+    def _build_model(self, input_shape: Tuple[int, int]) -> None:
+        """
+        Build the LSTM model architecture.
         
-        model = Sequential()
+        Args:
+            input_shape: Shape of input data (sequence_length, n_features)
+        """
+        self.model = Sequential()
         
         # Add LSTM layers
-        for i, units in enumerate(lstm_units):
-            if i == 0:
-                # First layer needs input shape
-                model.add(LSTM(
-                    units=units,
-                    input_shape=input_shape,
-                    return_sequences=(i < len(lstm_units) - 1)
-                ))
-            else:
-                model.add(LSTM(
-                    units=units,
-                    return_sequences=(i < len(lstm_units) - 1)
-                ))
-            model.add(Dropout(dropout_rate))
-            
-        # Add Dense layers
-        for units in dense_units[:-1]:
-            model.add(Dense(units=units, activation='relu'))
-            model.add(Dropout(dropout_rate))
-            
-        # Output layer
-        model.add(Dense(units=dense_units[-1]))
+        for i in range(self.layers):
+            return_sequences = i < self.layers - 1
+            self.model.add(LSTM(
+                units=self.units,
+                return_sequences=return_sequences,
+                input_shape=input_shape if i == 0 else None
+            ))
+            if self.dropout > 0:
+                self.model.add(Dropout(self.dropout))
+                
+        # Add output layer
+        self.model.add(Dense(self.forecast_horizon))
         
         # Compile model
-        model.compile(
-            optimizer=Adam(learning_rate=self.config.get('learning_rate', 0.001)),
-            loss=self.config.get('loss', 'mse'),
-            metrics=self.config.get('metrics', ['mae'])
+        self.model.compile(
+            optimizer=Adam(learning_rate=self.learning_rate),
+            loss=self.primary_loss
         )
         
-        self.model = model
+    def _prepare_sequences(self, X: np.ndarray, y: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Prepare input sequences for LSTM.
         
-    def train(self, data):
+        Args:
+            X: Input features
+            y: Target values (optional)
+            
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: Prepared sequences and targets
+        """
+        X_seq, y_seq = [], []
+        
+        for i in range(len(X) - self.sequence_length - self.forecast_horizon + 1):
+            X_seq.append(X[i:(i + self.sequence_length)])
+            if y is not None:
+                y_seq.append(y[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon])
+                
+        return np.array(X_seq), np.array(y_seq) if y is not None else None
+        
+    def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'LSTMModel':
         """
         Train the LSTM model on given data.
         
         Args:
-            data: Dataset object containing train and validation data
+            X: Training features
+            y: Target values
             
         Returns:
-            Training history
+            self: The fitted model instance
         """
-        if self.model is None:
-            raise ValueError("Model not initialized. Call _build_model first.")
+        # Convert inputs to numpy arrays
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+        if isinstance(y, pd.Series):
+            y = y.values
             
-        # Convert data to numpy arrays
-        X_train = data.train.features.to_pandas().values
-        y_train = data.train.labels.to_numpy()
-        X_val = data.validation.features.to_pandas().values
-        y_val = data.validation.labels.to_numpy()
+        # Prepare sequences
+        X_seq, y_seq = self._prepare_sequences(X, y)
         
-        # Prepare callbacks
-        callbacks = []
-        if self.config.get('early_stopping', True):
-            early_stopping = EarlyStopping(
-                monitor='val_loss',
-                patience=self.config.get('patience', 10),
-                restore_best_weights=True
-            )
-            callbacks.append(early_stopping)
+        # Build model if not already built
+        if self.model is None:
+            self._build_model(input_shape=(self.sequence_length, X.shape[1]))
             
         # Train model
-        history = self.model.fit(
-            X_train, y_train,
-            validation_data=(X_val, y_val),
-            epochs=self.config.get('epochs', 100),
-            batch_size=self.config.get('batch_size', 32),
-            callbacks=callbacks,
-            verbose=1
+        self.model.fit(
+            X_seq, y_seq,
+            batch_size=self.batch_size,
+            epochs=self.epochs,
+            verbose=0
         )
         
-        return history.history
+        self.is_fitted = True
+        return self
         
-    def predict(self, data):
+    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
         Make predictions using the trained LSTM model.
         
         Args:
-            data: Input data for prediction
+            X: Input data for prediction
             
         Returns:
-            Model predictions
+            np.ndarray: Model predictions with shape (n_samples, forecast_horizon)
         """
         if self.model is None:
-            raise ValueError("Model not initialized. Call _build_model first.")
+            raise ValueError("Model not initialized. Call train first.")
             
-        # Convert data to numpy array
-        X = data.to_pandas().values
+        # Convert input to numpy array
+        if isinstance(X, pd.DataFrame):
+            X = X.values
+            
+        # Prepare sequences
+        X_seq, _ = self._prepare_sequences(X)
         
-        # Generate predictions
-        return self.model.predict(X)
+        # Make predictions for all sequences at once
+        predictions = self.model.predict(X_seq, verbose=0)
+        return predictions
         
-    def save(self, path):
-        """Save the model to disk."""
-        if self.model is None:
-            raise ValueError("No model to save")
-        self.model.save(path)
+    def get_params(self) -> Dict[str, Any]:
+        """
+        Get the current model parameters.
         
-    def load(self, path):
-        """Load the model from disk."""
-        self.model = tf.keras.models.load_model(path) 
+        Returns:
+            Dict[str, Any]: Dictionary of model parameters
+        """
+        return {
+            'units': self.units,
+            'layers': self.layers,
+            'dropout': self.dropout,
+            'learning_rate': self.learning_rate,
+            'batch_size': self.batch_size,
+            'epochs': self.epochs,
+            'sequence_length': self.sequence_length,
+            'target_col': self.target_col,
+            'feature_cols': self.feature_cols,
+            'loss_functions': self.loss_functions,
+            'primary_loss': self.primary_loss,
+            'forecast_horizon': self.forecast_horizon
+        }
+        
+    def set_params(self, **params: Dict[str, Any]) -> 'LSTMModel':
+        """
+        Set model parameters.
+        
+        Args:
+            **params: Model parameters to set
+            
+        Returns:
+            self: The model instance with updated parameters
+        """
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
+        
+    def save(self, path: str) -> None:
+        """
+        Save the LSTM model to disk.
+        
+        Args:
+            path: Path to save the model
+        """
+        if not self.is_fitted:
+            raise ValueError("Cannot save an unfitted model")
+            
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        
+        # Save model state
+        model_state = {
+            'config': self.config,
+            'is_fitted': self.is_fitted,
+            'params': self.get_params()
+        }
+        
+        # Save model state to file
+        with open(path, 'wb') as f:
+            pickle.dump(model_state, f)
+            
+        # Save TensorFlow model separately
+        model_path = path.replace('.pkl', '_tf')
+        self.model.save(model_path)
+        
+    def load(self, path: str) -> None:
+        """
+        Load the LSTM model from disk.
+        
+        Args:
+            path: Path to load the model from
+        """
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"No model found at {path}")
+            
+        # Load model state from file
+        with open(path, 'rb') as f:
+            model_state = pickle.load(f)
+            
+        # Restore model state
+        self.config = model_state['config']
+        self.is_fitted = model_state['is_fitted']
+        self.set_params(**model_state['params'])
+        
+        # Load TensorFlow model
+        model_path = path.replace('.pkl', '_tf')
+        self.model = tf.keras.models.load_model(model_path) 
