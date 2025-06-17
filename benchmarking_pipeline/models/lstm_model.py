@@ -10,7 +10,7 @@ from tensorflow.keras.optimizers import Adam
 from typing import Dict, Any, Union, Tuple
 import pickle
 import os
-from .base_model import BaseModel
+from benchmarking_pipeline.models.base_model import BaseModel
 
 
 class LSTMModel(BaseModel):

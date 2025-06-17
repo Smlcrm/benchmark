@@ -9,7 +9,7 @@ import pandas as pd
 import json
 import os
 import pickle
-from ..pipeline.evaluator import Evaluator
+from benchmarking_pipeline.pipeline.evaluator import Evaluator
 
 
 class BaseModel(ABC):

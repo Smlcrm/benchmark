@@ -1,10 +1,11 @@
 # ARIMA testing
-from pipeline.data_loader import DataLoader
-from models.arima_model import ARIMAModel
-from trainer.hyperparameter_tuning import HyperparameterTuner
+from benchmarking_pipeline.pipeline.data_loader import DataLoader
+from benchmarking_pipeline.models.arima_model import ARIMAModel
+from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 
 
 if __name__ == "__main__":
+  print("Starting the program")
   australian_dataloader = DataLoader({"dataset" : {
     "path": "datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
