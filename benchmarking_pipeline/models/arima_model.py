@@ -61,7 +61,7 @@ class ARIMAModel(BaseModel):
             exog = None
             
         # Fit ARIMA model
-        self.model = ARIMA(endog, order=(self.p, self.d, self.q), exog=exog)
+        self.model = ARIMA(endog, order=(self.p, self.d, self.q))
         self.model = self.model.fit()
         self.is_fitted = True
         
