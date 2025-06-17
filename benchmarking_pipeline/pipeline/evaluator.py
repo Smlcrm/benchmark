@@ -210,6 +210,7 @@ class Evaluator:
         X_eval = data[X_eval_cols]
 
         # Get predictions from the model
+        #print("What is X_eval", len(X_eval))
         predictions_output = model.predict(X_eval)
 
         # Initialize prediction components
