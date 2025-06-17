@@ -22,7 +22,7 @@ class DataLoader:
         self.name = self.dataset_cfg.get('name')
         self.split_ratio = self.dataset_cfg.get('split_ratio', [0.6, 0.2, 0.2])
     
-    def load_data(self, chunk_index) -> Dataset:
+    def load_single_chunk(self, chunk_index) -> Dataset:
         """
         Load a single chunk and return it as a Dataset object.
 
@@ -57,3 +57,18 @@ class DataLoader:
             name=self.name,
             metadata={'start': start, 'freq': freq}
         )
+
+    def load_several_chunks(self,upper_chunk_index):
+        """
+        Loads several chunks, and returns them as a list of Dataset objects.
+
+        Args:
+            upper_chunk_index: the last index of the chunk we want the data of (inclusive)
+
+        Returns:
+            List of Dataset objects, with each Dataset object containing train, val, test splits.
+        """
+        list_of_chunks = []
+        for chunk_index in range(1, upper_chunk_index+1):
+            list_of_chunks.append(self.load_single_chunk(chunk_index))
+        return list_of_chunks

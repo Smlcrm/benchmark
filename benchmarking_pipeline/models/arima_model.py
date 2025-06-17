@@ -38,14 +38,14 @@ class ARIMAModel(BaseModel):
         
     def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'ARIMAModel':
         """
-        Train the ARIMA model on given data.
+        Train a new ARIMA model on given data.
         
         Args:
             X: Training features (exogenous variables)
             y: Target values (time series)
             
         Returns:
-            self: The fitted model instance
+            self: The new fitted model instance
         """
         # Convert inputs to appropriate format
         if isinstance(y, pd.Series):
@@ -89,11 +89,15 @@ class ARIMAModel(BaseModel):
             exog = None
             
         # Get predictions for each step in the forecast horizon
-        predictions = np.zeros((len(X), self.forecast_horizon))
-        for i in range(len(X)):
-            # Get forecast for this point
-            forecast = self.model.forecast(steps=self.forecast_horizon, exog=exog.iloc[i:i+1] if exog is not None else None)
-            predictions[i] = forecast.values
+        #if X is not None:
+        #    predictions = np.zeros((len(X), self.forecast_horizon))
+        #    for i in range(len(X)):
+        #        # Get forecast for this point
+        #        forecast = self.model.forecast(steps=self.forecast_horizon, exog=exog.iloc[i:i+self.forecast_horizon] if exog is not None else None)
+        #        predictions[i] = forecast.values
+        #else:
+        forecast = self.model.forecast(steps=self.forecast_horizon, exog=None)
+        predictions = forecast.values
             
         return predictions
         
