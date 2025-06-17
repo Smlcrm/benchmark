@@ -35,6 +35,7 @@ class BaseModel(ABC):
         self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.is_fitted = False
+        print(f"COnfig?? {self.config}")
         self.evaluator = Evaluator(config=self.config)
         
     @abstractmethod
@@ -81,7 +82,8 @@ class BaseModel(ABC):
             y_true = y_true.values
         if isinstance(y_pred, pd.Series):
             y_pred = y_pred.values
-            
+        #print(f"Y true shape: {y_true.shape}")
+        #print(f"Y pred shape: {y_pred.shape}")
         # Convert inputs to DataFrame format required by Evaluator
         eval_data = pd.DataFrame({
             self.evaluator.target_col_name: y_true,
