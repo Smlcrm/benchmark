@@ -1,16 +1,35 @@
 import itertools
 from ..models.base_model import BaseModel
 from typing import Dict, List
+import numpy as np
 
 class HyperparameterTuner:
   def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List]):
+    """
+    Initialize the hyperparameter tuner with a model class and a hyperparameter search space.
+
+    Args:
+        model_class: A model class that inherits from BaseModel
+        hyperparameter_ranges: A dictionary where keys are hyperparameter names and values are lists of values to search over.
+    """
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
   
   def hyperparameter_grid_search_single_time_series(self, time_series_dataset):
+    """
+    Perform grid search over hyperparameter combinations for a single time series dataset.
+
+    Args:
+        time_series_dataset: A Dataset object containing 'train', 'validation', and 'test' splits.
+
+    Returns:
+        best_trained_model: The model instance trained with the best hyperparameter setting.
+        best_hyperparameters: The hyperparameter values (as a tuple) that achieved the lowest validation loss.
+    """
     best_trained_model = None
     best_hyperparameters = None
     lowest_train_loss = float("inf")
+    print("Starting hyperparameter grid search on single time series!")
     # List of hyperparameter names
     hyperparameter_names = list(self.hyperparameter_ranges.keys())
     # We iterate over all possible hyperparameter value combinations
@@ -22,7 +41,6 @@ class HyperparameterTuner:
         # Appropriate hyperparameter value
         current_hyperparameter_dict[hyperparameter_names[key_value_index]] = hyperparameter_setting[key_value_index]
       # Change the model's hyperparameter values
-      print(f"Current hyperparameter setting: {hyperparameter_setting}")
       self.model_class.set_params(**current_hyperparameter_dict)
       # Train a new model
       trained_model = self.model_class.train(None,time_series_dataset.train.features[self.model_class.target_col])
@@ -38,12 +56,71 @@ class HyperparameterTuner:
     return best_trained_model, best_hyperparameters
 
   def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
+    """
+    Perform grid search over hyperparameter combinations for multiple time series datasets, 
+    then identify the model with the best average validation performance across the datasets.
+
+    Args:
+        list_of_time_series_datasets: A list of Dataset objects, each containing 'train', 'validation', and 'test' splits.
+
+    Returns:
+        best_arima_model_overall: The model instance that achieved the best average validation loss across datasets.
+        best_hyperparameters_overall: The hyperparameter values (as a tuple) that correspond to the best model.
+    """
     list_of_best_trained_models = []
     list_of_best_hyperparameters_per_model = []
+
     for time_series_dataset in list_of_time_series_datasets:
       trained_model, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset)
       list_of_best_trained_models.append(trained_model)
       list_of_best_hyperparameters_per_model.append(hyperparameters)
-    pass
-  
+    print(f"Best hyperparameters: {list_of_best_hyperparameters_per_model}")
+    print(f"Best models: {list_of_best_trained_models}")
+    average_scores = np.empty(len(list_of_time_series_datasets))
+    model_idx = 0
+    for model in list_of_best_trained_models:
+      loss_sum = 0
+      for time_series_dataset in list_of_time_series_datasets:
+        current_model_predictions = model.predict(None)
+        loss_sum += model.compute_loss(time_series_dataset.validation.features[model.target_col], current_model_predictions)[model.primary_loss]
+        print(f"loss sum:{loss_sum}")
+      average_scores[model_idx] = loss_sum / len(list_of_time_series_datasets)
+      model_idx += 1
+    print(f"Average scores: {average_scores}")
+    print(f"Chosen index: {average_scores.argmin()}")
+    best_arima_model_overall = list_of_best_trained_models[average_scores.argmin()]
+    best_hyperparameters_overall = list_of_best_hyperparameters_per_model[average_scores.argmin()]
+    return best_arima_model_overall, best_hyperparameters_overall
+
+  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets):
+    """
+    Train a model using the best hyperparameters on the combined train and validation splits, 
+    then evaluate its performance on the test split for each dataset.
+
+    Args:
+        best_hyperparamters: A dictionary mapping hyperparameter names to their best-tuned values.
+        list_of_time_series_datasets: A list of Datasets, each containing 'train', 'validation', and 'test' splits.
+
+    Returns:
+        results_dict: A dictionary mapping each loss metric name to its average value across datasets on the test split.
+    """
+    self.model_class.set_params(**best_hyperparamters)
+    results_dict = None
+    for time_series_dataset in list_of_time_series_datasets:
+      train_val_split = np.concatenate([
+            time_series_dataset.train.features[self.model_class.target_col],
+            time_series_dataset.validation.features[self.model_class.target_col]
+        ])
+      self.model_class.train(None, train_val_split)
+      predictions = self.model_class.predict(None)
+      train_loss_dict = self.model_class.compute_loss(time_series_dataset.test.features[self.model_class.target_col], predictions)
+      if results_dict is None:
+        results_dict = train_loss_dict
+      else:
+        # aggregates dict
+        results_dict = {key: results_dict[key] + train_loss_dict[key] for key in results_dict}
+    results_dict = {key: float(results_dict[key]/len(list_of_time_series_datasets)) for key in results_dict}
+    return results_dict
+      
+    
   
