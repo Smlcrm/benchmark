@@ -1,7 +1,8 @@
 import itertools
+from ..models.base_model import BaseModel
 
 class HyperparameterTuner:
-  def __init__(self, model_class, *hyperparameter_ranges):
+  def __init__(self, model_class: BaseModel, *hyperparameter_ranges):
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
   
