@@ -20,17 +20,21 @@ class DataLoader:
         self.dataset_cfg = config.get('dataset', {})
         self.path = self.dataset_cfg.get('path')
         self.name = self.dataset_cfg.get('name')
-        self.chunk_index = self.dataset_cfg.get('chunk_index', 1)
         self.split_ratio = self.dataset_cfg.get('split_ratio', [0.6, 0.2, 0.2])
     
-    def load_data(self) -> Dataset:
+    def load_data(self, chunk_index) -> Dataset:
         """
         Load a single chunk and return it as a Dataset object.
+
+        Args:
+            chunk_index: the index of the chunk we want the data of
 
         Returns:
             Dataset object containing train, val, test splits.
         """
-        file = os.path.join(self.path, f"chunk{self.chunk_index:03}.csv")
+
+        # need to change self.chunk_index so that it can take in several chunks
+        file = os.path.join(self.path, f"chunk{chunk_index:03}.csv")
         df = pd.read_csv(file)
         row = df.iloc[0]
         start = pd.to_datetime(row['start'])
