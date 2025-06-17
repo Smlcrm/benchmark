@@ -26,7 +26,6 @@ class HyperparameterTuner:
         best_trained_model: The model instance trained with the best hyperparameter setting.
         best_hyperparameters: The hyperparameter values (as a tuple) that achieved the lowest validation loss.
     """
-    best_trained_model = None
     best_hyperparameters = None
     lowest_train_loss = float("inf")
     print("Starting hyperparameter grid search on single time series!")
@@ -50,10 +49,9 @@ class HyperparameterTuner:
       if current_train_loss[self.model_class.primary_loss] < lowest_train_loss:
         print(f"Lowest train loss {lowest_train_loss}")
         lowest_train_loss = current_train_loss[self.model_class.primary_loss]
-        best_trained_model = trained_model
         best_hyperparameters = hyperparameter_setting
     
-    return best_trained_model, best_hyperparameters
+    return lowest_train_loss, best_hyperparameters
 
   def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
     """
@@ -67,30 +65,22 @@ class HyperparameterTuner:
         best_arima_model_overall: The model instance that achieved the best average validation loss across datasets.
         best_hyperparameters_overall: The hyperparameter values (as a tuple) that correspond to the best model.
     """
-    list_of_best_trained_models = []
-    list_of_best_hyperparameters_per_model = []
+    list_of_validation_scores = []
+    list_of_hyperparameters_per_validation_score = []
 
     for time_series_dataset in list_of_time_series_datasets:
-      trained_model, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset)
-      list_of_best_trained_models.append(trained_model)
-      list_of_best_hyperparameters_per_model.append(hyperparameters)
-    print(f"Best hyperparameters: {list_of_best_hyperparameters_per_model}")
-    print(f"Best models: {list_of_best_trained_models}")
-    average_scores = np.empty(len(list_of_time_series_datasets))
-    model_idx = 0
-    for model in list_of_best_trained_models:
-      loss_sum = 0
-      for time_series_dataset in list_of_time_series_datasets:
-        current_model_predictions = model.predict(None)
-        loss_sum += model.compute_loss(time_series_dataset.validation.features[model.target_col], current_model_predictions)[model.primary_loss]
-        print(f"loss sum:{loss_sum}")
-      average_scores[model_idx] = loss_sum / len(list_of_time_series_datasets)
-      model_idx += 1
-    print(f"Average scores: {average_scores}")
-    print(f"Chosen index: {average_scores.argmin()}")
-    best_arima_model_overall = list_of_best_trained_models[average_scores.argmin()]
-    best_hyperparameters_overall = list_of_best_hyperparameters_per_model[average_scores.argmin()]
-    return best_arima_model_overall, best_hyperparameters_overall
+      validation_score, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset)
+      list_of_validation_scores.append(validation_score)
+      list_of_hyperparameters_per_validation_score.append(hyperparameters)
+
+    list_of_validation_scores = np.array(list_of_validation_scores)
+    list_of_hyperparameters_per_validation_score = np.array(list_of_hyperparameters_per_validation_score)
+    print(f"Best hyperparameters: {list_of_hyperparameters_per_validation_score}")
+    print(f"Best validation scores: {list_of_validation_scores}")
+    print(f"Validation scores: {list_of_validation_scores}")
+    print(f"Chosen index: {list_of_validation_scores.argmin()}")
+    best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[list_of_validation_scores.argmin()]
+    return list_of_validation_scores.min(), best_hyperparameters_overall
 
   def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets):
     """
