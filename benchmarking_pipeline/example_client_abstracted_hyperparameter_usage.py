@@ -21,7 +21,6 @@ if __name__ == "__main__":
     "target_col": "y",
     "exog_cols": None,
     "loss_functions": ["mae"],
-    "metrics_to_calculate": ["mae"],
     "primary_loss": "mae",
     "forecast_horizon": 900
   })
@@ -34,7 +33,15 @@ if __name__ == "__main__":
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
   print(f"Single chunk: {single_chunk.validation.features}")
-  model_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_single_time_series(all_australian_chunks[0])
+  model_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
   print(f"Model and hyperparamter: {model_hyperparameter_tuple}")
+  print("yorppee",model_hyperparameter_tuple[0].get_params())
+  best_hyperparameters_dict = {
+    "p": model_hyperparameter_tuple[1][0], 
+    "d": model_hyperparameter_tuple[1][1], 
+    "q": model_hyperparameter_tuple[1][2]
+    }
+  print(f"Final Evaluation: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+  
 
   
