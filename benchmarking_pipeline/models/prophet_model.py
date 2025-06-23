@@ -1,5 +1,7 @@
 """
-Prophet model implementation
+Prophet model implementation.
+
+TO BE CHANGED: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
 """
 
 import os
