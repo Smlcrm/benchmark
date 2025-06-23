@@ -1,7 +1,7 @@
 import os
 import ast
 import pandas as pd
-from typing import Dict, Any
+from typing import Dict, Any, List
 from .data_types import Dataset, DatasetSplit  # assumes these are in data_types.py
 
 class DataLoader:
@@ -58,7 +58,7 @@ class DataLoader:
             metadata={'start': start, 'freq': freq}
         )
 
-    def load_several_chunks(self,upper_chunk_index):
+    def load_several_chunks(self,upper_chunk_index) -> List[Dataset]:
         """
         Loads several chunks, and returns them as a list of Dataset objects.
 
