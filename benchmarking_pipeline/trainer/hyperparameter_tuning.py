@@ -2,6 +2,7 @@ import itertools
 from ..models.base_model import BaseModel
 from typing import Dict, List
 import numpy as np
+from benchmarking_pipeline.models.lstm_model import LSTMModel
 
 class HyperparameterTuner:
   def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List]):
@@ -42,9 +43,11 @@ class HyperparameterTuner:
       # Change the model's hyperparameter values
       self.model_class.set_params(**current_hyperparameter_dict)
       # Train a new model
-      trained_model = self.model_class.train(None,time_series_dataset.train.features[self.model_class.target_col])
-      model_predictions = self.model_class.predict(None)
-      current_train_loss = self.model_class.compute_loss(time_series_dataset.validation.features[self.model_class.target_col], model_predictions)
+      target = time_series_dataset.train.features[self.model_class.target_col]
+      trained_model = self.model_class.train(target, None)
+      validation_series = time_series_dataset.validation.features[self.model_class.target_col]
+      model_predictions = trained_model.predict(validation_series)
+      current_train_loss = trained_model.compute_loss(time_series_dataset.validation.features[self.model_class.target_col], model_predictions)
       #print(f"Current Train Loss: {current_train_loss}")
       if current_train_loss[self.model_class.primary_loss] < lowest_train_loss:
         print(f"Lowest train loss {lowest_train_loss}")
@@ -101,9 +104,11 @@ class HyperparameterTuner:
             time_series_dataset.train.features[self.model_class.target_col],
             time_series_dataset.validation.features[self.model_class.target_col]
         ])
-      self.model_class.train(None, train_val_split)
-      predictions = self.model_class.predict(None)
-      train_loss_dict = self.model_class.compute_loss(time_series_dataset.test.features[self.model_class.target_col], predictions)
+      target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
+      trained_model = self.model_class.train(target, None)
+      validation_series = time_series_dataset.validation.features[self.model_class.target_col]
+      predictions = trained_model.predict(validation_series)
+      train_loss_dict = trained_model.compute_loss(time_series_dataset.test.features[self.model_class.target_col], predictions)
       if results_dict is None:
         results_dict = train_loss_dict
       else:

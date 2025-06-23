@@ -1,5 +1,7 @@
 """
 LSTM model implementation.
+
+TO BE CHANGED: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
 """
 import numpy as np
 import pandas as pd
@@ -75,50 +77,52 @@ class LSTMModel(BaseModel):
             loss=self.primary_loss
         )
         
-    def _prepare_sequences(self, X: np.ndarray, y: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+    def _prepare_sequences(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Prepare input sequences for LSTM.
         
         Args:
-            X: Input features
-            y: Target values (optional)
+            X: Input features (1D or 2D array)
             
         Returns:
             Tuple[np.ndarray, np.ndarray]: Prepared sequences and targets
         """
+        # Ensure X is 2D: (num_timesteps, 1) for univariate
+        if X.ndim == 1:
+            X = X.reshape(-1, 1)
         X_seq, y_seq = [], []
-        
         for i in range(len(X) - self.sequence_length - self.forecast_horizon + 1):
             X_seq.append(X[i:(i + self.sequence_length)])
-            if y is not None:
-                y_seq.append(y[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon])
-                
-        return np.array(X_seq), np.array(y_seq) if y is not None else None
+            # y_seq: flatten to 1D if forecast_horizon == 1, else keep as 1D array
+            y_seq.append(X[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon, 0])
+        return np.array(X_seq), np.array(y_seq)
         
-    def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'LSTMModel':
+    def train(self, target=None, X=None) -> 'LSTMModel':
         """
         Train the LSTM model on given data.
         
         Args:
-            X: Training features
-            y: Target values
+            target: Training data (time series)
+            X: Optional, ignored (for interface compatibility)
             
         Returns:
             self: The fitted model instance
         """
-        # Convert inputs to numpy arrays
-        if isinstance(X, pd.DataFrame):
-            X = X.values
-        if isinstance(y, pd.Series):
-            y = y.values
-            
+        if target is None:
+            raise ValueError("target (training series) must be provided for LSTMModel.")
+        # Convert input to numpy array
+        if isinstance(target, pd.Series):
+            target = target.values
+        elif isinstance(target, pd.DataFrame):
+            target = target.values
+        
         # Prepare sequences
-        X_seq, y_seq = self._prepare_sequences(X, y)
+        X_seq, y_seq = self._prepare_sequences(target)
         
         # Build model if not already built
         if self.model is None:
-            self._build_model(input_shape=(self.sequence_length, X.shape[1]))
-            
+            self._build_model(input_shape=(self.sequence_length, 1))
+        
         # Train model
         self.model.fit(
             X_seq, y_seq,
@@ -130,12 +134,12 @@ class LSTMModel(BaseModel):
         self.is_fitted = True
         return self
         
-    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+    def predict(self, X: Union[pd.Series, np.ndarray]) -> np.ndarray:
         """
         Make predictions using the trained LSTM model.
         
         Args:
-            X: Input data for prediction
+            X: Input data for prediction (time series)
             
         Returns:
             np.ndarray: Model predictions with shape (n_samples, forecast_horizon)
@@ -144,13 +148,15 @@ class LSTMModel(BaseModel):
             raise ValueError("Model not initialized. Call train first.")
             
         # Convert input to numpy array
-        if isinstance(X, pd.DataFrame):
+        if isinstance(X, pd.Series):
+            X = X.values
+        elif isinstance(X, pd.DataFrame):
             X = X.values
             
         # Prepare sequences
         X_seq, _ = self._prepare_sequences(X)
         
-        # Make predictions for all sequences at once
+        # Make predictions
         predictions = self.model.predict(X_seq, verbose=0)
         return predictions
         

@@ -39,13 +39,17 @@ class BaseModel(ABC):
         self.evaluator = Evaluator(config=self.config)
         
     @abstractmethod
-    def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'BaseModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], x_context: Union[pd.Series, np.ndarray] = None, 
+              y_target: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'BaseModel':
         """
         Train the model on given data.
         
         Args:
-            X: Training features
-            y: Target values
+            y_context: Past target values - training data during tuning time, training + validation data during testing time
+            x_context: Past exogenous variables - used during tuning and testing time
+            y_target: Future target values - validation data during tuning time, None during testing time (avoid data leakage)
+            x_target: Future exogenous variables - if provided, can be used with x_context for training (e.g., in ARIMA models)
+                     or with y_target for validation during tuning time
             
         Returns:
             self: The fitted model instance
@@ -82,8 +86,25 @@ class BaseModel(ABC):
             y_true = y_true.values
         if isinstance(y_pred, pd.Series):
             y_pred = y_pred.values
-        #print(f"Y true shape: {y_true.shape}")
-        #print(f"Y pred shape: {y_pred.shape}")
+            
+        # Handle shape mismatches
+        if y_pred.ndim == 2 and y_true.ndim == 1:
+            # If predictions are 2D and true values are 1D, flatten predictions
+            if y_pred.shape[0] == 1:
+                # Single prediction row, flatten it
+                y_pred = y_pred.flatten()
+            elif y_pred.shape[1] == 1:
+                # Single prediction column, flatten it
+                y_pred = y_pred.flatten()
+            else:
+                # Multiple predictions, take the first row
+                y_pred = y_pred[0]
+        
+        # Ensure both arrays have the same length
+        min_length = min(len(y_true), len(y_pred))
+        y_true = y_true[:min_length]
+        y_pred = y_pred[:min_length]
+        
         # Convert inputs to DataFrame format required by Evaluator
         eval_data = pd.DataFrame({
             self.evaluator.target_col_name: y_true,
