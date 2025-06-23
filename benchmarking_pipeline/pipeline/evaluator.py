@@ -2,8 +2,6 @@ import pandas as pd
 import numpy as np
 from ..metrics.rmse import RMSE
 from ..metrics.mae import MAE
-from ..metrics.mean_of_maes import MeanOfMAEs
-from ..metrics.mean_of_rmses import MeanOfRMSEs
 from ..metrics.mase import MASE
 from ..metrics.crps import CRPS
 from ..metrics.quantile_loss import QuantileLoss
@@ -26,58 +24,124 @@ class Evaluator:
         self.metric_registry = {
             'rmse': RMSE(),
             'mae': MAE(),
-            'mean_of_maes': MeanOfMAEs(),
-            'mean_of_rmses': MeanOfRMSEs(),
             'mase': MASE(),
             'crps': CRPS(),
             'quantile_loss': QuantileLoss(),
             'interval_score': IntervalScore()
         }
 
-    def evaluate(self, model, data, y_train_series=None):
+    def evaluate(self, y_predictions, y_true, y_train=None, **metric_kwargs):
         """
         Evaluate model performance on given data.
         
         Args:
-            model: Trained model instance with a .predict() method.
-            data: Evaluation data (pd.DataFrame) containing features and the target column.
-            y_train_series (pd.Series or np.array, optional): Training data for MASE.
-                                                            
+            y_predictions (pd.Series or np.array): Model predictions.
+            y_true (pd.Series or np.array): True target values.
+            y_train (pd.Series or np.array, optional): Training target values for metrics like MASE.
+            **metric_kwargs: Additional keyword arguments for metrics (e.g., y_pred_dist_samples for CRPS).
+
         Returns:
             Dictionary of evaluation metrics.
         """
-        y_true_eval = data[self.target_col_name].values
-        X_eval = data.drop(columns=[self.target_col_name], errors='ignore')
-        
-        predictions_output = model.predict(X_eval)
-
-        # Unpack predictions
-        if isinstance(predictions_output, dict):
-            y_pred_eval = predictions_output.get('point')
-            probabilistic_kwargs = predictions_output
-        else:
-            y_pred_eval = predictions_output
-            probabilistic_kwargs = {}
-        
-        # Add y_train to kwargs for MASE
-        probabilistic_kwargs['y_train'] = y_train_series
-
-        # Add other config items to kwargs for metrics that need them
-        probabilistic_kwargs['quantiles_q_values'] = self.config.get('quantiles_q_values')
-        probabilistic_kwargs['interval_alpha'] = self.config.get('interval_alpha')
+        if isinstance(y_predictions, pd.Series):
+            y_predictions = y_predictions.values
+        if isinstance(y_true, pd.Series):
+            y_true = y_true.values
+        if y_train is not None and isinstance(y_train, pd.Series):
+            y_train = y_train.values
+        if len(y_predictions) != len(y_true):
+            raise ValueError("Length of predictions and true values must match.")
 
         results = {}
         for metric_name in self.metrics_to_calculate:
-            if metric_name in self.metric_registry:
-                metric_func = self.metric_registry[metric_name]
-                try:
-                    # For probabilistic metrics, y_pred is a placeholder and not used
-                    score = metric_func(y_true_eval, y_pred_eval, **probabilistic_kwargs)
-                    results[metric_name] = score
-                except Exception as e:
-                    print(f"Could not compute metric '{metric_name}': {e}")
-                    results[metric_name] = "Error"
+            if metric_name not in self.metric_registry:
+                raise ValueError(f"Metric '{metric_name}' is not recognized. Available metrics: {list(self.metric_registry.keys())}")
+
+            metric = self.metric_registry[metric_name]
+            if metric_name == 'mase':
+                if y_train is None:
+                    raise ValueError("y_train must be provided for MASE calculation.")
+                metric_value = metric(y_true, y_predictions, y_train=y_train)
+            elif metric_name == 'crps':
+                if 'y_pred_dist_samples' not in metric_kwargs:
+                    raise ValueError("y_pred_dist_samples must be provided for CRPS calculation.")
+                metric_value = metric(y_true, y_predictions, **metric_kwargs)
+            elif metric_name == 'quantile_loss':
+                if 'y_pred_quantiles' not in metric_kwargs or 'quantiles_q_values' not in metric_kwargs:
+                    raise ValueError("y_pred_quantiles and quantiles_q_values must be provided for QuantileLoss calculation.")
+                metric_value = metric(y_true, y_predictions, **metric_kwargs)
+            elif metric_name == 'interval_score':
+                if 'y_pred_lower_bound' not in metric_kwargs or 'y_pred_upper_bound' not in metric_kwargs:
+                    raise ValueError("y_pred_lower_bound and y_pred_upper_bound must be provided for IntervalScore calculation.")
+                metric_value = metric(y_true, y_predictions, **metric_kwargs)
             else:
-                print(f"Warning: Metric '{metric_name}' not recognized.")
-                
+                metric_value = metric(y_true, y_predictions)
+
+            # If the metric returns a dict, merge it into results
+            if isinstance(metric_value, dict):
+                results.update(metric_value)
+            else:
+                results[metric_name] = metric_value
+
         return results
+    
+class EvaluatorTest:
+    def __init__(self, config=None):
+        """
+        Initialize evaluator test with configuration.
+        """
+        self.evaluator = Evaluator(config)
+
+    def run_tests(self):
+        """
+        Run basic tests to validate evaluator functionality.
+        """
+
+        # Test data
+        y_true = pd.Series([3, -0.5, 2, 7])
+        y_predictions = pd.Series([2.5, 0.0, 2, 8])
+        y_train = pd.Series([1, 2, 3, 4, 5, 6, 7, 8])  # Example training data for MASE
+
+        # For CRPS: shape (n_samples, n_draws)
+        y_pred_dist_samples = np.array([
+            [2.7, 3.1, 2.9],
+            [0.1, -0.2, 0.0],
+            [2.1, 1.9, 2.0],
+            [7.2, 6.8, 7.0]
+        ])
+
+        # For QuantileLoss: shape (n_samples, n_quantiles)
+        y_pred_quantiles = np.array([
+            [2.0, 3.0],
+            [0.0, 1.0],
+            [2.0, 2.5],
+            [7.0, 8.0]
+        ])
+        quantiles_q_values = [0.1, 0.9]
+
+        # For IntervalScore: lower and upper bounds
+        y_pred_lower_bound = np.array([2.0, -1.0, 1.5, 6.5])
+        y_pred_upper_bound = np.array([3.5, 0.5, 2.5, 8.5])
+        interval_alpha = 0.1
+
+        self.evaluator.metrics_to_calculate = [
+            'rmse', 'mae', 'mase', 'crps', 'quantile_loss', 'interval_score'
+        ]
+
+        # Evaluate
+        results = self.evaluator.evaluate(
+            y_predictions,
+            y_true,
+            y_train=y_train,
+            y_pred_dist_samples=y_pred_dist_samples,
+            y_pred_quantiles=y_pred_quantiles,
+            quantiles_q_values=quantiles_q_values,
+            y_pred_lower_bound=y_pred_lower_bound,
+            y_pred_upper_bound=y_pred_upper_bound,
+            interval_alpha=interval_alpha
+        )
+
+        # Print results
+        print("Evaluation Results:", results)
+
+EvaluatorTest().run_tests()
