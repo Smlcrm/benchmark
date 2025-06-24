@@ -48,7 +48,7 @@ class Evaluator:
         if isinstance(y_true, pd.Series):
             y_true = y_true.values
         if y_train is not None and isinstance(y_train, pd.Series):
-            y_train = y_train.values
+            y_train = y_train.values        
         if len(y_predictions) != len(y_true):
             raise ValueError("Length of predictions and true values must match.")
 

@@ -1,5 +1,5 @@
 from ..pipeline.data_loader import DataLoader
-from .testing_equality import value_equality
+from .testing_utilities import value_equality
 import pandas as pd
 
 if __name__ == "__main__":
