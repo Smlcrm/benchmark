@@ -16,16 +16,18 @@ class HyperparameterTuner:
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
   
-  def hyperparameter_grid_search_single_time_series(self, time_series_dataset):
+  def hyperparameter_grid_search_single_time_series(self, time_series_dataset, use_exog: bool):
     """
     Perform grid search over hyperparameter combinations for a single time series dataset.
 
     Args:
         time_series_dataset: A Dataset object containing 'train', 'validation', and 'test' splits.
+        use_exog: Whether to use exogeneous variables or not
 
     Returns:
         best_trained_model: The model instance trained with the best hyperparameter setting.
         best_hyperparameters: The hyperparameter values (as a tuple) that achieved the lowest validation loss.
+        
     """
     best_hyperparameters = None
     lowest_train_loss = float("inf")
@@ -46,7 +48,7 @@ class HyperparameterTuner:
       target = time_series_dataset.train.features[self.model_class.target_col]
       trained_model = self.model_class.train(target, None)
       validation_series = time_series_dataset.validation.features[self.model_class.target_col]
-      model_predictions = trained_model.predict(validation_series)
+      model_predictions = trained_model.predict(validation_series) if use_exog else trained_model.predict(None)
       current_train_loss = trained_model.compute_loss(time_series_dataset.validation.features[self.model_class.target_col], model_predictions)
       #print(f"Current Train Loss: {current_train_loss}")
       if current_train_loss[self.model_class.primary_loss] < lowest_train_loss:
@@ -56,23 +58,25 @@ class HyperparameterTuner:
     
     return lowest_train_loss, best_hyperparameters
 
-  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
+  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets, use_exog: bool):
     """
     Perform grid search over hyperparameter combinations for multiple time series datasets, 
     then identify the model with the best average validation performance across the datasets.
 
     Args:
         list_of_time_series_datasets: A list of Dataset objects, each containing 'train', 'validation', and 'test' splits.
+        use_exog: Whether to use exogeneous variables or not
 
     Returns:
         best_arima_model_overall: The model instance that achieved the best average validation loss across datasets.
         best_hyperparameters_overall: The hyperparameter values (as a tuple) that correspond to the best model.
+        
     """
     list_of_validation_scores = []
     list_of_hyperparameters_per_validation_score = []
 
     for time_series_dataset in list_of_time_series_datasets:
-      validation_score, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset)
+      validation_score, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset, use_exog)
       list_of_validation_scores.append(validation_score)
       list_of_hyperparameters_per_validation_score.append(hyperparameters)
 
@@ -85,7 +89,7 @@ class HyperparameterTuner:
     best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[list_of_validation_scores.argmin()]
     return list_of_validation_scores.min(), best_hyperparameters_overall
 
-  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets):
+  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets, use_exog: bool):
     """
     Train a model using the best hyperparameters on the combined train and validation splits, 
     then evaluate its performance on the test split for each dataset.
@@ -93,6 +97,7 @@ class HyperparameterTuner:
     Args:
         best_hyperparamters: A dictionary mapping hyperparameter names to their best-tuned values.
         list_of_time_series_datasets: A list of Datasets, each containing 'train', 'validation', and 'test' splits.
+        use_exog: Whether to use exogeneous variables or not
 
     Returns:
         results_dict: A dictionary mapping each loss metric name to its average value across datasets on the test split.
@@ -107,7 +112,7 @@ class HyperparameterTuner:
       target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
       trained_model = self.model_class.train(target, None)
       validation_series = time_series_dataset.validation.features[self.model_class.target_col]
-      predictions = trained_model.predict(validation_series)
+      predictions = trained_model.predict(validation_series) if use_exog else trained_model.predict(None)
       train_loss_dict = trained_model.compute_loss(time_series_dataset.test.features[self.model_class.target_col], predictions)
       if results_dict is None:
         results_dict = train_loss_dict

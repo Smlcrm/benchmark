@@ -106,13 +106,10 @@ class BaseModel(ABC):
         y_pred = y_pred[:min_length]
         
         # Convert inputs to DataFrame format required by Evaluator
-        eval_data = pd.DataFrame({
-            self.evaluator.target_col_name: y_true,
-            self.evaluator.pred_col_name: y_pred
-        })
+        
         
         # Use evaluator to compute all metrics
-        return self.evaluator.evaluate(self, eval_data)
+        return self.evaluator.evaluate(y_pred, y_true)
     
     def evaluate(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> Dict[str, float]:
         """

@@ -9,7 +9,7 @@ from benchmarking_pipeline.models.lstm_model import LSTMModel
 if __name__ == "__main__":
   print("Starting the program")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -41,14 +41,14 @@ if __name__ == "__main__":
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
   print(f"Single chunk: {single_chunk.validation.features}")
-  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks, False)
   print(f"Validation score and hyperparamter: {validation_score_hyperparameter_tuple}")
   best_hyperparameters_dict = {
     "p": validation_score_hyperparameter_tuple[1][0], 
     "d": validation_score_hyperparameter_tuple[1][1], 
     "q": validation_score_hyperparameter_tuple[1][2]
     }
-  print(f"Final Evaluation: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+  print(f"Final Evaluation: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks, False)}")
   
   # --- LSTM Model Example ---
   # print("\nLSTM Model Example:")
