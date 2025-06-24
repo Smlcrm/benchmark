@@ -4,7 +4,7 @@ Base model class that defines the interface for all models.
 
 from abc import ABC, abstractmethod
 import numpy as np
-from typing import Dict, Any, Union, Tuple, List
+from typing import Dict, Any, Union, Tuple, List, Optional
 import pandas as pd
 import json
 import os
@@ -57,12 +57,21 @@ class BaseModel(ABC):
         pass
     
     @abstractmethod
-    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+    def predict(
+        self,
+        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
+        x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
+        forecast_horizon: Optional[int] = None
+    ) -> np.ndarray:
         """
         Make predictions using the trained model.
         
         Args:
-            X: Input data for prediction
+            y_context: Recent/past target values (for sequence models, optional for ARIMA)
+            x_context: Recent/past exogenous variables (for sequence models, optional for ARIMA)
+            x_target: Future exogenous variables for the forecast horizon (required if model uses exogenous variables)
+            forecast_horizon: Number of steps to forecast (defaults to model config if not provided)
             
         Returns:
             np.ndarray: Model predictions with shape (n_samples, forecast_horizon)
