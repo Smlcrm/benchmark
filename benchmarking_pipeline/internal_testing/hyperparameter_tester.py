@@ -38,24 +38,24 @@ if __name__ == "__main__":
     "p": [0, 1, 2],
     "d": [0, 1],
     "q": [0, 1, 2]
-    })
+    }, False)
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
-  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks, False)
+  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
   
   best_hyperparameters_dict = {
     "p": validation_score_hyperparameter_tuple[1][0], 
     "d": validation_score_hyperparameter_tuple[1][1], 
     "q": validation_score_hyperparameter_tuple[1][2]
     }
-  print(f"Final Evaluation australia: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks, False)}")
-  print(f"Test Evaluation australia: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks, False)}")
+  print(f"Final Evaluation australia: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+  print(f"Test Evaluation australia: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)}")
 
   test_cases = []
 
   # Test Case 1: ARIMA Australia
-  test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks, False),
-                     arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks, False)))
+  test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks),
+                     arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)))
   
 
   # Test Case 2: ARIMA bdg-2_bear
@@ -83,9 +83,9 @@ if __name__ == "__main__":
     "p": [0, 1, 2],
     "d": [0, 1],
     "q": [0, 1, 2]
-    })
+    }, False)
 
-  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_bdg_chunks, False)
+  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_bdg_chunks)
   
   best_hyperparameters_dict = {
     "p": validation_score_hyperparameter_tuple[1][0], 
@@ -93,11 +93,11 @@ if __name__ == "__main__":
     "q": validation_score_hyperparameter_tuple[1][2]
     }
   
-  print(f"Final Evaluation bdg: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_bdg_chunks, False)}")
-  print(f"Test Evaluation bdg: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_bdg_chunks, False)}")
+  print(f"Final Evaluation bdg: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_bdg_chunks)}")
+  print(f"Test Evaluation bdg: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_bdg_chunks)}")
 
-  test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_bdg_chunks, False),
-                     arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_bdg_chunks, False)))
+  test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_bdg_chunks),
+                     arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_bdg_chunks)))
   
 
 
@@ -128,9 +128,9 @@ if __name__ == "__main__":
     "p": [0, 1, 2],
     "d": [0, 1],
     "q": [0, 1, 2]
-    })
+    }, False)
 
-  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_loop_seattle_chunks, False)
+  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_loop_seattle_chunks)
   
   best_hyperparameters_dict = {
     "p": validation_score_hyperparameter_tuple[1][0], 
@@ -138,11 +138,11 @@ if __name__ == "__main__":
     "q": validation_score_hyperparameter_tuple[1][2]
     }
   
-  print(f"Final Evaluation loop seattle: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_loop_seattle_chunks, False)}")
-  print(f"Test Evaluation loop seattle: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_loop_seattle_chunks, False)}")
+  print(f"Final Evaluation loop seattle: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_loop_seattle_chunks)}")
+  print(f"Test Evaluation loop seattle: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_loop_seattle_chunks)}")
 
-  test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_loop_seattle_chunks, False),
-                     arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_loop_seattle_chunks, False)))
+  test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_loop_seattle_chunks),
+                     arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_loop_seattle_chunks)))
   
 
   test_case_idx = 0
