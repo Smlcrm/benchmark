@@ -57,7 +57,7 @@ if __name__ == "__main__":
   second_chunk = preprocesser_data_loader.load_single_chunk(2)
   print(f"second chunk {second_chunk}")
   thirdly_preprocessed_second_chunk = min_max_preprocessor.preprocess(second_chunk)
-  #test_cases.append((thirdly_preprocessed_second_chunk.data.train.features["y"],pd.Series([0.000000,0.142857,0.285714,0.428571,0.571429,0.714286,0.857143,1.000000])))
+  test_cases.append((thirdly_preprocessed_second_chunk.data.train.features["y"],pd.Series([0.000000,0.142857,0.285714,0.428571,0.571429,0.714286,0.857143,1.000000])))
 
   test_case_idx = 0
   for test_case in test_cases:
