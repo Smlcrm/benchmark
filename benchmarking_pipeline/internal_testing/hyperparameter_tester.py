@@ -31,7 +31,7 @@ if __name__ == "__main__":
     "exog_cols": None,
     "loss_functions": ["mae"],
     "primary_loss": "mae",
-    "forecast_horizon": 10
+    "forecast_horizon": 100
   })
 
   arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
@@ -68,6 +68,23 @@ if __name__ == "__main__":
   all_bdg_chunks = bdg_dataloader.load_several_chunks(2)
   all_bdg_chunks = [preprocessor.preprocess(chunk).data for chunk in all_bdg_chunks]
 
+  arima_model = ARIMAModel({
+    "p": -1,
+    "d": -1,
+    "q": -1,
+    "target_col": "y",
+    "exog_cols": None,
+    "loss_functions": ["mae"],
+    "primary_loss": "mae",
+    "forecast_horizon": 100
+  })
+
+  arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
+    "p": [0, 1, 2],
+    "d": [0, 1],
+    "q": [0, 1, 2]
+    })
+
   validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_bdg_chunks, False)
   
   best_hyperparameters_dict = {
@@ -81,6 +98,52 @@ if __name__ == "__main__":
 
   test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_bdg_chunks, False),
                      arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_bdg_chunks, False)))
+  
+
+
+  # Test Case 3: ARIMA Loop Seattle
+  loop_seattle_dataloader = DataLoader({"dataset" : {
+    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/LOOP_SEATTLE",
+    "name": "LOOP_SEATTLE",
+    "split_ratio" : [0.8, 0.1, 0.1]
+    }})
+  
+  all_loop_seattle_chunks = loop_seattle_dataloader.load_several_chunks(3)
+  all_loop_seattle_chunks = [preprocessor.preprocess(chunk).data for chunk in all_loop_seattle_chunks]
+
+  """
+  arima_model = ARIMAModel({
+    "p": -1,
+    "d": -1,
+    "q": -1,
+    "target_col": "y",
+    "exog_cols": None,
+    "loss_functions": ["mae"],
+    "primary_loss": "mae",
+    "forecast_horizon": 100
+  })
+  """
+
+  arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
+    "p": [0, 1, 2],
+    "d": [0, 1],
+    "q": [0, 1, 2]
+    })
+
+  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_loop_seattle_chunks, False)
+  
+  best_hyperparameters_dict = {
+    "p": validation_score_hyperparameter_tuple[1][0], 
+    "d": validation_score_hyperparameter_tuple[1][1], 
+    "q": validation_score_hyperparameter_tuple[1][2]
+    }
+  
+  print(f"Final Evaluation loop seattle: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_loop_seattle_chunks, False)}")
+  print(f"Test Evaluation loop seattle: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_loop_seattle_chunks, False)}")
+
+  test_cases.append((arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_loop_seattle_chunks, False),
+                     arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_loop_seattle_chunks, False)))
+  
 
   test_case_idx = 0
   for test_case in test_cases:
