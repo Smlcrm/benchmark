@@ -20,7 +20,7 @@ class Evaluator:
         self.metrics_to_calculate = self.config.get('metrics_to_calculate', ['mae', 'rmse'])
         self.target_col_name = self.config.get('target_col', 'y_true')
         
-        # Metric registry maps string names to metric class instances
+        # maps string names to metric class instances
         self.metric_registry = {
             'rmse': RMSE(),
             'mae': MAE(),
@@ -101,7 +101,7 @@ class EvaluatorTest:
         # Test data
         y_true = pd.Series([3, -0.5, 2, 7])
         y_predictions = pd.Series([2.5, 0.0, 2, 8])
-        y_train = pd.Series([1, 2, 3, 4, 5, 6, 7, 8])  # Example training data for MASE
+        y_train = pd.Series([1, 2, 3, 4, 5, 6, 7, 8])  # training data for MASE
 
         # For CRPS: shape (n_samples, n_draws)
         y_pred_dist_samples = np.array([
@@ -142,7 +142,6 @@ class EvaluatorTest:
             interval_alpha=interval_alpha
         )
 
-        # Print results
         print("Evaluation Results:", results)
 
     def run_test_default_metrics(self):
@@ -220,7 +219,6 @@ class EvaluatorTest:
         assert evaluator.target_col_name == 'target'
         print("Custom config test passed.")
 
-# Example usage:
 if __name__ == "__main__":
     test = EvaluatorTest()
     test.run_tests()
