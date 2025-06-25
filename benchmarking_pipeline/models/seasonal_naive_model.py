@@ -10,7 +10,7 @@ from typing import Dict, Any, Union
 import numpy as np
 import pandas as pd
 from sktime.forecasting.naive import NaiveForecaster
-from base_model import BaseModel
+from benchmarking_pipeline.models.base_model import BaseModel
 
 class SeasonalNaiveModel(BaseModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
