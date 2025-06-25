@@ -113,8 +113,6 @@ class BaseModel(ABC):
         min_length = min(len(y_true), len(y_pred))
         y_true = y_true[:min_length]
         y_pred = y_pred[:min_length]
-        print(f"y_true: {y_true}")
-        print(f"y_pred: {y_pred}")
         
         # Convert inputs to DataFrame format required by Evaluator
         

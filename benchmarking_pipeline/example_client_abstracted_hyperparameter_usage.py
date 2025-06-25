@@ -59,11 +59,11 @@ if __name__ == "__main__":
     "learning_rate": 0.001,
     "batch_size": 16,
     "epochs": 5,
-    "sequence_length": 10,
+    "sequence_length": (len(single_chunk.test.features["y"]) // 10),
     "target_col": "y",
     "loss_functions": ["mae"],
     "primary_loss": "mae",
-    "forecast_horizon": len(single_chunk.test.features["y"]) // 10
+    "forecast_horizon": (len(single_chunk.test.features["y"]) // 10)
   }
   lstm_model = LSTMModel(lstm_config)
   lstm_hyperparameter_tuner = HyperparameterTuner(lstm_model,{
