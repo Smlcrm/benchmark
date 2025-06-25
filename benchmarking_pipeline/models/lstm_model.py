@@ -46,6 +46,7 @@ class LSTMModel(BaseModel):
         self.sequence_length = self.config.get('sequence_length', 10)
         self.target_col = self.config.get('target_col', 'y')
         self.feature_cols = self.config.get('feature_cols', None)
+        self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.model = None
         
     def _build_model(self, input_shape: Tuple[int, int]) -> None:
@@ -97,24 +98,24 @@ class LSTMModel(BaseModel):
             y_seq.append(X[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon, 0])
         return np.array(X_seq), np.array(y_seq)
         
-    def train(self, target=None, X=None) -> 'LSTMModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'LSTMModel':
         """
         Train the LSTM model on given data.
         
         Args:
-            target: Training data (time series)
-            X: Optional, ignored (for interface compatibility)
+            y_context: Past target values (time series) - used for training
+            y_target: Future target values (optional, for validation)
+            x_context: Past exogenous variables (optional, ignored for now)
+            x_target: Future exogenous variables (optional, ignored for now)
             
         Returns:
             self: The fitted model instance
         """
-        if target is None:
-            raise ValueError("target (training series) must be provided for LSTMModel.")
         # Convert input to numpy array
-        if isinstance(target, pd.Series):
-            target = target.values
-        elif isinstance(target, pd.DataFrame):
-            target = target.values
+        if isinstance(y_context, (pd.Series, pd.DataFrame)):
+            target = y_context.values
+        else:
+            target = y_context
         
         # Prepare sequences
         X_seq, y_seq = self._prepare_sequences(target)
@@ -134,31 +135,39 @@ class LSTMModel(BaseModel):
         self.is_fitted = True
         return self
         
-    def predict(self, X: Union[pd.Series, np.ndarray]) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
         """
         Make predictions using the trained LSTM model.
-        
-        Args:
-            X: Input data for prediction (time series)
-            
+        Predicts len(y_target) steps ahead in a fully autoregressive fashion.
         Returns:
-            np.ndarray: Model predictions with shape (n_samples, forecast_horizon)
+            np.ndarray: Model predictions with shape (1, forecast_steps)
         """
         if self.model is None:
             raise ValueError("Model not initialized. Call train first.")
-            
+        if y_target is None:
+            raise ValueError("y_target must be provided to determine prediction length.")
+
         # Convert input to numpy array
-        if isinstance(X, pd.Series):
-            X = X.values
-        elif isinstance(X, pd.DataFrame):
-            X = X.values
-            
-        # Prepare sequences
-        X_seq, _ = self._prepare_sequences(X)
-        
-        # Make predictions
-        predictions = self.model.predict(X_seq, verbose=0)
-        return predictions
+        if isinstance(y_context, (pd.Series, pd.DataFrame)):
+            input_data = y_context.values
+        else:
+            input_data = y_context
+        forecast_steps = len(y_target)
+
+        # Ensure input_data is 2D
+        if input_data.ndim == 1:
+            input_data = input_data.reshape(-1, 1)
+
+        # Start with the last sequence_length values
+        current_sequence = input_data[-self.sequence_length:].reshape(1, self.sequence_length, 1)
+        predictions = []
+        for _ in range(forecast_steps):
+            next_pred = self.model.predict(current_sequence, verbose=0)
+            predictions.append(next_pred[0, 0])  # Take only the first value
+            # Update sequence: remove oldest, add new prediction
+            current_sequence = np.roll(current_sequence, -1, axis=1)
+            current_sequence[0, -1, 0] = next_pred[0, 0]
+        return np.array(predictions).reshape(1, -1)
         
     def get_params(self) -> Dict[str, Any]:
         """

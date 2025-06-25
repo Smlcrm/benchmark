@@ -5,7 +5,7 @@ import numpy as np
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 
 class HyperparameterTuner:
-  def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List]):
+  def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List], model_name: str):
     """
     Initialize the hyperparameter tuner with a model class and a hyperparameter search space.
 
@@ -15,8 +15,9 @@ class HyperparameterTuner:
     """
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
+    self.model_name = model_name
   
-  def hyperparameter_grid_search_single_time_series(self, time_series_dataset, use_exog: bool):
+  def hyperparameter_grid_search_single_time_series(self, time_series_dataset, use_exog: bool = False):
     """
     Perform grid search over hyperparameter combinations for a single time series dataset.
 
@@ -46,9 +47,9 @@ class HyperparameterTuner:
       self.model_class.set_params(**current_hyperparameter_dict)
       # Train a new model
       target = time_series_dataset.train.features[self.model_class.target_col]
-      trained_model = self.model_class.train(target, None)
       validation_series = time_series_dataset.validation.features[self.model_class.target_col]
-      model_predictions = trained_model.predict(validation_series) if use_exog else trained_model.predict(None)
+      trained_model = self.model_class.train(y_context=target, y_target=validation_series)
+      model_predictions = trained_model.predict(y_context=target, y_target=validation_series)
       current_train_loss = trained_model.compute_loss(time_series_dataset.validation.features[self.model_class.target_col], model_predictions)
       #print(f"Current Train Loss: {current_train_loss}")
       if current_train_loss[self.model_class.primary_loss] < lowest_train_loss:
@@ -58,7 +59,7 @@ class HyperparameterTuner:
     
     return lowest_train_loss, best_hyperparameters
 
-  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets, use_exog: bool):
+  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets, use_exog: bool = False):
     """
     Perform grid search over hyperparameter combinations for multiple time series datasets, 
     then identify the model with the best average validation performance across the datasets.
@@ -76,9 +77,11 @@ class HyperparameterTuner:
     list_of_hyperparameters_per_validation_score = []
 
     for time_series_dataset in list_of_time_series_datasets:
-      validation_score, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset, use_exog)
+      validation_score, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset)
       list_of_validation_scores.append(validation_score)
       list_of_hyperparameters_per_validation_score.append(hyperparameters)
+    print(f"List of validation scores: {list_of_validation_scores}")
+    print(f"List of hyperparameters per validation score: {list_of_hyperparameters_per_validation_score}")
 
     list_of_validation_scores = np.array(list_of_validation_scores)
     list_of_hyperparameters_per_validation_score = np.array(list_of_hyperparameters_per_validation_score)
@@ -89,7 +92,7 @@ class HyperparameterTuner:
     best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[list_of_validation_scores.argmin()]
     return list_of_validation_scores.min(), best_hyperparameters_overall
 
-  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets, use_exog: bool):
+  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets, use_exog: bool = False):
     """
     Train a model using the best hyperparameters on the combined train and validation splits, 
     then evaluate its performance on the test split for each dataset.
@@ -110,9 +113,9 @@ class HyperparameterTuner:
             time_series_dataset.validation.features[self.model_class.target_col]
         ])
       target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
-      trained_model = self.model_class.train(target, None)
-      validation_series = time_series_dataset.validation.features[self.model_class.target_col]
-      predictions = trained_model.predict(validation_series) if use_exog else trained_model.predict(None)
+      trained_model = self.model_class.train(y_context=target, y_target=None)
+            
+      predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.features[self.model_class.target_col])
       train_loss_dict = trained_model.compute_loss(time_series_dataset.test.features[self.model_class.target_col], predictions)
       if results_dict is None:
         results_dict = train_loss_dict

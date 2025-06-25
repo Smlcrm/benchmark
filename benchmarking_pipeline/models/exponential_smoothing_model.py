@@ -24,66 +24,51 @@ class ExponentialSmoothingModel(BaseModel):
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
-        # The model will be instantiated with data during the .train() call, as is standard for statsmodels
-        self.model = None
+        self.trend = self.config.get('trend', None)
+        self.seasonal = self.config.get('seasonal', None)
+        self.seasonal_periods = self.config.get('seasonal_periods', None)
+        self.damped_trend = self.config.get('damped_trend', False)
+        self.model_ = None
 
-    def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'ExponentialSmoothingModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'ExponentialSmoothingModel':
         """
         Train the Exponential Smoothing model on given data.
-        
+
         Args:
-            X: Training features (ignored by this univariate model, but required for API consistency).
-            y: Target time series values
+            y_context: Past target values (time series) - used for training
         
         Returns:
-            self: The fitted model instance.
+            self: The fitted model instance
         """
-        # statsmodels works best if y is a Pandas Series
-        if not isinstance(y, pd.Series):
-            y = pd.Series(y)
-            
-        # Get model parameters from config
-        model_params = self.config.get('model_params', {})
-        
-        print("Initializing and fitting ExponentialSmoothing model...")
-        
-        # Instantiate the model with data and parameters
-        ets_model = ExponentialSmoothing(
-            endog=y,
-            trend=model_params.get('trend'),
-            damped_trend=model_params.get('damped_trend', False),
-            seasonal=model_params.get('seasonal'),
-            seasonal_periods=model_params.get('seasonal_periods')
-        )
-        
-        # Fit the model and store the results object
-        self.model = ets_model.fit()
+        if isinstance(y_context, pd.Series):
+            endog = y_context.values
+        else:
+            endog = y_context
+        # Optionally, could use y_target for validation/early stopping in future
+        self.model_ = ExponentialSmoothing(
+            endog,
+            trend=self.trend,
+            seasonal=self.seasonal,
+            seasonal_periods=self.seasonal_periods,
+            damped_trend=self.damped_trend
+        ).fit()
         self.is_fitted = True
-        
-        print("Training complete.")
         return self
-        
-    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
         """
         Make predictions using the trained Exponential Smoothing model.
-        
-        Args:
-            X: Input data for prediction. The number of rows in X determines the
-               number of steps to forecast. The content of X is ignored.
-            
+
         Returns:
-            np.ndarray: Model predictions.
+            np.ndarray: Model predictions with shape (1, forecast_horizon)
         """
         if not self.is_fitted:
-            raise ValueError("Model is not trained yet. Call train() first.")
-        
-        # The number of steps to forecast is determined by the length of the input X
-        n_steps = len(X)
-        
-        # The .forecast() method of a fitted statsmodels object takes the number of steps
-        predictions = self.model.forecast(steps=n_steps)
-        
-        return predictions.values
+            raise ValueError("Model not initialized. Call train first.")
+        if y_target is None:
+            raise ValueError("y_target must be provided to determine prediction length.")
+        forecast_steps = len(y_target)
+        forecast = self.model_.forecast(steps=forecast_steps)
+        return forecast.reshape(1, -1)
 
     def get_params(self) -> Dict[str, Any]:
         """
@@ -101,7 +86,7 @@ class ExponentialSmoothingModel(BaseModel):
         self.config['model_params'].update(params)
         
         self.is_fitted = False
-        self.model = None
+        self.model_ = None
         
         return self
 
@@ -112,7 +97,7 @@ class ExponentialSmoothingModel(BaseModel):
         Args:
             path: Path to save the model.
         """
-        if not self.is_fitted or self.model is None:
+        if not self.is_fitted or self.model_ is None:
             raise ValueError("Cannot save an unfitted model")
             
         dir_name = os.path.dirname(path)
@@ -121,7 +106,7 @@ class ExponentialSmoothingModel(BaseModel):
             
         # The fitted results object from statsmodels can be pickled
         with open(path, 'wb') as f:
-            pickle.dump(self.model, f)
+            pickle.dump(self.model_, f)
             
     def load(self, path: str) -> 'ExponentialSmoothingModel':
         """
@@ -134,6 +119,6 @@ class ExponentialSmoothingModel(BaseModel):
             raise FileNotFoundError(f"No model found at {path}")
             
         with open(path, 'rb') as f:
-            self.model = pickle.load(f)
+            self.model_ = pickle.load(f)
         self.is_fitted = True
         return self
