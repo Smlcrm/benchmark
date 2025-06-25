@@ -12,6 +12,9 @@ class HyperparameterTuner:
     Args:
         model_class: A model class that inherits from BaseModel
         hyperparameter_ranges: A dictionary where keys are hyperparameter names and values are lists of values to search over.
+        use_exog: Whether to use exogeneous variables or not
+        is_statsmodel: Whether this model is a statsmodel or not. Defaults to
+                       True
     """
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
@@ -24,6 +27,7 @@ class HyperparameterTuner:
     Args:
         time_series_dataset: A Dataset object containing 'train', 'validation', and 'test' splits.
         use_exog: Whether to use exogeneous variables or not
+        is_statsmodel: Whether this tuner is a statsmodel or not
 
     Returns:
         best_trained_model: The model instance trained with the best hyperparameter setting.
@@ -39,12 +43,15 @@ class HyperparameterTuner:
     for hyperparameter_setting in itertools.product(*self.hyperparameter_ranges.values()):
       current_hyperparameter_dict = dict()
       for key_value_index in range(len(hyperparameter_names)):
+
         # For the current chosen hyperparameter combination,
         # Create a dictionary associating hyperparameter names to the 
         # Appropriate hyperparameter value
         current_hyperparameter_dict[hyperparameter_names[key_value_index]] = hyperparameter_setting[key_value_index]
+
       # Change the model's hyperparameter values
       self.model_class.set_params(**current_hyperparameter_dict)
+
       # Train a new model
       target = time_series_dataset.train.features[self.model_class.target_col]
       validation_series = time_series_dataset.validation.features[self.model_class.target_col]
@@ -66,7 +73,6 @@ class HyperparameterTuner:
 
     Args:
         list_of_time_series_datasets: A list of Dataset objects, each containing 'train', 'validation', and 'test' splits.
-        use_exog: Whether to use exogeneous variables or not
 
     Returns:
         best_arima_model_overall: The model instance that achieved the best average validation loss across datasets.
@@ -85,10 +91,12 @@ class HyperparameterTuner:
 
     list_of_validation_scores = np.array(list_of_validation_scores)
     list_of_hyperparameters_per_validation_score = np.array(list_of_hyperparameters_per_validation_score)
+
     print(f"Best hyperparameters: {list_of_hyperparameters_per_validation_score}")
     print(f"Best validation scores: {list_of_validation_scores}")
     print(f"Validation scores: {list_of_validation_scores}")
     print(f"Chosen index: {list_of_validation_scores.argmin()}")
+
     best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[list_of_validation_scores.argmin()]
     return list_of_validation_scores.min(), best_hyperparameters_overall
 
@@ -112,6 +120,7 @@ class HyperparameterTuner:
             time_series_dataset.train.features[self.model_class.target_col],
             time_series_dataset.validation.features[self.model_class.target_col]
         ])
+      
       target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
       trained_model = self.model_class.train(y_context=target, y_target=None)
             
@@ -122,6 +131,7 @@ class HyperparameterTuner:
       else:
         # aggregates dict
         results_dict = {key: results_dict[key] + train_loss_dict[key] for key in results_dict}
+
     results_dict = {key: float(results_dict[key]/len(list_of_time_series_datasets)) for key in results_dict}
     return results_dict
       

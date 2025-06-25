@@ -34,8 +34,8 @@ class BaseModel(ABC):
         self.loss_functions = self.config.get('loss_functions', ['mse'])
         self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
+        self.target_col = self.config.get('target_col', 'y')
         self.is_fitted = False
-        print(f"COnfig?? {self.config}")
         self.evaluator = Evaluator(config=self.config)
         
     @abstractmethod
