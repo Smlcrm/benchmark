@@ -34,16 +34,13 @@ class ARIMAModel(BaseModel):
         self.target_col = self.config.get('target_col', 'y')
         self.model = None
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], x_context: Union[pd.Series, np.ndarray] = None, 
-              y_target: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'ARIMAModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'ARIMAModel':
         """
         Train the ARIMA model on given data.
         
         Args:
-            y_context: Past target values - training + validation data
+            y_context: Past target values - training data
             x_context: Past exogenous variables - used during training
-            y_target: Future target values - not used in training ARIMA model
-            x_target: Future exogenous variables - not used in training
         Returns:
             self: The fitted model instance
         """
@@ -66,18 +63,22 @@ class ARIMAModel(BaseModel):
         self.is_fitted = True
         return self
         
-    def predict(self, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None,  y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
         """
         Make predictions using the trained ARIMA model.
         
         Args:
+            y_target: Used to determine the number of steps to forecast
             x_target: Future exogenous variables for prediction (optional)
         
         Returns:
-            np.ndarray: Model predictions with shape (forecast_horizon,) or (n_samples, forecast_horizon)
+            np.ndarray: Model predictions with shape (1, forecast_horizon)
         """
         if not self.is_fitted:
             raise ValueError("Model not initialized. Call train first.")
+        
+        if y_target is None:
+            raise ValueError("y_target must be provided to determine prediction length.")
         
         # Handle exogenous variables for prediction (only x_target)
         exog = None
@@ -87,9 +88,9 @@ class ARIMAModel(BaseModel):
             else:
                 exog = x_target
         
-        # Forecast using the fitted model
-        forecast = self.model_.forecast(steps=self.forecast_horizon, exog=exog)
-        return forecast.reshape(1, -1)  # Return as (1, forecast_horizon) to make it consistent with other models
+        forecast_steps = len(y_target)
+        forecast = self.model_.forecast(steps=forecast_steps, exog=exog)
+        return forecast.reshape(1, -1)  # Return as (1, forecast_steps) to make it consistent with other models
         
     def get_params(self) -> Dict[str, Any]:
         """
