@@ -48,7 +48,7 @@ class Evaluator:
         if isinstance(y_true, pd.Series):
             y_true = y_true.values
         if y_train is not None and isinstance(y_train, pd.Series):
-            y_train = y_train.values        
+            y_train = y_train.values
         if len(y_predictions) != len(y_true):
             raise ValueError("Length of predictions and true values must match.")
 
@@ -85,6 +85,8 @@ class Evaluator:
 
         return results
     
+
+# Temporarily for testing purposes
 class EvaluatorTest:
     def __init__(self, config=None):
         """
@@ -96,7 +98,6 @@ class EvaluatorTest:
         """
         Run basic tests to validate evaluator functionality.
         """
-
         # Test data
         y_true = pd.Series([3, -0.5, 2, 7])
         y_predictions = pd.Series([2.5, 0.0, 2, 8])
@@ -113,7 +114,7 @@ class EvaluatorTest:
         # For QuantileLoss: shape (n_samples, n_quantiles)
         y_pred_quantiles = np.array([
             [2.0, 3.0],
-            [0.0, 1.0],
+            [0.0, 5.0],
             [2.0, 2.5],
             [7.0, 8.0]
         ])
@@ -121,7 +122,7 @@ class EvaluatorTest:
 
         # For IntervalScore: lower and upper bounds
         y_pred_lower_bound = np.array([2.0, -1.0, 1.5, 6.5])
-        y_pred_upper_bound = np.array([3.5, 0.5, 2.5, 8.5])
+        y_pred_upper_bound = np.array([3.5, 0.5, 1.5, 8.5])
         interval_alpha = 0.1
 
         self.evaluator.metrics_to_calculate = [
@@ -144,4 +145,87 @@ class EvaluatorTest:
         # Print results
         print("Evaluation Results:", results)
 
-EvaluatorTest().run_tests()
+    def run_test_default_metrics(self):
+        """
+        Test default metrics (mae, rmse) with minimal arguments.
+        """
+        y_true = pd.Series([1, 2, 3])
+        y_pred = pd.Series([1, 2, 4])
+        self.evaluator.metrics_to_calculate = ['mae', 'rmse']
+        results = self.evaluator.evaluate(y_pred, y_true)
+        assert 'mae' in results and 'rmse' in results
+        print("Default metrics test passed:", results)
+
+    def run_test_missing_required_args(self):
+        """
+        Test error handling for missing required arguments for certain metrics.
+        """
+        y_true = pd.Series([1, 2, 3])
+        y_pred = pd.Series([1, 2, 4])
+        self.evaluator.metrics_to_calculate = ['mase']
+        try:
+            self.evaluator.evaluate(y_pred, y_true)
+        except ValueError as e:
+            print("Caught expected error for missing y_train (MASE):", e)
+
+        self.evaluator.metrics_to_calculate = ['crps']
+        try:
+            self.evaluator.evaluate(y_pred, y_true)
+        except ValueError as e:
+            print("Caught expected error for missing y_pred_dist_samples (CRPS):", e)
+
+        self.evaluator.metrics_to_calculate = ['quantile_loss']
+        try:
+            self.evaluator.evaluate(y_pred, y_true)
+        except ValueError as e:
+            print("Caught expected error for missing quantile args (QuantileLoss):", e)
+
+        self.evaluator.metrics_to_calculate = ['interval_score']
+        try:
+            self.evaluator.evaluate(y_pred, y_true)
+        except ValueError as e:
+            print("Caught expected error for missing interval bounds (IntervalScore):", e)
+
+    def run_test_unknown_metric(self):
+        """
+        Test error handling for unknown metric name.
+        """
+        y_true = pd.Series([1, 2, 3])
+        y_pred = pd.Series([1, 2, 4])
+        self.evaluator.metrics_to_calculate = ['qpwegrhvf']
+        try:
+            self.evaluator.evaluate(y_pred, y_true)
+        except ValueError as e:
+            print("Caught expected error for unknown metric:", e)
+
+    def run_test_length_mismatch(self):
+        """
+        Test error handling for mismatched prediction/true value lengths.
+        """
+        y_true = pd.Series([1, 2, 3])
+        y_pred = pd.Series([1, 2])
+        self.evaluator.metrics_to_calculate = ['mae']
+        try:
+            self.evaluator.evaluate(y_pred, y_true)
+        except ValueError as e:
+            print("Caught expected error for length mismatch:", e)
+
+    def run_test_custom_config(self):
+        """
+        Test initialization with custom config.
+        """
+        config = {'metrics_to_calculate': ['mae'], 'target_col': 'target'}
+        evaluator = Evaluator(config)
+        assert evaluator.metrics_to_calculate == ['mae']
+        assert evaluator.target_col_name == 'target'
+        print("Custom config test passed.")
+
+# Example usage:
+if __name__ == "__main__":
+    test = EvaluatorTest()
+    test.run_tests()
+    test.run_test_default_metrics()
+    test.run_test_missing_required_args()
+    test.run_test_unknown_metric()
+    test.run_test_length_mismatch()
+    test.run_test_custom_config()

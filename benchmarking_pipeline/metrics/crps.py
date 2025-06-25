@@ -18,7 +18,6 @@ class CRPS:
         y_s = np.asarray(y_pred_dist_samples)
         
         if y_true.ndim == 1: # Univariate
-            # More efficient CRPS calculation
             term1 = np.mean(np.abs(y_s - y_true[:, np.newaxis]), axis=1)
             term2 = np.mean(np.abs(y_s[:, :, np.newaxis] - y_s[:, np.newaxis, :]), axis=(1, 2)) / 2
             return np.mean(term1 - term2)
