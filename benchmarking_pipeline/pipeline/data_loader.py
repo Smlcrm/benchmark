@@ -22,6 +22,7 @@ class DataLoader:
         self.name = self.dataset_cfg.get('name')
         self.split_ratio = self.dataset_cfg.get('split_ratio', [0.6, 0.2, 0.2])
     
+    #doesn't work with exogenous variables for now
     def load_single_chunk(self, chunk_index) -> Dataset:
         """
         Load a single chunk and return it as a Dataset object.
