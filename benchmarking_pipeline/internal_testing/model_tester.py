@@ -39,6 +39,7 @@ def test_arima(all_australian_chunks):
   print(f"Test Evaluation ARIMA australia: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)}")
   print("ARIMA WORKS!")
 
+# Need to make this accurate
 def test_seasonal_naive(all_australian_chunks):
   # SECOND MODEL: Seasonal Naive
   seasonal_naive_model = SeasonalNaiveModel({
@@ -65,6 +66,7 @@ def test_seasonal_naive(all_australian_chunks):
   print(f"Test Evaluation Seasonal Naive australia: {seasonal_naive_hyperparameter_tuner.final_evaluation({'sp':2}, all_australian_chunks)}")
   print("Seasonal Naive WORKS!")
 
+# Need to make this accurate
 def test_exponential_smooth(all_australian_chunks):
   # THIRD MODEL: Exponential Smoothing
   exponential_smoothing_model = ExponentialSmoothingModel({
@@ -93,6 +95,20 @@ def test_exponential_smooth(all_australian_chunks):
   print(f"Test Evaluation Exponential Smoothing australia: {exponential_smoothing_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)}")
   print("Exponential Smoothing WORKS!")
 
+def test_theta(all_australian_chunks):
+  theta_model = ThetaModel({'model_params':{'sp':2}})
+
+  theta_hyperparameter_tuner = HyperparameterTuner(theta_model, {
+    'model_params':{
+      'sp':[0,1,2]
+      }
+      }, False)
+  
+  validation_score_hyperparameter_tuner = theta_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+  print(validation_score_hyperparameter_tuner)
+
+  print(f"Testing the theta model's get_params(...) method:\n\n{theta_model.get_params()}")
+
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
@@ -108,8 +124,9 @@ if __name__ == "__main__":
   single_chunk = preprocessor.preprocess(single_chunk).data
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
-  test_arima(all_australian_chunks)
-  test_seasonal_naive(all_australian_chunks)
+  #test_arima(all_australian_chunks)
+  #test_seasonal_naive(all_australian_chunks)
+  test_theta(all_australian_chunks)
 
 
   

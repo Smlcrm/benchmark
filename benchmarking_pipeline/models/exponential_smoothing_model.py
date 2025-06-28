@@ -20,7 +20,11 @@ class ExponentialSmoothingModel(BaseModel):
         
         Args:
             config: Configuration dictionary for model parameters.
-                    e.g., {'model_params': {'trend': 'add', 'seasonal': 'add', 'seasonal_periods': 12}}
+                    e.g., {'model_params': {
+                    'trend': 'add', 
+                    'seasonal': 'add', 
+                    'seasonal_periods': 12 }
+                          }
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
