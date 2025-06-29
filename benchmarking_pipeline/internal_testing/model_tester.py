@@ -102,7 +102,7 @@ def test_theta(all_australian_chunks):
     })
 
   theta_hyperparameter_tuner = HyperparameterTuner(theta_model, {
-    'sp':[1,2,3,4,5,6,7,8]  
+    'sp':[1,2,3,4]  
       }, False)
   
   validation_score_hyperparameter_tuple = theta_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
@@ -114,7 +114,7 @@ def test_theta(all_australian_chunks):
     "sp": validation_score_hyperparameter_tuple[1][0], 
     }
   print(f"Final Evaluation Theta australia: {theta_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
-  print(f"Test Evaluation Theta australia: {theta_hyperparameter_tuner.final_evaluation({'sp':4,}, all_australian_chunks)}")
+  print(f"Test Evaluation Theta australia: {theta_hyperparameter_tuner.final_evaluation({'sp':3,}, all_australian_chunks)}")
   print("Theta WORKS!")
 
 if __name__ == "__main__":
