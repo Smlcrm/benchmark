@@ -20,22 +20,19 @@ class ThetaModel(BaseModel):
         Args:
             config: Configuration dictionary for model parameters.
                     Example Format:
-                    {'model_params': 
-                        {
-                        'sp': 12    - for monthly data with yearly seasonality.
-                        }
-                    } 
+                    {'sp': 12} - for monthly data with yearly seasonality.   
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
-        self._build_model()
+        self.sp = self.config.get('sp', 1)
+        self.model = None
         
     def _build_model(self):
         """
         Build the ThetaForecaster model instance from the configuration.
         """
         # Get hyperparameters from config
-        model_params = self.config.get('model_params', {})
+        model_params = {"sp": self.sp}
         
         self.model = ThetaForecaster(**model_params)
         self.is_fitted = False
@@ -93,18 +90,29 @@ class ThetaModel(BaseModel):
         """
         if self.model:
             return self.model.get_params()
-        return self.config.get('model_params', {})
+        return {"sp", self.sp}
 
     def set_params(self, **params: Dict[str, Any]) -> 'ThetaModel':
         """
         Set model parameters. This will rebuild the sktime model instance.
         """
-        if 'model_params' not in self.config:
-            self.config['model_params'] = {}
-        self.config['model_params'].update(params)
+        model_params_changed = False
         
-        # Re-build the model with the new parameters
-        self._build_model()
+        for key, value in params.items():
+            if hasattr(self, key):
+                # Check if this is a model parameter that requires refitting
+                if key in ['sp'] and getattr(self, key) != value:
+                    model_params_changed = True
+                setattr(self, key, value)
+            else:
+                # Update config if parameter not found in instance attributes
+                self.config[key] = value
+        
+        # If model parameters changed, reset the fitted model
+        if model_params_changed and self.is_fitted:
+            self.model_ = None
+            self.is_fitted = False
+            
         return self
 
     def save(self, path: str) -> None:
