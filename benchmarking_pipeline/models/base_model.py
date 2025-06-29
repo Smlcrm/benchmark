@@ -31,7 +31,7 @@ class BaseModel(ABC):
                 config = json.load(f)
         
         self.config = config or {}
-        self.loss_functions = self.config.get('loss_functions', ['mse'])
+        self.loss_functions = self.config.get('loss_functions', ['mae'])
         self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.target_col = self.config.get('target_col', 'y')

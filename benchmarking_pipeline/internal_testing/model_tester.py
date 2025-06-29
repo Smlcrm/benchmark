@@ -97,17 +97,25 @@ def test_exponential_smooth(all_australian_chunks):
 
 def test_theta(all_australian_chunks):
   theta_model = ThetaModel({
-    'sp':-1
+    'sp':-1,
+    "forecast_horizon": 100
     })
 
   theta_hyperparameter_tuner = HyperparameterTuner(theta_model, {
-    'sp':[1,2,3]  
+    'sp':[1,2,3,4,5,6,7,8]  
       }, False)
   
-  validation_score_hyperparameter_tuner = theta_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
-  print(validation_score_hyperparameter_tuner)
+  validation_score_hyperparameter_tuple = theta_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+  print(validation_score_hyperparameter_tuple)
 
   print(f"Testing the theta model's get_params(...) method:\n\n{theta_model.get_params()}")
+
+  best_hyperparameters_dict = {
+    "sp": validation_score_hyperparameter_tuple[1][0], 
+    }
+  print(f"Final Evaluation Theta australia: {theta_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+  print(f"Test Evaluation Theta australia: {theta_hyperparameter_tuner.final_evaluation({'sp':4,}, all_australian_chunks)}")
+  print("Theta WORKS!")
 
 if __name__ == "__main__":
   print("Model testing suite!")
