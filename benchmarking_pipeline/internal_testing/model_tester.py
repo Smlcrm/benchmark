@@ -96,12 +96,12 @@ def test_exponential_smooth(all_australian_chunks):
   print("Exponential Smoothing WORKS!")
 
 def test_theta(all_australian_chunks):
-  theta_model = ThetaModel({'model_params':{'sp':2}})
+  theta_model = ThetaModel({
+    'sp':-1
+    })
 
   theta_hyperparameter_tuner = HyperparameterTuner(theta_model, {
-    'model_params':{
-      'sp':[0,1,2]
-      }
+    'sp':[1,2,3]  
       }, False)
   
   validation_score_hyperparameter_tuner = theta_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
@@ -120,7 +120,9 @@ if __name__ == "__main__":
   all_australian_chunks = australian_dataloader.load_several_chunks(2)
 
   # Preprocess the data with default params
-  preprocessor = Preprocessor({}) # by default interpolate missing values
+  preprocessor = Preprocessor({"dataset":
+                               {"normalize":False}
+                               }) # by default interpolate missing values
   single_chunk = preprocessor.preprocess(single_chunk).data
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
