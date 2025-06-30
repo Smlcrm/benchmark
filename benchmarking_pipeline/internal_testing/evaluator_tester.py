@@ -56,8 +56,44 @@ class EvaluatorTest:
             y_pred_upper_bound=y_pred_upper_bound,
             interval_alpha=interval_alpha
         )
-
         print("Evaluation Results:", results)
+
+        # Additional test with different data
+        y_true2 = pd.Series([10, 20, 30, 40])
+        y_predictions2 = pd.Series([12, 18, 33, 39])
+        y_train2 = pd.Series([5, 10, 15, 20, 25, 30, 35, 40])
+
+        y_pred_dist_samples2 = np.array([
+            [11, 13, 12],
+            [19, 21, 20],
+            [29, 31, 30],
+            [41, 39, 40]
+        ])
+
+        y_pred_quantiles2 = np.array([
+            [11, 13],
+            [19, 21],
+            [29, 31],
+            [39, 41]
+        ])
+        quantiles_q_values2 = [0.25, 0.75]
+
+        y_pred_lower_bound2 = np.array([9, 17, 28, 38])
+        y_pred_upper_bound2 = np.array([13, 19, 34, 42])
+        interval_alpha2 = 0.2
+
+        results2 = self.evaluator.evaluate(
+            y_predictions2,
+            y_true2,
+            y_train=y_train2,
+            y_pred_dist_samples=y_pred_dist_samples2,
+            y_pred_quantiles=y_pred_quantiles2,
+            quantiles_q_values=quantiles_q_values2,
+            y_pred_lower_bound=y_pred_lower_bound2,
+            y_pred_upper_bound=y_pred_upper_bound2,
+            interval_alpha=interval_alpha2
+        )
+        print("Second Evaluation Results:", results2)
 
     def run_test_default_metrics(self):
         """
