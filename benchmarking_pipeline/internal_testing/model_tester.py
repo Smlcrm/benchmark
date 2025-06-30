@@ -6,6 +6,7 @@ from benchmarking_pipeline.models.seasonal_naive_model import SeasonalNaiveModel
 from benchmarking_pipeline.models.exponential_smoothing_model import ExponentialSmoothingModel
 from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.theta_model import ThetaModel
+from benchmarking_pipeline.models.deepAR_model import DeepARModel
 
 def test_arima(all_australian_chunks):
 
@@ -39,62 +40,6 @@ def test_arima(all_australian_chunks):
   print(f"Test Evaluation ARIMA australia: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)}")
   print("ARIMA WORKS!")
 
-# Need to make this accurate
-def test_seasonal_naive(all_australian_chunks):
-  # SECOND MODEL: Seasonal Naive
-  seasonal_naive_model = SeasonalNaiveModel({
-    "model_params": {
-      "sp":"-1"
-    },
-    "target_col": "y",
-    "loss_functions": ["mae"],
-    "primary_loss": "mae",
-    "forecast_horizon": 100
-  })
-
-  seasonal_naive_hyperparameter_tuner = HyperparameterTuner(seasonal_naive_model, {
-    "sp": [1,2,3,4]
-  }, False)
-
-  # Give the Seasonal Naive model the first chunk to hyperparameter tune on
-  validation_score_hyperparameter_tuple = seasonal_naive_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
-  
-  best_hyperparameters_dict = {
-    "sp": validation_score_hyperparameter_tuple[1][0]
-    }
-  print(f"Final Evaluation Seasonal Naive australia: {seasonal_naive_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
-  print(f"Test Evaluation Seasonal Naive australia: {seasonal_naive_hyperparameter_tuner.final_evaluation({'sp':2}, all_australian_chunks)}")
-  print("Seasonal Naive WORKS!")
-
-# Need to make this accurate
-def test_exponential_smooth(all_australian_chunks):
-  # THIRD MODEL: Exponential Smoothing
-  exponential_smoothing_model = ExponentialSmoothingModel({
-    "model_params": {
-      "sp":"-1"
-    },
-    "target_col": "y",
-    "loss_functions": ["mae"],
-    "primary_loss": "mae",
-    "forecast_horizon": 100
-  })
-
-  exponential_smoothing_hyperparameter_tuner = HyperparameterTuner(exponential_smoothing_model, {
-    "sp": [1,2,3,4]
-  }, False)
-
-  # Give the Seasonal Naive model the first chunk to hyperparameter tune on
-  validation_score_hyperparameter_tuple = exponential_smoothing_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
-  
-  best_hyperparameters_dict = {
-    "p": validation_score_hyperparameter_tuple[1][0], 
-    "d": validation_score_hyperparameter_tuple[1][1], 
-    "q": validation_score_hyperparameter_tuple[1][2]
-    }
-  print(f"Final Evaluation Exponential Smoothing australia: {exponential_smoothing_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
-  print(f"Test Evaluation Exponential Smoothing australia: {exponential_smoothing_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)}")
-  print("Exponential Smoothing WORKS!")
-
 def test_theta(all_australian_chunks):
   theta_model = ThetaModel({
     'sp':-1,
@@ -117,6 +62,26 @@ def test_theta(all_australian_chunks):
   print(f"Test Evaluation Theta australia: {theta_hyperparameter_tuner.final_evaluation({'sp':3,}, all_australian_chunks)}")
   print("Theta WORKS!")
 
+def test_deep_ar(all_australian_chunks):
+  deep_ar_model = DeepARModel({
+    "hidden_size": 10,
+    "rnn_layers" : 2,
+    "dropout" : 0.1,
+    "learning_rate" : 0.001,
+    "target_col" : 'y',
+    "feature_cols" : None,
+    "forecast_horizon" : 100
+  })
+
+  deep_ar_hyperparameter_tuner = HyperparameterTuner(deep_ar_model, {
+    'rnn_layers' : [2,3,4],
+    'hidden_size' : [10,11,12]
+  }, False)
+
+  validation_score_hyperparameter_tuple = deep_ar_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+
+  print("Deep AR WORKS!")
+
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
@@ -137,6 +102,7 @@ if __name__ == "__main__":
   #test_arima(all_australian_chunks)
   #test_seasonal_naive(all_australian_chunks)
   test_theta(all_australian_chunks)
+  test_deep_ar(all_australian_chunks)
 
 
   

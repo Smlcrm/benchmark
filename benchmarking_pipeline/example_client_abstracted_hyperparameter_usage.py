@@ -41,14 +41,14 @@ if __name__ == "__main__":
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
   print(f"Single chunk: {single_chunk.validation.features}")
-  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks, False)
+  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
   print(f"Validation score and hyperparamter: {validation_score_hyperparameter_tuple}")
   best_hyperparameters_dict = {
     "p": validation_score_hyperparameter_tuple[1][0], 
     "d": validation_score_hyperparameter_tuple[1][1], 
     "q": validation_score_hyperparameter_tuple[1][2]
     }
-  print(f"Final Evaluation: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks, False)}")
+  print(f"Final Evaluation: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
   
   print("\nLSTM Model Example:")
   # Use the first chunk's train and validation sets for demonstration

@@ -39,8 +39,14 @@ class BaseModel(ABC):
         self.evaluator = Evaluator(config=self.config)
         
     @abstractmethod
-    def train(self, y_context: Union[pd.Series, np.ndarray], x_context: Union[pd.Series, np.ndarray] = None, 
-              y_target: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'BaseModel':
+    def train(self, 
+              y_context: Optional[Union[pd.Series, np.ndarray]], 
+              x_context: Optional[Union[pd.Series, np.ndarray]] = None, 
+              y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
+              x_target: Optional[Union[pd.Series, np.ndarray]] = None,
+              y_start_date: Optional[str] = None,
+              x_start_date: Optional[str] = None
+    ) -> 'BaseModel':
         """
         Train the model on given data.
         
@@ -50,6 +56,8 @@ class BaseModel(ABC):
             y_target: Future target values - validation data during tuning time, None during testing time (avoid data leakage)
             x_target: Future exogenous variables - if provided, can be used with x_context for training (e.g., in ARIMA models)
                      or with y_target for validation during tuning time
+            y_start_date: The start date timestamp for y_context and y_target in string form
+            x_start_date: The start date timestamp for x_context and x_target in string form
             
         Returns:
             self: The fitted model instance
