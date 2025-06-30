@@ -4,6 +4,7 @@ LSTM model implementation.
 TO BE CHANGED: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
 """
 import numpy as np
+import math
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
@@ -102,6 +103,13 @@ class LSTMModel(BaseModel):
         """
         Train the LSTM model on given data.
         
+        TECHNIQUE: Sliding Window Multi-Step Learning
+        - Creates overlapping sequences of length sequence_length from historical data
+        - Each sequence predicts forecast_horizon future values simultaneously
+        - Training pairs: Input [t, t+1, ..., t+sequence_length-1] → Target [t+sequence_length, ..., t+sequence_length+forecast_horizon-1]
+        - Model learns to predict multiple future steps in a single forward pass
+        - Captures temporal dependencies across multiple future time steps
+        
         Args:
             y_context: Past target values (time series) - used for training
             y_target: Future target values (optional, for validation)
@@ -138,7 +146,16 @@ class LSTMModel(BaseModel):
     def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
         """
         Make predictions using the trained LSTM model.
-        Predicts len(y_target) steps ahead in a fully autoregressive fashion.
+        Predicts len(y_target) steps ahead using non-overlapping windows.
+        
+        TECHNIQUE: Non-overlapping Multi-Step Windows
+        - Starts with last sequence_length historical values
+        - Predicts forecast_horizon steps at once (no autoregressive feedback)
+        - Advances window by forecast_horizon steps for next prediction
+        - Repeats until len(y_target) steps are predicted
+        - Fair comparison with non-autoregressive models (ARIMA, Exponential Smoothing)
+        - No data leakage from using own predictions as input
+        
         Returns:
             np.ndarray: Model predictions with shape (1, forecast_steps)
         """
@@ -158,16 +175,26 @@ class LSTMModel(BaseModel):
         if input_data.ndim == 1:
             input_data = input_data.reshape(-1, 1)
 
-        # Start with the last sequence_length values
+        # Calculate how many prediction windows we need
+        num_windows = math.ceil((forecast_steps) // self.forecast_horizon)
+        
+        all_predictions = []
         current_sequence = input_data[-self.sequence_length:].reshape(1, self.sequence_length, 1)
-        predictions = []
-        for _ in range(forecast_steps):
-            next_pred = self.model.predict(current_sequence, verbose=0)
-            predictions.append(next_pred[0, 0])  # Take only the first value
-            # Update sequence: remove oldest, add new prediction
-            current_sequence = np.roll(current_sequence, -1, axis=1)
-            current_sequence[0, -1, 0] = next_pred[0, 0]
-        return np.array(predictions).reshape(1, -1)
+        
+        for window in range(num_windows):
+            # Predict forecast_horizon steps at once
+            predictions = self.model.predict(current_sequence, verbose=0)
+            all_predictions.extend(predictions[0])
+            
+            # Advance window by forecast_horizon steps and use predictions as input
+            if window < num_windows - 1:  # Don't update on last iteration
+                # Move window forward by forecast_horizon steps
+                current_sequence = np.roll(current_sequence, -self.forecast_horizon, axis=1)
+                # Use the predictions as input for the next window
+                current_sequence[0, -self.forecast_horizon:, 0] = predictions[0]
+        
+        # Return only the requested number of predictions
+        return np.array(all_predictions[:forecast_steps]).reshape(1, -1)
         
     def get_params(self) -> Dict[str, Any]:
         """
