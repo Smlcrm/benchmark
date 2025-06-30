@@ -77,7 +77,10 @@ class ThetaModel(BaseModel):
             raise ValueError("Model is not trained yet. Call train() first.")
         
         # Create a forecasting horizon based on the number of samples in the input X.
-        fh = np.arange(1, len(x_target) + 1)
+        if x_target is not None:
+            fh = np.arange(1, len(x_target) + 1)
+        else:
+            fh = self.forecast_horizon
         
         # The sktime predict method uses the forecasting horizon (fh).
         predictions = self.model.predict(fh=fh)
@@ -97,7 +100,6 @@ class ThetaModel(BaseModel):
         Set model parameters. This will rebuild the sktime model instance.
         """
         model_params_changed = False
-        
         for key, value in params.items():
             if hasattr(self, key):
                 # Check if this is a model parameter that requires refitting
@@ -110,7 +112,7 @@ class ThetaModel(BaseModel):
         
         # If model parameters changed, reset the fitted model
         if model_params_changed and self.is_fitted:
-            self.model_ = None
+            self.model = None
             self.is_fitted = False
             
         return self
