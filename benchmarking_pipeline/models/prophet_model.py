@@ -34,13 +34,15 @@ class ProphetModel(BaseModel):
         self.model = Prophet(**model_params)
         self.is_fitted = False
 
-    def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'ProphetModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.DataFrame, np.ndarray] = None, x_target: Union[pd.DataFrame, np.ndarray] = None) -> 'ProphetModel':
         """
         Train the Prophet model on given data.
         
         Args:
-            X: Training features (exogenous variables). Must have the same index as y.
-            y: Target time series values. Must be a pd.Series with a DatetimeIndex.
+            y_context: Past target values (time series) as a Pandas Series with a DatetimeIndex.
+            y_target: Future target values (optional, for validation)
+            x_context: Past exogenous variables (optional, DataFrame with same index as y_context)
+            x_target: Future exogenous variables (optional, DataFrame with same index as y_target)
         
         Returns:
             self: The fitted model instance.
@@ -48,58 +50,59 @@ class ProphetModel(BaseModel):
         if self.model is None:
             self._build_model()
 
-        if not isinstance(y, pd.Series) or not isinstance(y.index, pd.DatetimeIndex):
-            raise TypeError("For Prophet, `y` must be a Pandas Series with a DatetimeIndex.")
-            
-        # Prophet requires a DataFrame with 'ds' and 'y' columns
-        train_df = pd.DataFrame({'ds': y.index, 'y': y.values})
+        if not isinstance(y_context, pd.Series) or not isinstance(y_context.index, pd.DatetimeIndex):
+            raise TypeError("For Prophet, y_context must be a Pandas Series with a DatetimeIndex.")
+        
+        train_df = pd.DataFrame({'ds': y_context.index, 'y': y_context.values})
         
         # Handle exogenous regressors
-        exog_cols = []
-        if X is not None:
-            if not isinstance(X, pd.DataFrame):
-                # Assume columns are named exog_0, exog_1, etc.
-                X = pd.DataFrame(X, index=y.index)
-                X.columns = [f"exog_{i}" for i in range(X.shape[1])]
-
-            # Add regressors to the Prophet model instance
-            for col in X.columns:
+        if x_context is not None:
+            if not isinstance(x_context, pd.DataFrame):
+                x_context = pd.DataFrame(x_context, index=y_context.index)
+                x_context.columns = [f"exog_{i}" for i in range(x_context.shape[1])]
+            for col in x_context.columns:
                 self.model.add_regressor(col)
-            
-            # Join regressors with the main DataFrame
-            train_df = train_df.join(X)
-
+            train_df = train_df.join(x_context)
+        
         print(f"Fitting Prophet model...")
         self.model.fit(train_df)
         self.is_fitted = True
         print("Training complete.")
         return self
-        
-    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.DataFrame, np.ndarray] = None, x_target: Union[pd.DataFrame, np.ndarray] = None) -> np.ndarray:
         """
         Make predictions using the trained Prophet model.
         
         Args:
-            X: Input data for prediction. Must be a DataFrame with a DatetimeIndex
-               and columns for any exogenous regressors used during training.
-            
+            y_context: Past target values (time series) as a Pandas Series with a DatetimeIndex.
+            y_target: Future target values (used to determine forecast length and future dates)
+            x_context: Past exogenous variables (optional, ignored for prediction)
+            x_target: Future exogenous variables (optional, DataFrame with same index as y_target)
+        
         Returns:
-            np.ndarray: Model's point forecast ('yhat').
+            np.ndarray: Model's point forecast ('yhat') with shape (1, forecast_steps)
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
+        if y_target is None:
+            raise ValueError("y_target must be provided to determine prediction length and future dates.")
+        if not isinstance(y_target, pd.Series) or not isinstance(y_target.index, pd.DatetimeIndex):
+            raise TypeError("For Prophet, y_target must be a Pandas Series with a DatetimeIndex.")
         
-        if not isinstance(X, pd.DataFrame) or not isinstance(X.index, pd.DatetimeIndex):
-            raise TypeError("For Prophet prediction, `X` must be a Pandas DataFrame with a DatetimeIndex.")
-
-        # Prophet's predict method needs a "future" dataframe with a 'ds' column and columns for any regressors.
-        future_df = X.copy()
-        future_df['ds'] = future_df.index
+        # Build the future dataframe
+        future_df = pd.DataFrame({'ds': y_target.index})
+        
+        # Add exogenous regressors if available
+        if x_target is not None:
+            if not isinstance(x_target, pd.DataFrame):
+                x_target = pd.DataFrame(x_target, index=y_target.index)
+                x_target.columns = [f"exog_{i}" for i in range(x_target.shape[1])]
+            future_df = future_df.join(x_target)
         
         forecast = self.model.predict(future_df)
-        
-        # Return the point forecast 'yhat' as a numpy array
-        return forecast['yhat'].values
+        yhat = forecast['yhat'].values.reshape(1, -1)
+        return yhat
 
     def get_params(self) -> Dict[str, Any]:
         """
