@@ -5,7 +5,7 @@ import numpy as np
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 
 class HyperparameterTuner:
-  def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List], model_name: str):
+  def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List], use_exog: str):
     """
     Initialize the hyperparameter tuner with a model class and a hyperparameter search space.
 
@@ -18,55 +18,9 @@ class HyperparameterTuner:
     """
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
-    self.model_name = model_name
-  
-  def hyperparameter_grid_search_single_time_series(self, time_series_dataset, use_exog: bool = False):
-    """
-    Perform grid search over hyperparameter combinations for a single time series dataset.
+    self.use_exog = use_exog
 
-    Args:
-        time_series_dataset: A Dataset object containing 'train', 'validation', and 'test' splits.
-        use_exog: Whether to use exogeneous variables or not
-        is_statsmodel: Whether this tuner is a statsmodel or not
-
-    Returns:
-        best_trained_model: The model instance trained with the best hyperparameter setting.
-        best_hyperparameters: The hyperparameter values (as a tuple) that achieved the lowest validation loss.
-        
-    """
-    best_hyperparameters = None
-    lowest_train_loss = float("inf")
-    print("Starting hyperparameter grid search on single time series!")
-    # List of hyperparameter names
-    hyperparameter_names = list(self.hyperparameter_ranges.keys())
-    # We iterate over all possible hyperparameter value combinations
-    for hyperparameter_setting in itertools.product(*self.hyperparameter_ranges.values()):
-      current_hyperparameter_dict = dict()
-      for key_value_index in range(len(hyperparameter_names)):
-
-        # For the current chosen hyperparameter combination,
-        # Create a dictionary associating hyperparameter names to the 
-        # Appropriate hyperparameter value
-        current_hyperparameter_dict[hyperparameter_names[key_value_index]] = hyperparameter_setting[key_value_index]
-
-      # Change the model's hyperparameter values
-      self.model_class.set_params(**current_hyperparameter_dict)
-
-      # Train a new model
-      target = time_series_dataset.train.features[self.model_class.target_col]
-      validation_series = time_series_dataset.validation.features[self.model_class.target_col]
-      trained_model = self.model_class.train(y_context=target, y_target=validation_series)
-      model_predictions = trained_model.predict(y_context=target, y_target=validation_series)
-      current_train_loss = trained_model.compute_loss(time_series_dataset.validation.features[self.model_class.target_col], model_predictions)
-      #print(f"Current Train Loss: {current_train_loss}")
-      if current_train_loss[self.model_class.primary_loss] < lowest_train_loss:
-        print(f"Lowest train loss {lowest_train_loss}")
-        lowest_train_loss = current_train_loss[self.model_class.primary_loss]
-        best_hyperparameters = hyperparameter_setting
-    
-    return lowest_train_loss, best_hyperparameters
-
-  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets, use_exog: bool = False):
+  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
     """
     Perform grid search over hyperparameter combinations for multiple time series datasets, 
     then identify the model with the best average validation performance across the datasets.
@@ -83,7 +37,49 @@ class HyperparameterTuner:
     list_of_hyperparameters_per_validation_score = []
 
     for time_series_dataset in list_of_time_series_datasets:
-      validation_score, hyperparameters = self.hyperparameter_grid_search_single_time_series(time_series_dataset)
+      best_hyperparameters = 0
+      lowest_validation_loss = float("inf")
+      print("Starting hyperparameter grid search on single time series!")
+
+      # List of hyperparameter names
+      hyperparameter_names = list(self.hyperparameter_ranges.keys())
+      # We iterate over all possible hyperparameter value combinations
+      for hyperparameter_setting in itertools.product(*self.hyperparameter_ranges.values()):
+        current_hyperparameter_dict = dict()
+        for key_value_index in range(len(hyperparameter_names)):
+
+          # For the current chosen hyperparameter combination,
+          # Create a dictionary associating hyperparameter names to the 
+          # Appropriate hyperparameter value
+          current_hyperparameter_dict[hyperparameter_names[key_value_index]] = hyperparameter_setting[key_value_index]
+          
+        # Change the model's hyperparameter values
+        self.model_class.set_params(**current_hyperparameter_dict)
+
+        # Train a new model
+        target = time_series_dataset.train.features[self.model_class.target_col]
+        validation_series = time_series_dataset.validation.features[self.model_class.target_col]
+        trained_model = self.model_class.train(y_context=target, y_target=validation_series)
+
+        # Get validation losses over every chunk
+        current_train_loss = 0
+        for time_series_dataset_from_all in list_of_time_series_datasets:
+          target = time_series_dataset_from_all.train.features[self.model_class.target_col]
+          validation_series = time_series_dataset_from_all.validation.features[self.model_class.target_col]
+          #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
+          model_predictions = trained_model.predict(y_context=target, y_target=validation_series)
+          train_loss = trained_model.compute_loss(time_series_dataset_from_all.validation.features[self.model_class.target_col], model_predictions)
+          current_train_loss += train_loss[self.model_class.primary_loss]
+        # Average validation losses over the chunks
+        current_train_loss /= len(list_of_time_series_datasets)
+        if current_train_loss < lowest_validation_loss:
+          # For this hyper parameter setting, we have a lower average validation loss
+          print(f"Lowest average validation loss so far {lowest_validation_loss}")
+          lowest_validation_loss = current_train_loss
+          best_hyperparameters = hyperparameter_setting
+      # After every possible hyperparameter setting, for the model trained on this chunk,
+      # we choose the hyperparameters that give us the lowest validation scores across all chunks
+      validation_score, hyperparameters = lowest_validation_loss, best_hyperparameters
       list_of_validation_scores.append(validation_score)
       list_of_hyperparameters_per_validation_score.append(hyperparameters)
     print(f"List of validation scores: {list_of_validation_scores}")
@@ -100,7 +96,7 @@ class HyperparameterTuner:
     best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[list_of_validation_scores.argmin()]
     return list_of_validation_scores.min(), best_hyperparameters_overall
 
-  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets, use_exog: bool = False):
+  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets):
     """
     Train a model using the best hyperparameters on the combined train and validation splits, 
     then evaluate its performance on the test split for each dataset.
