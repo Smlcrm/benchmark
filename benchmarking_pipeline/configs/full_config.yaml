@@ -8,7 +8,7 @@ dataset:
   normalize: true
   handle_missing: interpolate
 model:
-  name: ["ARIMA", "ExponentialSmoothing"]
+  name: ["ARIMA", "ExponentialSmoothing", "RandomForest"]
   parameters:
     ARIMA:
       p: [0, 1, 2]
@@ -32,6 +32,15 @@ model:
       verbose: 1
       validation_split: 0.2
       callbacks: [EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)]
+    RandomForest:
+      lookback_window: [5, 10, 15]
+      forecast_horizon: 144
+      n_estimators: [50, 100, 200]
+      max_depth: [5, 10, 15]
+      min_samples_split: [2, 5, 10]
+      min_samples_leaf: [1, 2, 4]
+      random_state: 42
+      n_jobs: -1
 
 evaluation:
   type: deterministic
