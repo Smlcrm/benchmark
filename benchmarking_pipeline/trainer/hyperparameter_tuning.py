@@ -5,7 +5,7 @@ import numpy as np
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 
 class HyperparameterTuner:
-  def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List], model_name: str):
+  def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List], use_exog: str):
     """
     Initialize the hyperparameter tuner with a model class and a hyperparameter search space.
 
@@ -18,9 +18,9 @@ class HyperparameterTuner:
     """
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
-    self.model_name = model_name
+    self.use_exog = use_exog
 
-  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets, use_exog: bool = False):
+  def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
     """
     Perform grid search over hyperparameter combinations for multiple time series datasets, 
     then identify the model with the best average validation performance across the datasets.
@@ -66,6 +66,7 @@ class HyperparameterTuner:
         for time_series_dataset_from_all in list_of_time_series_datasets:
           target = time_series_dataset_from_all.train.features[self.model_class.target_col]
           validation_series = time_series_dataset_from_all.validation.features[self.model_class.target_col]
+          #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
           model_predictions = trained_model.predict(y_context=target, y_target=validation_series)
           train_loss = trained_model.compute_loss(time_series_dataset_from_all.validation.features[self.model_class.target_col], model_predictions)
           current_train_loss += train_loss[self.model_class.primary_loss]
@@ -95,7 +96,7 @@ class HyperparameterTuner:
     best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[list_of_validation_scores.argmin()]
     return list_of_validation_scores.min(), best_hyperparameters_overall
 
-  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets, use_exog: bool = False):
+  def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets):
     """
     Train a model using the best hyperparameters on the combined train and validation splits, 
     then evaluate its performance on the test split for each dataset.
