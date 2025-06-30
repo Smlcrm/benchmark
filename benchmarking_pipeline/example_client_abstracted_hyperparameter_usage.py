@@ -4,6 +4,7 @@ from benchmarking_pipeline.models.arima_model import ARIMAModel
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from benchmarking_pipeline.models.lstm_model import LSTMModel
+from benchmarking_pipeline.models.random_forest_model import RandomForestModel
 
 
 if __name__ == "__main__":
@@ -22,61 +23,100 @@ if __name__ == "__main__":
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
 
-  arima_model = ARIMAModel({
-    "p": -1,
-    "d": -1,
-    "q": -1,
-    "target_col": "y",
-    "exog_cols": None,
-    "loss_functions": ["mae"],
-    "primary_loss": "mae",
-    "forecast_horizon": len(single_chunk.test.features["y"])
-  })
+  # arima_model = ARIMAModel({
+  #   "p": -1,
+  #   "d": -1,
+  #   "q": -1,
+  #   "target_col": "y",
+  #   "exog_cols": None,
+  #   "loss_functions": ["mae"],
+  #   "primary_loss": "mae",
+  #   "forecast_horizon": len(single_chunk.test.features["y"])
+  # })
 
-  arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
-    "p": [0, 1, 2],
-    "d": [0, 1],
-    "q": [0, 1, 2]
-    }, "arima")
+  # arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
+  #   "p": [0, 1, 2],
+  #   "d": [0, 1],
+  #   "q": [0, 1, 2]
+  #   }, "arima")
   
-  # Give the ARIMA model the first chunk to hyperparameter tune on
-  print(f"Single chunk: {single_chunk.validation.features}")
-  validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
-  print(f"Validation score and hyperparamter: {validation_score_hyperparameter_tuple}")
-  best_hyperparameters_dict = {
-    "p": validation_score_hyperparameter_tuple[1][0], 
-    "d": validation_score_hyperparameter_tuple[1][1], 
-    "q": validation_score_hyperparameter_tuple[1][2]
+  # # Give the ARIMA model the first chunk to hyperparameter tune on
+  # print(f"Single chunk: {single_chunk.validation.features}")
+  # validation_score_hyperparameter_tuple = arima_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+  # print(f"Validation score and hyperparamter: {validation_score_hyperparameter_tuple}")
+  # best_hyperparameters_dict = {
+  #   "p": validation_score_hyperparameter_tuple[1][0], 
+  #   "d": validation_score_hyperparameter_tuple[1][1], 
+  #   "q": validation_score_hyperparameter_tuple[1][2]
+  #   }
+  # print(f"Final Evaluation: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+  
+  # print("\nLSTM Model Example:")
+  # # Use the first chunk's train and validation sets for demonstration
+  # lstm_config = {
+  #   "units": 32,
+  #   "layers": 2,
+  #   "dropout": 0.2,
+  #   "learning_rate": 0.001,
+  #   "batch_size": 16,
+  #   "epochs": 5,
+  #   "sequence_length": (len(single_chunk.test.features["y"]) // 10),
+  #   "target_col": "y",
+  #   "loss_functions": ["mae"],
+  #   "primary_loss": "mae",
+  #   "forecast_horizon": (len(single_chunk.test.features["y"]) // 10)
+  # }
+  # lstm_model = LSTMModel(lstm_config)
+  # lstm_hyperparameter_tuner = HyperparameterTuner(lstm_model,{
+  #   "units": [20, 32],
+  #   "layers": [1, 2]
+  # }, "lstm")
+
+  # validation_score_hyperparameter_tuple = lstm_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+  # print(f"Validation score and hyperparamter: {validation_score_hyperparameter_tuple}")
+  # best_hyperparameters_dict = {
+  #   "units": validation_score_hyperparameter_tuple[1][0], 
+  #   "layers": validation_score_hyperparameter_tuple[1][1]
+  #   }
+  # print(f"Final Evaluation: {lstm_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+
+  # Random Forest Model Example:
+  print("\nRandom Forest Model Example:")
+  rf_config = {
+    "lookback_window": 5,  # Reduced from 10
+    "forecast_horizon": len(single_chunk.test.features["y"]),
+    "model_params": {
+      "n_estimators": 5,  # Reduced from 10 for faster testing
+      "max_depth": 5,     # Reduced from 10
+      "min_samples_split": 2,
+      "min_samples_leaf": 1,
+      "random_state": 42,
+      "n_jobs": -1
     }
-  print(f"Final Evaluation: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
-  
-  print("\nLSTM Model Example:")
-  # Use the first chunk's train and validation sets for demonstration
-  lstm_config = {
-    "units": 32,
-    "layers": 2,
-    "dropout": 0.2,
-    "learning_rate": 0.001,
-    "batch_size": 16,
-    "epochs": 5,
-    "sequence_length": (len(single_chunk.test.features["y"]) // 10),
-    "target_col": "y",
-    "loss_functions": ["mae"],
-    "primary_loss": "mae",
-    "forecast_horizon": (len(single_chunk.test.features["y"]) // 10)
   }
-  lstm_model = LSTMModel(lstm_config)
-  lstm_hyperparameter_tuner = HyperparameterTuner(lstm_model,{
-    "units": [20, 32],
-    "layers": [1, 2]
-  }, "lstm")
+  rf_hyperparameter_grid = {
+    "lookback_window": [5],  # Only one value for testing
+    "model_params__n_estimators": [5],  # Reduced from 50 for faster testing
+  }
+  print(f"Hyperparameter grid: {rf_hyperparameter_grid}")
+  print(f"Number of combinations: {len(rf_hyperparameter_grid['lookback_window']) * len(rf_hyperparameter_grid['model_params__n_estimators'])}")
+  print(f"Number of time series chunks: {len(all_australian_chunks)}")
 
-  validation_score_hyperparameter_tuple = lstm_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+  rf_model = RandomForestModel(rf_config)
+  rf_hyperparameter_tuner = HyperparameterTuner(rf_model, rf_hyperparameter_grid, "random_forest")
+
+  print("Starting hyperparameter tuning...")
+  validation_score_hyperparameter_tuple = rf_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
   print(f"Validation score and hyperparamter: {validation_score_hyperparameter_tuple}")
+
+  # Convert numpy array back to dictionary format
+  best_hyperparameters_array = validation_score_hyperparameter_tuple[1]
   best_hyperparameters_dict = {
-    "units": validation_score_hyperparameter_tuple[1][0], 
-    "layers": validation_score_hyperparameter_tuple[1][1]
-    }
-  print(f"Final Evaluation: {lstm_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+      "lookback_window": int(best_hyperparameters_array[0]),
+      "model_params__n_estimators": int(best_hyperparameters_array[1])
+  }
+  print(f"Best hyperparameters dict: {best_hyperparameters_dict}")
+
+  print(f"Final Evaluation: {rf_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
 
   
