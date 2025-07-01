@@ -6,7 +6,7 @@ HANDLING: This model needs to be updated to match the new interface with y_conte
 
 import os
 import pickle
-from typing import Dict, Any, Union
+from typing import Dict, Any, Union, Optional
 import numpy as np
 import pandas as pd
 from sktime.forecasting.theta import ThetaForecaster
@@ -37,7 +37,14 @@ class ThetaModel(BaseModel):
         self.model = ThetaForecaster(**model_params)
         self.is_fitted = False
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'ThetaModel':
+    def train(self, 
+              y_context: Union[pd.Series, np.ndarray], 
+              y_target: Union[pd.Series, np.ndarray] = None, 
+              x_context: Union[pd.Series, np.ndarray] = None, 
+              x_target: Union[pd.Series, np.ndarray] = None, 
+              y_start_date: Optional[str] = None,
+              x_start_date: Optional[str] = None
+    ) -> 'ThetaModel':
         """
         Train the Theta model on given data. For this model, "training" involves
         decomposing the series and fitting exponential smoothing.
