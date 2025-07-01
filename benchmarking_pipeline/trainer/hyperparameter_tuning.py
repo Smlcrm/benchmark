@@ -3,6 +3,8 @@ from ..models.base_model import BaseModel
 from typing import Dict, List
 import numpy as np
 from benchmarking_pipeline.models.lstm_model import LSTMModel
+import pandas as pd
+import re
 
 class HyperparameterTuner:
   def __init__(self, model_class: BaseModel, hyperparameter_ranges: Dict[str, List], use_exog: str):
@@ -19,6 +21,13 @@ class HyperparameterTuner:
     self.model_class = model_class
     self.hyperparameter_ranges = hyperparameter_ranges
     self.use_exog = use_exog
+  
+  def _extract_number_before_capital(self, freq_str):
+    match = re.match(r'(\d+)?[A-Z]', freq_str)
+    if match:
+        return int(match.group(1)) if match.group(1) else 1
+    else:
+        raise ValueError(f"Invalid frequency string: {freq_str}")
 
   def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
     """
@@ -38,7 +47,7 @@ class HyperparameterTuner:
 
     for time_series_dataset in list_of_time_series_datasets:
       best_hyperparameters = 0
-      lowest_validation_loss = float("inf")
+      lowest_train_loss = float("inf")
       print("Starting hyperparameter grid search on single time series!")
 
       # List of hyperparameter names
@@ -55,11 +64,18 @@ class HyperparameterTuner:
           
         # Change the model's hyperparameter values
         self.model_class.set_params(**current_hyperparameter_dict)
-
         # Train a new model
         target = time_series_dataset.train.features[self.model_class.target_col]
         validation_series = time_series_dataset.validation.features[self.model_class.target_col]
-        trained_model = self.model_class.train(y_context=target, y_target=validation_series)
+        start_date = time_series_dataset.metadata["start"]
+        freq_str = time_series_dataset.metadata["freq"]
+        first_capital_letter_finder = re.search(r'[A-Z]', freq_str)
+        freq = first_capital_letter_finder.group()
+        freq_coefficient = self._extract_number_before_capital(freq_str)
+        freq_offset = pd.tseries.frequencies.to_offset(freq)
+        x_start_date = pd.to_datetime(start_date)
+        y_start_date = x_start_date + (freq_coefficient * len(target) * freq_offset)
+        trained_model = self.model_class.train(y_context=target, y_target=validation_series, y_start_date=y_start_date, x_start_date=x_start_date)
 
         # Get validation losses over every chunk
         current_train_loss = 0
@@ -72,14 +88,14 @@ class HyperparameterTuner:
           current_train_loss += train_loss[self.model_class.primary_loss]
         # Average validation losses over the chunks
         current_train_loss /= len(list_of_time_series_datasets)
-        if current_train_loss < lowest_validation_loss:
+        if current_train_loss < lowest_train_loss:
           # For this hyper parameter setting, we have a lower average validation loss
-          print(f"Lowest average validation loss so far {lowest_validation_loss}")
-          lowest_validation_loss = current_train_loss
+          print(f"Lowest average train loss so far {current_train_loss}")
+          lowest_train_loss = current_train_loss
           best_hyperparameters = hyperparameter_setting
       # After every possible hyperparameter setting, for the model trained on this chunk,
       # we choose the hyperparameters that give us the lowest validation scores across all chunks
-      validation_score, hyperparameters = lowest_validation_loss, best_hyperparameters
+      validation_score, hyperparameters = lowest_train_loss, best_hyperparameters
       list_of_validation_scores.append(validation_score)
       list_of_hyperparameters_per_validation_score.append(hyperparameters)
     print(f"List of validation scores: {list_of_validation_scores}")
