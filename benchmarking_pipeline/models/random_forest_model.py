@@ -4,7 +4,7 @@ Random Forest model implementation for time series forecasting.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Union, Tuple, List
+from typing import Dict, Any, Union, Tuple, List, Optional
 import json
 import os
 import pickle
@@ -91,7 +91,13 @@ class RandomForestModel(BaseModel):
         
         return np.array(features), np.array(targets)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> 'RandomForestModel':
+    def train(self, 
+              y_context: Union[pd.Series, np.ndarray], 
+              y_target: Union[pd.Series, np.ndarray] = None, 
+              x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, 
+              x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None,
+              y_start_date: Optional[str] = None,
+              x_start_date: Optional[str] = None) -> 'RandomForestModel':
         """
         Train the Random Forest model on given data.
         
@@ -107,6 +113,8 @@ class RandomForestModel(BaseModel):
             y_target: Future target values (optional, for validation)
             x_context: Past exogenous variables (optional)
             x_target: Future exogenous variables (optional)
+            y_start_date: The start date timestamp for y_context and y_target in string form
+            x_start_date: The start date timestamp for x_context and x_target in string form
         
         Returns:
             self: The fitted model instance.

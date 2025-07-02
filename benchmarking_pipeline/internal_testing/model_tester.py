@@ -9,6 +9,7 @@ from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
 from benchmarking_pipeline.models.lstm_model import LSTMModel
+from benchmarking_pipeline.models.random_forest_model import RandomForestModel
 import pandas as pd
 
 def test_arima(all_australian_chunks):
@@ -70,6 +71,7 @@ def test_deep_ar(all_australian_chunks):
     "hidden_size": 10,
     "rnn_layers" : -1,
     "dropout" : 0.1,
+    "batch_size" : 1,
     "learning_rate" : 0.001,
     "target_col" : 'y',
     "feature_cols" : None,
@@ -158,6 +160,38 @@ def test_lstm(all_australian_chunks):
     print(f"Test Evaluation LSTM australia: {lstm_tuner.final_evaluation({'units': 32, 'dropout': 0.0}, all_australian_chunks)}")
     print("LSTM WORKS!")
 
+def test_random_forest(all_australian_chunks):
+    rf_model = RandomForestModel({
+        "n_estimators": 100,
+        "max_depth": 5,
+        "random_state": 42,
+        "lookback_window": 10,
+        "forecast_horizon": 100,
+        "target_col": "y",
+        "loss_functions": ["mae"],
+        "primary_loss": "mae"
+    })
+
+    rf_tuner = HyperparameterTuner(
+        rf_model,
+        {
+        "n_estimators": [50, 100],
+        "max_depth": [5, 10]
+        },
+        False
+    )
+
+    validation_score_hyperparameter_tuple = rf_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+
+    best_hyperparameters = {
+        "n_estimators": validation_score_hyperparameter_tuple[1][0],
+        "max_depth": validation_score_hyperparameter_tuple[1][1]
+    }
+
+    print(f"Final Evaluation RF australia: {rf_tuner.final_evaluation(best_hyperparameters, all_australian_chunks)}")
+    print(f"Test Evaluation RF australia: {rf_tuner.final_evaluation({'n_estimators': 100, 'max_depth': 5}, all_australian_chunks)}")
+    print("RF WORKS!")
+
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
@@ -179,6 +213,7 @@ if __name__ == "__main__":
   #test_arima(all_australian_chunks)
   #test_seasonal_naive(all_australian_chunks)
   test_theta(all_australian_chunks)
-  #test_deep_ar(all_australian_chunks)
+  test_deep_ar(all_australian_chunks)
   #test_croston_classic(all_australian_chunks)
-  test_lstm(all_australian_chunks)
+  #test_lstm(all_australian_chunks)
+  #test_random_forest(all_australian_chunks)

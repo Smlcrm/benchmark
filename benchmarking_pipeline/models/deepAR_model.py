@@ -63,8 +63,15 @@ class DeepARModel(BaseModel):
         self.model = None
     
     def _series_to_TimeSeriesDataset(self, series):
+        
+        values = None
+        if isinstance(series, pd.Series):
+            values = series.values
+        else:
+            values = series
+
         dataset_altered_form = pd.DataFrame({
-            "value": series.values,
+            "value": values,
             "time_idx": list(range(len(series))),
             "group_id": ["0"] * len(series)
         })
