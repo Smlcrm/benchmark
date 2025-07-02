@@ -33,11 +33,17 @@ class DeepARModel(BaseModel):
                 - rnn_layers: int, number of DeepAR RNN layers
                 - dropout: float, dropout rate in DeepAR RNN layers
                 - learning_rate: float, learning rate for the DeepAR model
+                - batch_size: int, batch size for training
                 - target_col: str, name of target column
                 - feature_cols: list of str, names of feature columns
                 - loss_functions: List[str], list of loss function names to use
                 - primary_loss: str, primary loss function for training
                 - forecast_horizon: int, number of steps to forecast ahead
+                - max_encoder_length: int, number of steps to use as input data during autoregressive training
+                - max_prediction_length: int, number of steps to use as output data during autoregressive training
+                - epochs: int, number of training epochs
+                - gradient_clip_val: float, threshold to clip gradient to during training
+                - num_workers: int, number of workers used for the dataloaders
             config_file: Path to a JSON configuration file
         """
         super().__init__(config, config_file)
@@ -45,47 +51,91 @@ class DeepARModel(BaseModel):
         self.rnn_layers = self.config.get('rnn_layers', 2)
         self.dropout = self.config.get('dropout', 0.1)
         self.learning_rate = self.config.get('learning_rate', 0.001)
+        self.batch_size = self.config.get('batch_size', 32)
         self.target_col = self.config.get('target_col', 'y')
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
+        self.max_encoder_length = self.config.get('max_encoder_length', 24)
+        self.max_prediction_length = self.config.get('max_prediction_length', 6)
+        self.epochs = self.config.get('epochs', 100)
+        self.gradient_clip_val = self.config.get('gradient_clip_val', 0.1)
+        self.num_workers = self.config.get('num_workers', 7)
         self.model = None
     
-    def _dataframe_to_TimeSeriesDataset(self, dataframe):
-          """
-          Takes a Pandas dataframe and converts it into a TimeSeriesDataset from Pytorch Forecasting
-          """
-          pass
-    
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'DeepARModel':
-        print(f"y_context: {y_context}")
-        print(f"y_target: {y_target}")
-        print(f"x_context: {x_context}")
-        print(f"x_target: {x_target}")
-      
-    def set_params(self, **params: Dict[str, Any]) -> 'BaseModel':
-        """
-        Set model parameters.
-        
-        Args:
-            **params: Model parameters to set
-            
-        Returns:
-            self: The model instance with updated parameters
-        """
-        pass
-      
-    def get_params(self) -> Dict[str, Any]:
-        """
-        Get the current model parameters.
-        
-        Returns:
-            Dict[str, Any]: Dictionary of model parameters
-        """
-        pass
+    def _series_to_TimeSeriesDataset(self, series):
+        dataset_altered_form = pd.DataFrame({
+            "value": series.values,
+            "time_idx": list(range(len(series))),
+            "group_id": ["0"] * len(series)
+        })
 
+        dataset = TimeSeriesDataSet(
+            dataset_altered_form,
+            time_idx="time_idx",
+            target="value",
+            group_ids=["group_id"],
+            time_varying_unknown_reals=["value"],
+            max_encoder_length = self.max_encoder_length,
+            max_prediction_length = self.max_prediction_length,
+            static_categoricals=["group_id"]
+        )
+
+        return dataset
+    
+    def _build_model(self, training_dataset):
+        self.model = DeepAR.from_dataset(training_dataset,
+                                           learning_rate=self.learning_rate,
+                                           hidden_size=self.hidden_size,
+                                           rnn_layers=self.rnn_layers,
+                                           dropout=self.dropout)
+    
+    def train(self, 
+              y_context: Union[pd.Series, np.ndarray], 
+              y_target: Union[pd.Series, np.ndarray] = None, 
+              x_context: Union[pd.Series, np.ndarray] = None, 
+              x_target: Union[pd.Series, np.ndarray] = None, 
+              y_start_date: Optional[str] = None,
+              x_start_date: Optional[str] = None
+    ) -> 'DeepARModel':
+        #print(f"y_context: {y_context}")
+        #print(f"y_target: {y_target}")
+        #print(f"x_context: {x_context}")
+        #print(f"x_target: {x_target}")
+        #print(f"y_start_date: {y_start_date}")
+        #print(f"x_start_date: {x_start_date}")
+        training_dataset = self._series_to_TimeSeriesDataset(y_context)
+        validation_dataset = self._series_to_TimeSeriesDataset(y_target)
+
+        if self.model is None:
+            self._build_model(training_dataset)
+
+        train_dataloader = training_dataset.to_dataloader(
+            train=True, batch_size=self.batch_size, batch_sampler="synchronized",
+            num_workers=self.num_workers, persistent_workers=True
+        )
+
+        validation_dataloader = validation_dataset.to_dataloader(
+            train=False, batch_size=self.batch_size, batch_sampler="synchronized",
+            num_workers=self.num_workers, persistent_workers=True
+        )
+        
+        #print(f"Secondly altered training dataset: {training_dataset}")
+        #print(f"Secondly altered validation dataset: {validation_dataset}")
+
+        #print("Creating the DeepAR trainer!")
+        trainer = pl.Trainer(accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
+
+        #print("Training DeepAR!")
+        trainer.fit(self.model,train_dataloader,validation_dataloader)
+        #print("All done training!")
+
+        return self
+        
+        
     def predict(
         self,
         y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_target: Union[pd.Series, np.ndarray] = None,
         x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
         x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
         forecast_horizon: Optional[int] = None
@@ -94,12 +144,74 @@ class DeepARModel(BaseModel):
         Make predictions using the trained model.
         
         Args:
-            y_context: Recent/past target values (for sequence models, optional for ARIMA)
-            x_context: Recent/past exogenous variables (for sequence models, optional for ARIMA)
-            x_target: Future exogenous variables for the forecast horizon (required if model uses exogenous variables)
+            y_context: Recent/past target values 
+            y_target: Future target values 
+            x_context: Recent/past exogenous variables 
+            x_target: Future exogenous variables for the forecast horizon 
             forecast_horizon: Number of steps to forecast (defaults to model config if not provided)
             
         Returns:
             np.ndarray: Model predictions with shape (n_samples, forecast_horizon)
         """
-        pass
+        if self.model is None:
+            raise ValueError("Model not initialized. Call train first.")
+        validation_dataset = self._series_to_TimeSeriesDataset(y_target)
+        validation_dataloader = validation_dataset.to_dataloader(
+            train=False, batch_size=self.batch_size, batch_sampler="synchronized",
+            num_workers=self.num_workers, persistent_workers=True
+        )
+
+        predictions = self.model.predict(validation_dataloader)
+        predictions = predictions.cpu().numpy() # shape is (length of val set, self.max_prediction_length)
+        predictions = predictions[:,0]
+        return predictions
+        
+        
+
+      
+    def set_params(self, **params: Dict[str, Any]) -> 'BaseModel':
+        """
+        Set model parameters. This will rebuild the sktime model instance.
+        """
+        model_params_changed = False
+        for key, value in params.items():
+            if hasattr(self, key):
+                # Check if this is a model parameter that requires refitting
+                if key in ['learning_rate', 'hidden_size', 'rnn_layers', 'dropout'] and getattr(self, key) != value:
+                    model_params_changed = True
+                setattr(self, key, value)
+            else:
+                # Update config if parameter not found in instance attributes
+                self.config[key] = value
+        
+        # If model parameters changed, reset the fitted model
+        if model_params_changed:
+            self.model = None
+            
+        return self
+      
+    def get_params(self) -> Dict[str, Any]:
+        """
+        Get the current model parameters.
+        
+        Returns:
+            Dict[str, Any]: Dictionary of model parameters
+        """
+        if self.model is None:
+            raise ValueError("Model not initialized. Call train first.")
+        return({
+        "hidden_size": self.hidden_size, 
+        "rnn_layers" : self.rnn_layers,
+        "dropout" : self.dropout,
+        "learning_rate" : self.learning_rate,
+        "batch_size" : self.batch_size,
+        "target_col" : self.target_col,
+        "feature_cols" : self.feature_cols,
+        "forecast_horizon" : self.forecast_horizon,
+        "max_encoder_length" : self.max_encoder_length,
+        "max_prediction_length" : self.max_prediction_length,
+        "epochs" : self.epochs,
+        "gradient_clip_val" : self.gradient_clip_val,
+        "num_workers" : self.num_workers
+        })
+    
