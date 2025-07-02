@@ -4,7 +4,7 @@ Random Forest model implementation for time series forecasting.
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, Union, Tuple, List
+from typing import Dict, Any, Union, Tuple, List, Optional
 import json
 import os
 import pickle
@@ -107,6 +107,8 @@ class RandomForestModel(BaseModel):
             y_target: Future target values (optional, for validation)
             x_context: Past exogenous variables (optional)
             x_target: Future exogenous variables (optional)
+            y_start_date: The start date timestamp for y_context and y_target in string form
+            x_start_date: The start date timestamp for x_context and x_target in string form
         
         Returns:
             self: The fitted model instance.
