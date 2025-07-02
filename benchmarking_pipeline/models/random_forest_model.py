@@ -91,7 +91,7 @@ class RandomForestModel(BaseModel):
         
         return np.array(features), np.array(targets)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> 'RandomForestModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None) -> 'RandomForestModel':
         """
         Train the Random Forest model on given data.
         
@@ -204,18 +204,28 @@ class RandomForestModel(BaseModel):
             # Multi-step forecasting
             predictions = []
             
-            # If we need more predictions than forecast_horizon, use iterative prediction
             if forecast_steps > self.forecast_horizon:
-                print(f"Warning: Requesting {forecast_steps} predictions but forecast_horizon is {self.forecast_horizon}. Using iterative prediction.")
-                
-                # Use the models iteratively
+                print(f"Warning: Requesting {forecast_steps} predictions but forecast_horizon is {self.forecast_horizon}. Using true iterative prediction.")
+                # Prepare context for iterative prediction
+                y_context_iter = y_data.copy()
+                x_context_iter = x_data.copy() if x_data is not None else None
                 for step in range(forecast_steps):
-                    model_idx = step % self.forecast_horizon  # Cycle through models
-                    pred = self.models[model_idx].predict(X_last)[0]
+                    model_idx = step % self.forecast_horizon
+                    # Create features for the current context
+                    X_step, _ = self._create_features(y_context_iter, x_context_iter)
+                    X_last_step = X_step[-1:].reshape(1, -1)
+                    pred = self.models[model_idx].predict(X_last_step)[0]
                     predictions.append(pred)
-                    
+                    # Update context with new prediction
+                    y_context_iter = np.append(y_context_iter, pred)
+                    if x_context_iter is not None and x_target is not None:
+                        # If exogenous variables, append the next x_target row
+                        if step < len(x_target):
+                            x_context_iter = np.vstack([x_context_iter, x_target[step]])
+                
             else:
                 # Standard multi-step prediction
+                X_last = X_pred[-1:].reshape(1, -1)
                 for i in range(forecast_steps):
                     pred = self.models[i].predict(X_last)[0]
                     predictions.append(pred)
