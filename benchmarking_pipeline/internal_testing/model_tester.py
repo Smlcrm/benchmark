@@ -8,6 +8,7 @@ from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
+from benchmarking_pipeline.models.lstm_model import LSTMModel
 import pandas as pd
 
 def test_arima(all_australian_chunks):
@@ -121,6 +122,42 @@ def test_croston_classic(all_australian_chunks):
 
     print("Croston Classic WORKS!")
 
+def test_lstm(all_australian_chunks):
+    # LSTM model configuration
+    lstm_model = LSTMModel({
+        "units": 32,
+        "layers": 1,
+        "dropout": 0.1,
+        "learning_rate": 0.001,
+        "batch_size": 16,
+        "epochs": 20,
+        "sequence_length": 20,
+        "target_col": "y",
+        "loss_functions": ["mae"],
+        "primary_loss": "mae",
+        "forecast_horizon": 100
+    })
+
+    lstm_tuner = HyperparameterTuner(
+        lstm_model,
+        {
+            "units": [32, 64],
+            "dropout": [0.0, 0.2],
+        },
+        False
+    )
+
+    validation_score_hyperparameter_tuple = lstm_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
+
+    best_hyperparameters_dict = {
+        "units": validation_score_hyperparameter_tuple[1][0],
+        "dropout": validation_score_hyperparameter_tuple[1][1]
+    }
+
+    print(f"Final Evaluation LSTM australia: {lstm_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+    print(f"Test Evaluation LSTM australia: {lstm_tuner.final_evaluation({'units': 32, 'dropout': 0.0}, all_australian_chunks)}")
+    print("LSTM WORKS!")
+
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
@@ -138,8 +175,10 @@ if __name__ == "__main__":
   single_chunk = preprocessor.preprocess(single_chunk).data
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
+
   #test_arima(all_australian_chunks)
   #test_seasonal_naive(all_australian_chunks)
   test_theta(all_australian_chunks)
-  test_deep_ar(all_australian_chunks)
-  test_croston_classic(all_australian_chunks)
+  #test_deep_ar(all_australian_chunks)
+  #test_croston_classic(all_australian_chunks)
+  test_lstm(all_australian_chunks)
