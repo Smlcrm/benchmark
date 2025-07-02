@@ -10,6 +10,9 @@ from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.xgboost_model import XGBoostModel
 from benchmarking_pipeline.models.random_forest_model import RandomForestModel
 from benchmarking_pipeline.models.lstm_model import LSTMModel
+from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
+from benchmarking_pipeline.models.lstm_model import LSTMModel
+from benchmarking_pipeline.models.random_forest_model import RandomForestModel
 import pandas as pd
 
 
@@ -72,6 +75,7 @@ def test_deep_ar(all_australian_chunks):
     "hidden_size": 10,
     "rnn_layers" : -1,
     "dropout" : 0.1,
+    "batch_size" : 1,
     "learning_rate" : 0.001,
     "target_col" : 'y',
     "feature_cols" : None,
@@ -201,13 +205,35 @@ def test_prophet(all_australian_chunks):
     print(f"Test Evaluation Prophet australia: {prophet_hyperparameter_tuner.final_evaluation({'seasonality_mode': 'additive', 'changepoint_prior_scale': 0.05, 'seasonality_prior_scale': 10.0}, all_australian_chunks)}")
     print("Prophet WORKS!")
 
+
+def test_croston_classic(all_australian_chunks):
+    croston_model = CrostonClassicModel({
+        "alpha": 0.1,
+        "target_col": "y",
+        "loss_functions": ["mae"],
+        "primary_loss": "mae",
+        "forecast_horizon": 100
+    })
+
+    # Example: No hyperparameter tuning, just fit and evaluate
+    for i, chunk in enumerate(all_australian_chunks):
+        y = chunk["y"] if isinstance(chunk, dict) else chunk
+        croston_model.train(y_context=y)
+        preds = croston_model.predict(y_context=y, y_target=y[-100:])
+        print(f"Chunk {i} Croston predictions (first 5): {preds.flatten()[:5]}")
+        print(f"Model summary: {croston_model.get_model_summary()}")
+
+    print("Croston Classic WORKS!")
+
 def test_lstm(all_australian_chunks):
+    # LSTM model configuration
     lstm_model = LSTMModel({
         "units": 32,
-        "layers": 2,
-        "learning_rate": 0.1,
-        "batch_size": 32,
-        "epochs": 10,  # Keep epochs low for test speed
+        "layers": 1,
+        "dropout": 0.1,
+        "learning_rate": 0.001,
+        "batch_size": 16,
+        "epochs": 20,
         "sequence_length": 20,
         "target_col": "y",
         "loss_functions": ["mae"],
@@ -247,6 +273,7 @@ if __name__ == "__main__":
                                }) # by default interpolate missing values
   single_chunk = preprocessor.preprocess(single_chunk).data
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
+
 
   #test_arima(all_australian_chunks)
   #test_seasonal_naive(all_australian_chunks)

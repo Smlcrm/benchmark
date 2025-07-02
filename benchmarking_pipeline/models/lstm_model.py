@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.optimizers import Adam
-from typing import Dict, Any, Union, Tuple
+from typing import Dict, Any, Union, Tuple, Optional
 import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
@@ -115,6 +115,9 @@ class LSTMModel(BaseModel):
             y_target: Future target values (optional, for validation)
             x_context: Past exogenous variables (optional, ignored for now)
             x_target: Future exogenous variables (optional, ignored for now)
+            y_start_date: The start date timestamp for y_context and y_target in string form
+            x_start_date: The start date timestamp for x_context and x_target in string form
+
             
         Returns:
             self: The fitted model instance
