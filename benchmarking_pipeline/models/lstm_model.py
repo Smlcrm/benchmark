@@ -99,7 +99,7 @@ class LSTMModel(BaseModel):
             y_seq.append(X[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon, 0])
         return np.array(X_seq), np.array(y_seq)
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'LSTMModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None) -> 'LSTMModel':
         """
         Train the LSTM model on given data.
         
