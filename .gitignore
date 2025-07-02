@@ -34,3 +34,4 @@ ENV/
 # Project specific
 outputs/
 *.log
+lightning_logs/
