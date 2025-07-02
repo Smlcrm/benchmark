@@ -4,7 +4,7 @@ ARIMA model implementation.
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
-from typing import Dict, Any, Union, Tuple
+from typing import Dict, Any, Union, Tuple, Optional
 import itertools
 import pickle
 import os
@@ -34,7 +34,14 @@ class ARIMAModel(BaseModel):
         self.target_col = self.config.get('target_col', 'y')
         self.model = None
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'ARIMAModel':
+    def train(self, 
+              y_context: Union[pd.Series, np.ndarray], 
+              y_target: Union[pd.Series, np.ndarray] = None, 
+              x_context: Union[pd.Series, np.ndarray] = None, 
+              x_target: Union[pd.Series, np.ndarray] = None, 
+              y_start_date: Optional[str] = None,
+              x_start_date: Optional[str] = None
+    ) -> 'ARIMAModel':
         """
         Train the ARIMA model on given data.
         
