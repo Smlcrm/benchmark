@@ -7,8 +7,8 @@ from benchmarking_pipeline.models.exponential_smoothing_model import Exponential
 from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
-import pandas as pd
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
+import pandas as pd
 
 def test_arima(all_australian_chunks):
 
