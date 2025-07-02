@@ -7,6 +7,7 @@ from benchmarking_pipeline.models.exponential_smoothing_model import Exponential
 from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
+import pandas as pd
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
 
 def test_arima(all_australian_chunks):
@@ -66,21 +67,39 @@ def test_theta(all_australian_chunks):
 def test_deep_ar(all_australian_chunks):
   deep_ar_model = DeepARModel({
     "hidden_size": 10,
-    "rnn_layers" : 2,
+    "rnn_layers" : -1,
     "dropout" : 0.1,
     "learning_rate" : 0.001,
     "target_col" : 'y',
     "feature_cols" : None,
-    "forecast_horizon" : 100
+    "forecast_horizon" : 100,
+    "epochs": 1,
+    "num_workers":8
   })
 
   deep_ar_hyperparameter_tuner = HyperparameterTuner(deep_ar_model, {
-    'rnn_layers' : [2,3,4],
-    'hidden_size' : [10,11,12]
+    'rnn_layers' : [2,3],
   }, False)
+
+  shorten_australia = True
+  if shorten_australia:
+    for australian_chunk in all_australian_chunks:
+      #print("train", pd.Series(australian_chunk.train.features[6300:].squeeze(),index=list(range(900))).shape)
+      australian_chunk.train.features = pd.DataFrame({'y': australian_chunk.train.features[7000:].squeeze()})
+      australian_chunk.train.features.reset_index()
+      print("train", australian_chunk.train.features)
 
   validation_score_hyperparameter_tuple = deep_ar_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
 
+
+  best_hyperparameters_dict = {
+    "rnn_layers": validation_score_hyperparameter_tuple[1][0], 
+    }
+  
+
+  
+  print(f"Final Evaluation DeepAR australia: {deep_ar_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
+  print(f"Test Evaluation DeepAR australia: {deep_ar_hyperparameter_tuner.final_evaluation({'rnn_layers':2,}, all_australian_chunks)}")
   print("Deep AR WORKS!")
 
 def test_croston_classic(all_australian_chunks):

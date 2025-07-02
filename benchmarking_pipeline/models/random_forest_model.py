@@ -135,10 +135,12 @@ class RandomForestModel(BaseModel):
         # For multi-step forecasting, train separate models
         if self.forecast_horizon > 1:
             self.models = []
+            print(f"Training {self.forecast_horizon} Random Forest models for multi-step forecasting...")
             for i in range(self.forecast_horizon):
                 model = RandomForestRegressor(**self.config.get('model_params', {}))
                 model.fit(X, y[:, i])
                 self.models.append(model)
+            print(f"Training complete. Models can predict up to {self.forecast_horizon} steps directly, or more using iterative prediction.")
         else:
             # Single-step forecasting
             self.model.fit(X, y.flatten())
@@ -201,13 +203,22 @@ class RandomForestModel(BaseModel):
         if hasattr(self, 'models') and self.forecast_horizon > 1:
             # Multi-step forecasting
             predictions = []
-            for i in range(min(forecast_steps, self.forecast_horizon)):
-                pred = self.models[i].predict(X_last)[0]
-                predictions.append(pred)
             
-            # If we need more predictions than forecast_horizon, repeat the last prediction
-            while len(predictions) < forecast_steps:
-                predictions.append(predictions[-1])
+            # If we need more predictions than forecast_horizon, use iterative prediction
+            if forecast_steps > self.forecast_horizon:
+                print(f"Warning: Requesting {forecast_steps} predictions but forecast_horizon is {self.forecast_horizon}. Using iterative prediction.")
+                
+                # Use the models iteratively
+                for step in range(forecast_steps):
+                    model_idx = step % self.forecast_horizon  # Cycle through models
+                    pred = self.models[model_idx].predict(X_last)[0]
+                    predictions.append(pred)
+                    
+            else:
+                # Standard multi-step prediction
+                for i in range(forecast_steps):
+                    pred = self.models[i].predict(X_last)[0]
+                    predictions.append(pred)
                 
         else:
             # Single-step forecasting
