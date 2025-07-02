@@ -7,6 +7,7 @@ from benchmarking_pipeline.models.exponential_smoothing_model import Exponential
 from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
+from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
 
 def test_arima(all_australian_chunks):
 
@@ -82,6 +83,25 @@ def test_deep_ar(all_australian_chunks):
 
   print("Deep AR WORKS!")
 
+def test_croston_classic(all_australian_chunks):
+    croston_model = CrostonClassicModel({
+        "alpha": 0.1,
+        "target_col": "y",
+        "loss_functions": ["mae"],
+        "primary_loss": "mae",
+        "forecast_horizon": 100
+    })
+
+    # Example: No hyperparameter tuning, just fit and evaluate
+    for i, chunk in enumerate(all_australian_chunks):
+        y = chunk["y"] if isinstance(chunk, dict) else chunk
+        croston_model.train(y_context=y)
+        preds = croston_model.predict(y_context=y, y_target=y[-100:])
+        print(f"Chunk {i} Croston predictions (first 5): {preds.flatten()[:5]}")
+        print(f"Model summary: {croston_model.get_model_summary()}")
+
+    print("Croston Classic WORKS!")
+
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
@@ -103,6 +123,4 @@ if __name__ == "__main__":
   #test_seasonal_naive(all_australian_chunks)
   test_theta(all_australian_chunks)
   test_deep_ar(all_australian_chunks)
-
-
-  
+  test_croston_classic(all_australian_chunks)
