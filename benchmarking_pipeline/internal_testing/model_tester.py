@@ -14,6 +14,15 @@ from benchmarking_pipeline.models.croston_classic_model import CrostonClassicMod
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 from benchmarking_pipeline.models.random_forest_model import RandomForestModel
 import pandas as pd
+import re
+
+
+def _extract_number_before_capital(freq_str):
+    match = re.match(r'(\d+)?[A-Z]', freq_str)
+    if match:
+        return int(match.group(1)) if match.group(1) else 1
+    else:
+        raise ValueError(f"Invalid frequency string: {freq_str}")
 
 
 def test_arima(all_australian_chunks):
@@ -72,8 +81,8 @@ def test_theta(all_australian_chunks):
 
 def test_deep_ar(all_australian_chunks):
   deep_ar_model = DeepARModel({
-    "hidden_size": 10,
-    "rnn_layers" : -1,
+    "hidden_size": 2,
+    "rnn_layers" : 2,
     "dropout" : 0.1,
     "batch_size" : 1,
     "learning_rate" : 0.001,
@@ -81,21 +90,45 @@ def test_deep_ar(all_australian_chunks):
     "feature_cols" : None,
     "forecast_horizon" : 100,
     "epochs": 1,
-    "num_workers":8
+    "num_workers":4
   })
 
   deep_ar_hyperparameter_tuner = HyperparameterTuner(deep_ar_model, {
     'rnn_layers' : [2,3],
   }, False)
 
-  shorten_australia = True
+  shorten_australia = False
   if shorten_australia:
     for australian_chunk in all_australian_chunks:
       #print("train", pd.Series(australian_chunk.train.features[6300:].squeeze(),index=list(range(900))).shape)
       australian_chunk.train.features = pd.DataFrame({'y': australian_chunk.train.features[7000:].squeeze()})
       australian_chunk.train.features.reset_index()
       print("train", australian_chunk.train.features)
+  
 
+  time_series_dataset = all_australian_chunks[0]
+  deep_ar_model.set_params(rnn_layers=2)
+  target = time_series_dataset.train.features[deep_ar_model.target_col]
+  validation_series = time_series_dataset.validation.features[deep_ar_model.target_col]
+  start_date = time_series_dataset.metadata["start"]
+  freq_str = time_series_dataset.metadata["freq"]
+  first_capital_letter_finder = re.search(r'[A-Z]', freq_str)
+  freq = first_capital_letter_finder.group()
+  freq_coefficient = _extract_number_before_capital(freq_str)
+  freq_offset = pd.tseries.frequencies.to_offset(freq)
+  x_start_date = pd.to_datetime(start_date)
+  y_start_date = x_start_date + (freq_coefficient * len(target) * freq_offset)
+
+  """print("Starting training")
+  trained_model = deep_ar_model.train(y_context=target, y_target=validation_series, y_start_date=y_start_date, x_start_date=x_start_date)
+  print("Done training; starting predicting")
+  model_predictions = trained_model.predict(y_context=target, y_target=validation_series)
+  print("Done predicting; starting computing loss")
+  train_loss = trained_model.compute_loss(time_series_dataset.validation.features[deep_ar_model.target_col], model_predictions)
+  print(train_loss)
+  print("Done computing loss")"""
+
+  
   validation_score_hyperparameter_tuple = deep_ar_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
 
 
@@ -108,6 +141,7 @@ def test_deep_ar(all_australian_chunks):
   print(f"Final Evaluation DeepAR australia: {deep_ar_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
   print(f"Test Evaluation DeepAR australia: {deep_ar_hyperparameter_tuner.final_evaluation({'rnn_layers':2,}, all_australian_chunks)}")
   print("Deep AR WORKS!")
+  
 
 def test_xgboost(all_australian_chunks):
   xgb_model = XGBoostModel({
@@ -260,7 +294,7 @@ def test_lstm(all_australian_chunks):
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -275,14 +309,14 @@ if __name__ == "__main__":
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
 
-  #test_arima(all_australian_chunks)
-  #test_seasonal_naive(all_australian_chunks)
-  # test_theta(all_australian_chunks)
-  # test_deep_ar(all_australian_chunks)
+  # test_arima(all_australian_chunks)
+  # test_seasonal_naive(all_australian_chunks)
+  #test_theta(all_australian_chunks)
+  test_deep_ar(all_australian_chunks)
   # test_xgboost(all_australian_chunks)
   # test_random_forest(all_australian_chunks)
   # test_prophet(all_australian_chunks)
-  test_lstm(all_australian_chunks)
+  # test_lstm(all_australian_chunks)
 
 
   

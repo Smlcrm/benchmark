@@ -111,7 +111,7 @@ class Preprocessor:
             if is_training:
                 df = self._remove_outliers(df)
             df = self._normalize_features(df, is_training=is_training)
-            return DatasetSplit(features=df, labels=split.labels, metadata=split.metadata)
+            return DatasetSplit(features=df, labels=split.labels, metadata=split.metadata, timestamps=split.timestamps)
 
         train_split = process_split(data.train, is_training=True)
         val_split = process_split(data.validation, is_training=False)

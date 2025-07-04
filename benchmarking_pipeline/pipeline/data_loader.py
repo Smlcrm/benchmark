@@ -3,6 +3,7 @@ import ast
 import pandas as pd
 from typing import Dict, Any, List
 from .data_types import Dataset, DatasetSplit  # assumes these are in data_types.py
+import numpy as np
 
 class DataLoader:
     def __init__(self, config: Dict[str, Any]):
@@ -21,6 +22,35 @@ class DataLoader:
         self.path = self.dataset_cfg.get('path')
         self.name = self.dataset_cfg.get('name')
         self.split_ratio = self.dataset_cfg.get('split_ratio', [0.6, 0.2, 0.2])
+    
+    def _generate_timestamp_list(self, start, freq, horizon) -> List[Any]:
+        """
+        Takes in a starting timestamp and outputs a list of timestamps with 
+        element count equal to horizon.
+
+        Please note the returned list will always contain start as the starting
+        time step. Thus, horizon can be thought of as follows: 1 (for start) + 
+        number of future timesteps you want to generate = horizon
+
+        Args:
+            start: A timestamp-like object (e.g., string, datetime).
+            freq: A pandas-compatible frequency string (e.g., 'D', 'H', '30T', etc.)
+            horizon: Number of timestamps to generate, including the start.
+
+        Returns:
+            List of timestamps, starting from `start`, spaced by `freq`, of length `horizon`.
+        """
+
+        # Convert start to pandas.Timestamp
+        start_timestamp = pd.to_datetime(start)
+
+        # Convert frequency string to offset
+        freq_offset = pd.tseries.frequencies.to_offset(freq)
+
+        # Generate timestamps
+        timestamps = [start_timestamp + i * freq_offset for i in range(horizon)]
+
+        return timestamps
     
     #doesn't work with exogenous variables for now
     def load_single_chunk(self, chunk_index) -> Dataset:
@@ -51,10 +81,27 @@ class DataLoader:
         val = ts_df.iloc[train_end:val_end]
         test = ts_df.iloc[val_end:]
 
+        self._generate_timestamp_list(start, freq, 4)
+        
+
+        train_timestamps_plus_val_start = self._generate_timestamp_list(start,freq,len(train[['y']])+1)
+        
+        train_timestamps = train_timestamps_plus_val_start[:len(train[['y']])]
+        val_start = train_timestamps_plus_val_start[-1]
+
+        val_timestamps_plus_test_start = self._generate_timestamp_list(val_start,freq,len(val[['y']])+1)
+
+        val_timestamps = val_timestamps_plus_test_start[:len(val[['y']])]
+        test_start = val_timestamps_plus_test_start[-1]
+
+        test_timestamps = self._generate_timestamp_list(test_start,freq,len(test[['y']]))
+        
+        #print("train timestamps", train_timestamps)
+
         return Dataset(
-            train=DatasetSplit(features=train[['y']], labels=None),
-            validation=DatasetSplit(features=val[['y']], labels=None),
-            test=DatasetSplit(features=test[['y']], labels=None),
+            train=DatasetSplit(features=train[['y']], labels=None, timestamps=train_timestamps),
+            validation=DatasetSplit(features=val[['y']], labels=None, timestamps=val_timestamps),
+            test=DatasetSplit(features=test[['y']], labels=None, timestamps=test_timestamps),
             name=self.name,
             metadata={'start': start, 'freq': freq}
         )
