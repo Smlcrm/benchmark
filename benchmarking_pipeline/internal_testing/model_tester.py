@@ -9,6 +9,7 @@ from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
 import pandas as pd
+import numpy as np
 
 def test_arima(all_australian_chunks):
 
@@ -114,9 +115,22 @@ def test_croston_classic(all_australian_chunks):
     # Example: No hyperparameter tuning, just fit and evaluate
     for i, chunk in enumerate(all_australian_chunks):
         y = chunk["y"] if isinstance(chunk, dict) else chunk
-        croston_model.train(y_context=y)
-        preds = croston_model.predict(y_context=y, y_target=y[-100:])
-        print(f"Chunk {i} Croston predictions (first 5): {preds.flatten()[:5]}")
+
+        print(len(y))
+        # Extract a 1D array for y_target
+        if isinstance(y, pd.Series):
+            y_data = y.values
+        else:
+            y_data = np.asarray(y)
+
+        # Ensure y_data is at least 1D before slicing
+        y_data = np.atleast_1d(y_data)
+
+        print(type(y_data[0]))
+
+        croston_model.train(y_context=y_data)
+        preds = croston_model.predict(y_context=y_data, y_target=y_data[-100:])
+        print(f"Chunk {i} Croston predictions (first 5): {preds}")
         print(f"Model summary: {croston_model.get_model_summary()}")
 
     print("Croston Classic WORKS!")
@@ -124,7 +138,7 @@ def test_croston_classic(all_australian_chunks):
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/chenk/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -140,6 +154,6 @@ if __name__ == "__main__":
 
   #test_arima(all_australian_chunks)
   #test_seasonal_naive(all_australian_chunks)
-  test_theta(all_australian_chunks)
-  test_deep_ar(all_australian_chunks)
+  #test_theta(all_australian_chunks)
+  #test_deep_ar(all_australian_chunks)
   test_croston_classic(all_australian_chunks)
