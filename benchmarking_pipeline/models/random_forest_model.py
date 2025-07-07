@@ -46,13 +46,14 @@ class RandomForestModel(BaseModel):
         self.model = RandomForestRegressor(**filtered_params)
         self.is_fitted = False
 
-    def _create_features(self, y_series: np.ndarray, x_series: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+    def _create_features(self, y_series: np.ndarray, x_series: np.ndarray = None, timestamps: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Create time series features for Random Forest.
+        Create time series features for Random Forest with timestamp features.
         
         Args:
             y_series: Target time series
             x_series: Exogenous variables (optional)
+            timestamps: Timestamp features (optional)
             
         Returns:
             Tuple[np.ndarray, np.ndarray]: Features and targets
@@ -81,26 +82,59 @@ class RandomForestModel(BaseModel):
             # Combine all features
             sample_features = list(lag_features) + [rolling_mean, rolling_std, rolling_min, rolling_max, trend]
             
+            # Add timestamp features if available
+            if timestamps is not None and len(timestamps) >= i + self.lookback_window + self.forecast_horizon:
+                # Add current timestamp and future timestamps as features
+                current_timestamp = timestamps[i + self.lookback_window - 1]
+                future_timestamps = timestamps[i + self.lookback_window:i + self.lookback_window + self.forecast_horizon]
+                
+                # Convert timestamps to numerical features
+                if isinstance(current_timestamp, (pd.Timestamp, np.datetime64)):
+                    current_time_features = [
+                        current_timestamp.year,
+                        current_timestamp.month,
+                        current_timestamp.day,
+                        current_timestamp.hour,
+                        current_timestamp.dayofweek,
+                        current_timestamp.dayofyear
+                    ]
+                else:
+                    # If timestamps are already numerical, use as is
+                    current_time_features = [current_timestamp]
+                
+                # Add future timestamp features
+                future_time_features = []
+                for ts in future_timestamps:
+                    if isinstance(ts, (pd.Timestamp, np.datetime64)):
+                        future_time_features.extend([
+                            ts.year, ts.month, ts.day, ts.hour, ts.dayofweek, ts.dayofyear
+                        ])
+                    else:
+                        future_time_features.append(ts)
+                
+                sample_features.extend(current_time_features + future_time_features)
+            
             # Add exogenous features if available
             if x_series is not None and len(x_series) >= i + self.lookback_window:
                 x_lags = x_series[i:i + self.lookback_window]
                 sample_features.extend(x_lags.flatten())
             
             features.append(sample_features)
-            targets.append(y_series[i + self.lookback_window:i + self.lookback_window + self.forecast_horizon])
+            # Multi-output: target is a vector of length forecast_horizon
+            targets.append([y_series[i + self.lookback_window + step] for step in range(self.forecast_horizon)])
         
         return np.array(features), np.array(targets)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None) -> 'RandomForestModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None, y_context_timestamps: np.ndarray = None, y_target_timestamps: np.ndarray = None) -> 'RandomForestModel':
         """
         Train the Random Forest model on given data.
         
-        TECHNIQUE: Lag-based Feature Engineering
+        TECHNIQUE: Single Model with Timestamp Features
         - Creates lag features from historical target values
         - Adds rolling statistics (mean, std, min, max)
         - Includes trend features using linear regression
-        - Incorporates exogenous variables if available
-        - Trains separate model for each forecast horizon step
+        - Incorporates timestamp features for time-aware splits
+        - Uses a single model to predict all forecast horizon steps
         
         Args:
             y_context: Past target values (time series) - used for training
@@ -109,6 +143,8 @@ class RandomForestModel(BaseModel):
             x_target: Future exogenous variables (optional)
             y_start_date: The start date timestamp for y_context and y_target in string form
             x_start_date: The start date timestamp for x_context and x_target in string form
+            y_context_timestamps: Timestamps for y_context (optional)
+            y_target_timestamps: Timestamps for y_target (optional)
         
         Returns:
             self: The fitted model instance.
@@ -131,40 +167,49 @@ class RandomForestModel(BaseModel):
         if y_data.ndim > 1:
             y_data = y_data.flatten()
         
-        # Create features and targets
-        X, y = self._create_features(y_data, x_data)
-        
-        # For multi-step forecasting, train separate models
-        if self.forecast_horizon > 1:
-            self.models = []
-            print(f"Training {self.forecast_horizon} Random Forest models for multi-step forecasting...")
-            for i in range(self.forecast_horizon):
-                model = RandomForestRegressor(**self.config.get('model_params', {}))
-                model.fit(X, y[:, i])
-                self.models.append(model)
-            print(f"Training complete. Models can predict up to {self.forecast_horizon} steps directly, or more using iterative prediction.")
+        # Combine context and target data for training
+        if y_target is not None:
+            if isinstance(y_target, (pd.Series, pd.DataFrame)):
+                y_target_data = y_target.values
+            else:
+                y_target_data = y_target
+            if y_target_data.ndim > 1:
+                y_target_data = y_target_data.flatten()
+            full_y_data = np.concatenate([y_data, y_target_data])
         else:
-            # Single-step forecasting
-            self.model.fit(X, y.flatten())
+            full_y_data = y_data
         
+        # Combine timestamps if available
+        full_timestamps = None
+        if y_context_timestamps is not None and y_target_timestamps is not None:
+            full_timestamps = np.concatenate([y_context_timestamps, y_target_timestamps])
+        elif y_context_timestamps is not None:
+            full_timestamps = y_context_timestamps
+        
+        # Create features and targets
+        X, y = self._create_features(full_y_data, x_data, full_timestamps)
+        
+        # y is shape (n_samples, forecast_horizon)
+        self.model.fit(X, y)
         self.is_fitted = True
         return self
         
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_context_timestamps: np.ndarray = None, y_target_timestamps: np.ndarray = None) -> np.ndarray:
         """
         Make predictions using the trained Random Forest model.
         
-        TECHNIQUE: Multi-step Forecasting with Lag Features
+        TECHNIQUE: Single Model with Timestamp Features
         - Uses last lookback_window values to create features
-        - Predicts forecast_horizon steps ahead
-        - For multi-step: uses separate models for each step
-        - For single-step: uses single model
+        - Incorporates timestamp features for time-aware prediction
+        - Predicts all forecast horizon steps with a single model
         
         Args:
             y_context: Past target values (time series) - used for prediction
             y_target: Future target values - used to determine prediction length
             x_context: Past exogenous variables (optional)
             x_target: Future exogenous variables (optional)
+            y_context_timestamps: Timestamps for y_context (optional)
+            y_target_timestamps: Timestamps for y_target (optional)
             
         Returns:
             np.ndarray: Model predictions with shape (1, forecast_steps)
@@ -177,74 +222,116 @@ class RandomForestModel(BaseModel):
         
         forecast_steps = len(y_target)
         
-        # Convert inputs to numpy arrays
         if isinstance(y_context, (pd.Series, pd.DataFrame)):
             y_data = y_context.values
         else:
             y_data = y_context
-            
+        
         if isinstance(x_context, (pd.Series, pd.DataFrame)):
             x_data = x_context.values
         else:
             x_data = x_context
         
-        # Ensure y_data is 1D
         if y_data.ndim > 1:
             y_data = y_data.flatten()
         
-        # Create features for prediction
-        X_pred, _ = self._create_features(y_data, x_data)
-        
-        if len(X_pred) == 0:
-            raise ValueError("Not enough data for prediction. Need at least lookback_window samples.")
-        
-        # Use the last sample for prediction
-        X_last = X_pred[-1:].reshape(1, -1)
-        
-        # Make predictions
-        if hasattr(self, 'models') and self.forecast_horizon > 1:
-            # Multi-step forecasting
-            predictions = []
-            
-            if forecast_steps > self.forecast_horizon:
-                print(f"Warning: Requesting {forecast_steps} predictions but forecast_horizon is {self.forecast_horizon}. Using true iterative prediction.")
-                # Prepare context for iterative prediction
-                y_context_iter = y_data.copy()
-                x_context_iter = x_data.copy() if x_data is not None else None
-                for step in range(forecast_steps):
-                    model_idx = step % self.forecast_horizon
-                    # Create features for the current context
-                    X_step, _ = self._create_features(y_context_iter, x_context_iter)
-                    X_last_step = X_step[-1:].reshape(1, -1)
-                    pred = self.models[model_idx].predict(X_last_step)[0]
-                    predictions.append(pred)
-                    # Update context with new prediction
-                    y_context_iter = np.append(y_context_iter, pred)
-                    if x_context_iter is not None and x_target is not None:
-                        # If exogenous variables, append the next x_target row
-                        if step < len(x_target):
-                            x_context_iter = np.vstack([x_context_iter, x_target[step]])
-                
-            else:
-                # Standard multi-step prediction
-                X_last = X_pred[-1:].reshape(1, -1)
-                for i in range(forecast_steps):
-                    pred = self.models[i].predict(X_last)[0]
-                    predictions.append(pred)
-                
+        # Use the last available context to create a single feature row
+        # For prediction, we want to predict forecast_steps ahead
+        # So we need to create a feature row for the current context and the next forecast_steps timestamps
+        if y_context_timestamps is not None and y_target_timestamps is not None:
+            # Use the last lookback_window context and the actual target timestamps
+            context_timestamps = y_context_timestamps[-self.lookback_window:]
+            feature_row, _ = self._create_features(
+                np.concatenate([y_data, np.zeros(forecast_steps)]),
+                x_data,
+                np.concatenate([y_context_timestamps, y_target_timestamps])
+            )
+            X_last = feature_row[-1:].reshape(1, -1)
         else:
-            # Single-step forecasting
-            predictions = [self.model.predict(X_last)[0]] * forecast_steps
+            # Fallback: no timestamps
+            feature_row, _ = self._create_features(
+                np.concatenate([y_data, np.zeros(forecast_steps)]),
+                x_data,
+                None
+            )
+            X_last = feature_row[-1:].reshape(1, -1)
         
-        return np.array(predictions).reshape(1, -1)
+        # Predict all steps at once
+        preds = self.model.predict(X_last)
+        return preds
+    
+    def _create_step_features(self, y_data: np.ndarray, x_data: np.ndarray = None, context_timestamps: np.ndarray = None, target_timestamp: np.ndarray = None) -> np.ndarray:
+        """
+        Create features for a single prediction step.
+        
+        Args:
+            y_data: Historical target values
+            x_data: Historical exogenous variables (optional)
+            context_timestamps: Timestamps for context data (optional)
+            target_timestamp: Timestamp for the target step (optional)
+            
+        Returns:
+            np.ndarray: Feature vector for the prediction step
+        """
+        # Use the last lookback_window values
+        lag_features = y_data[-self.lookback_window:]
+        
+        # Create rolling statistics
+        rolling_mean = np.mean(lag_features)
+        rolling_std = np.std(lag_features)
+        rolling_min = np.min(lag_features)
+        rolling_max = np.max(lag_features)
+        
+        # Create trend features
+        trend = np.polyfit(range(self.lookback_window), lag_features, 1)[0]
+        
+        # Combine all features
+        sample_features = list(lag_features) + [rolling_mean, rolling_std, rolling_min, rolling_max, trend]
+        
+        # Add timestamp features if available
+        if context_timestamps is not None and target_timestamp is not None:
+            current_timestamp = context_timestamps[-1]
+            
+            # Convert timestamps to numerical features
+            if isinstance(current_timestamp, (pd.Timestamp, np.datetime64)):
+                current_time_features = [
+                    current_timestamp.year,
+                    current_timestamp.month,
+                    current_timestamp.day,
+                    current_timestamp.hour,
+                    current_timestamp.dayofweek,
+                    current_timestamp.dayofyear
+                ]
+            else:
+                current_time_features = [current_timestamp]
+            
+            # Add target timestamp features
+            if isinstance(target_timestamp, (pd.Timestamp, np.datetime64)):
+                target_time_features = [
+                    target_timestamp.year,
+                    target_timestamp.month,
+                    target_timestamp.day,
+                    target_timestamp.hour,
+                    target_timestamp.dayofweek,
+                    target_timestamp.dayofyear
+                ]
+            else:
+                target_time_features = [target_timestamp]
+            
+            sample_features.extend(current_time_features + target_time_features)
+        
+        # Add exogenous features if available
+        if x_data is not None:
+            x_lags = x_data[-self.lookback_window:]
+            sample_features.extend(x_lags.flatten())
+        
+        return np.array(sample_features)
 
     def get_params(self) -> Dict[str, Any]:
         """
         Get the current model parameters.
         """
-        if hasattr(self, 'models') and self.forecast_horizon > 1:
-            return {f'model_{i}': model.get_params() for i, model in enumerate(self.models)}
-        elif self.model:
+        if self.model:
             return self.model.get_params()
         return self.config.get('model_params', {})
 
@@ -273,14 +360,6 @@ class RandomForestModel(BaseModel):
         # Rebuild the model with new parameters
         self._build_model()
         
-        # If we have trained models, update them too
-        if hasattr(self, 'models') and self.forecast_horizon > 1 and self.is_fitted:
-            self.models = []
-            filtered_params = self._get_filtered_model_params()
-            for i in range(self.forecast_horizon):
-                model = RandomForestRegressor(**filtered_params)
-                self.models.append(model)
-        
         return self
 
     def save(self, path: str) -> None:
@@ -302,13 +381,9 @@ class RandomForestModel(BaseModel):
             'config': self.config,
             'is_fitted': self.is_fitted,
             'lookback_window': self.lookback_window,
-            'forecast_horizon': self.forecast_horizon
+            'forecast_horizon': self.forecast_horizon,
+            'model': self.model
         }
-        
-        if hasattr(self, 'models'):
-            model_state['models'] = self.models
-        else:
-            model_state['model'] = self.model
         
         with open(path, 'wb') as f:
             pickle.dump(model_state, f)
@@ -330,10 +405,6 @@ class RandomForestModel(BaseModel):
         self.is_fitted = model_state['is_fitted']
         self.lookback_window = model_state['lookback_window']
         self.forecast_horizon = model_state['forecast_horizon']
-        
-        if 'models' in model_state:
-            self.models = model_state['models']
-        else:
-            self.model = model_state['model']
+        self.model = model_state['model']
         
         return self

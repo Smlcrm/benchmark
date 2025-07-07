@@ -36,13 +36,15 @@ class ProphetModel(BaseModel):
             index=pd.date_range(fallback_start, periods=len(y), freq=freq)
         )
 
-    def train(self, y_context, x_context=None, y_start_date=None):
-        if y_start_date is None:
-            raise ValueError("y_start_date must be provided for Prophet training.")
-        # Always create a DatetimeIndex for y_context
+    def train(self, y_context, x_context=None, y_context_timestamps=None):
+        if y_context_timestamps is None:
+            raise ValueError("y_context_timestamps must be provided for Prophet training.")
+        # Create a new Prophet model instance for each training
+        self.model = Prophet(**self.config.get('model_params', {}))
+        # Use the provided timestamps to create a DatetimeIndex for y_context
         y_context = pd.Series(
             y_context.values if hasattr(y_context, 'values') else y_context,
-            index=pd.date_range(start=y_start_date, periods=len(y_context), freq='D')
+            index=y_context_timestamps
         )
         train_df = pd.DataFrame({'ds': y_context.index, 'y': y_context.values})
         if x_context is not None:
@@ -55,21 +57,30 @@ class ProphetModel(BaseModel):
         self.is_fitted = True
         return self
 
-    def predict(self, y_context, y_target, x_context=None, x_target=None, start_date=None):
+    def predict(self, y_context, y_target, x_context=None, x_target=None, start_date=None, y_target_timestamps=None, y_context_timestamps=None):
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
-        if y_context is None or y_target is None or start_date is None:
-            raise ValueError("y_context, y_target, and start_date must all be provided.")
-        # The first prediction date is start_date + len(y_context) days
-        first_pred_date = pd.to_datetime(start_date) + pd.Timedelta(days=len(y_context))
-        future_index = pd.date_range(start=first_pred_date, periods=len(y_target), freq='D')
+        if y_context is None or y_target is None:
+            raise ValueError("y_context and y_target must both be provided.")
+        
+        # Use provided y_target_timestamps if available
+        if y_target_timestamps is not None:
+            future_index = pd.to_datetime(y_target_timestamps)
+        else:
+            if start_date is None:
+                raise ValueError("Either y_target_timestamps or start_date must be provided.")
+            # The first prediction should start after the last training data point
+            # Assuming daily frequency for now
+            future_index = pd.date_range(start=start_date, periods=len(y_target), freq='D')
+        
+        # Create future dataframe with the correct timestamps
         future_df = pd.DataFrame({'ds': future_index})
-        if x_target is not None:
-            if not isinstance(x_target, pd.DataFrame):
-                x_target = pd.DataFrame(x_target, index=future_index)
-            future_df = future_df.join(x_target)
+        
+        # Make predictions
         forecast = self.model.predict(future_df)
-        return forecast['yhat'].values.reshape(1, -1)
+        
+        # Return the predicted values
+        return forecast['yhat'].values
 
     def get_params(self) -> Dict[str, Any]:
         """

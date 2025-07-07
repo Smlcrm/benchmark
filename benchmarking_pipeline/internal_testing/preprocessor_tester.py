@@ -6,7 +6,7 @@ import pandas as pd
 if __name__ == "__main__":
   print("Preprocessor testing suite!")
   preprocesser_data_loader = DataLoader({"dataset": {
-    "path" : "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/internal_testing/internal_testing_data/preprocessor_testing",
+    "path" : "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/internal_testing/internal_testing_data/preprocessor_testing",
     "name" : "preprocessor_testing",
     "split_ratio" : [0.8,0.1,0.1]
   }})
