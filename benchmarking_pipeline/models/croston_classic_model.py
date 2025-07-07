@@ -6,6 +6,10 @@ import pandas as pd
 from typing import Dict, Any, Union
 import pickle
 import os
+import xarray as xr
+
+
+from sympy import series
 from benchmarking_pipeline.models.base_model import BaseModel
 
 class CrostonClassicModel(BaseModel):
@@ -46,25 +50,29 @@ class CrostonClassicModel(BaseModel):
         Returns:
             self: The fitted model instance.
         """
+        # Convert y_context to a 1D numpy array of numbers
         if isinstance(y_context, pd.Series):
             series = y_context.values
-        else:
-            series = y_context
-            
+        elif isinstance(y_context, np.ndarray):
+            series = np.asarray(y_context).flatten()
+    
+        series = np.atleast_1d(series)
+
         # Find indices of non-zero demand
-        non_zero_indices = np.where(series > 0)[0]
-        
+        non_zero_indices = np.nonzero(series)
+
         # If there's no demand or only one demand point we cannot forecast
-        if len(non_zero_indices) < 2:
+        if len(non_zero_indices[0]) < 2:
             # Set levels to a default state (e.g., average of the whole series)
             self.demand_level_ = np.mean(series) if len(series) > 0 else 0
+            
             self.interval_level_ = len(series) if len(series) > 0 else 1
             self.is_fitted = True
             return self
 
         # Get demand values and intervals
         demands = series[non_zero_indices]
-        intervals = np.diff(non_zero_indices)
+        intervals = np.diff(non_zero_indices[0])
         
         # Demand level starts with the first non-zero demand
         current_demand_level = demands[0]
