@@ -14,10 +14,8 @@ from benchmarking_pipeline.models.croston_classic_model import CrostonClassicMod
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 from benchmarking_pipeline.models.random_forest_model import RandomForestModel
 import pandas as pd
-<<<<<<< HEAD
-import numpy as np
-=======
 import re
+import numpy as np
 
 
 def _extract_number_before_capital(freq_str):
@@ -27,7 +25,6 @@ def _extract_number_before_capital(freq_str):
     else:
         raise ValueError(f"Invalid frequency string: {freq_str}")
 
->>>>>>> a0754fa375a6dc362f9a050115ac228283a2901e
 
 def test_arima(all_australian_chunks):
 
@@ -245,36 +242,21 @@ def test_prophet(all_australian_chunks):
 
 
 def test_croston_classic(all_australian_chunks):
+    y_train = np.array([0, 0, 5, 0, 0, 0, 3, 0, 2, 0, 0, 0, 4, 0, 0, 0, 0, 6, 0, 0, 1, 4, 0, 0, 5, 19, 0, 0, 0])
+    y_target = np.zeros(5)  # Forecast 5 steps ahead
+
     croston_model = CrostonClassicModel({
         "alpha": 0.1,
         "target_col": "y",
         "loss_functions": ["mae"],
         "primary_loss": "mae",
-        "forecast_horizon": 100
+        "forecast_horizon": 5
     })
 
-    # Example: No hyperparameter tuning, just fit and evaluate
-    for i, chunk in enumerate(all_australian_chunks):
-        y = chunk["y"] if isinstance(chunk, dict) else chunk
-
-        print(len(y))
-        # Extract a 1D array for y_target
-        if isinstance(y, pd.Series):
-            y_data = y.values
-        else:
-            y_data = np.asarray(y)
-
-        # Ensure y_data is at least 1D before slicing
-        y_data = np.atleast_1d(y_data)
-
-        print(type(y_data[0]))
-
-        croston_model.train(y_context=y_data)
-        preds = croston_model.predict(y_context=y_data, y_target=y_data[-100:])
-        print(f"Chunk {i} Croston predictions (first 5): {preds}")
-        print(f"Model summary: {croston_model.get_model_summary()}")
-
-    print("Croston Classic WORKS!")
+    croston_model.train(y_context=y_train)
+    preds = croston_model.predict(y_context=y_train, y_target=y_target)
+    print("Synthetic Croston predictions:", preds.flatten())
+    print("Model summary:", croston_model.get_model_summary())
 
 def test_lstm(all_australian_chunks):
     # LSTM model configuration
@@ -325,23 +307,16 @@ if __name__ == "__main__":
   single_chunk = preprocessor.preprocess(single_chunk).data
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
-<<<<<<< HEAD
-  #test_arima(all_australian_chunks)
-  #test_seasonal_naive(all_australian_chunks)
-  #test_theta(all_australian_chunks)
-  #test_deep_ar(all_australian_chunks)
-  test_croston_classic(all_australian_chunks)
-=======
 
   # test_arima(all_australian_chunks)
   # test_seasonal_naive(all_australian_chunks)
-  #test_theta(all_australian_chunks)
-  test_deep_ar(all_australian_chunks)
+  # test_theta(all_australian_chunks)
+  # test_deep_ar(all_australian_chunks)
   # test_xgboost(all_australian_chunks)
   # test_random_forest(all_australian_chunks)
   # test_prophet(all_australian_chunks)
   # test_lstm(all_australian_chunks)
+  test_croston_classic(all_australian_chunks)
 
 
-  
->>>>>>> a0754fa375a6dc362f9a050115ac228283a2901e
+
