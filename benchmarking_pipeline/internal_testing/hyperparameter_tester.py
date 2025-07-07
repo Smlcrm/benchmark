@@ -10,7 +10,7 @@ from .testing_utilities import less_than
 if __name__ == "__main__":
   print("Hyperparameter testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
   # Test Case 2: ARIMA bdg-2_bear
   bdg_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/bdg-2_bear",
+    "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/bdg-2_bear",
     "name": "bdg-2_bear",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
   # Test Case 3: ARIMA Loop Seattle
   loop_seattle_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/LOOP_SEATTLE",
+    "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/LOOP_SEATTLE",
     "name": "LOOP_SEATTLE",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
