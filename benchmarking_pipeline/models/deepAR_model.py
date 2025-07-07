@@ -117,7 +117,8 @@ class DeepARModel(BaseModel):
               x_context: Union[pd.Series, np.ndarray] = None, 
               x_target: Union[pd.Series, np.ndarray] = None, 
               y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None
+              x_start_date: Optional[str] = None,
+              **kwargs
     ) -> 'DeepARModel':
         #print(f"y_context: {y_context}")
         #print(f"y_target: {y_target}")
@@ -160,7 +161,8 @@ class DeepARModel(BaseModel):
         y_target: Union[pd.Series, np.ndarray] = None,
         x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
         x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-        forecast_horizon: Optional[int] = None
+        forecast_horizon: Optional[int] = None,
+        **kwargs
     ) -> np.ndarray:
         """
         Make predictions using the trained model.

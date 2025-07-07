@@ -35,7 +35,7 @@ class CrostonClassicModel(BaseModel):
         self.demand_level_ = None
         self.interval_level_ = None
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'CrostonClassicModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'CrostonClassicModel':
         """
         Train the Croston's Classic model on the given time series data.
         
@@ -92,7 +92,7 @@ class CrostonClassicModel(BaseModel):
         
         return self
 
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None,  y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
         """
         Make predictions using the trained Croston's Classic model.
         

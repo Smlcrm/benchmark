@@ -40,7 +40,8 @@ class ARIMAModel(BaseModel):
               x_context: Union[pd.Series, np.ndarray] = None, 
               x_target: Union[pd.Series, np.ndarray] = None, 
               y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None
+              x_start_date: Optional[str] = None,
+              **kwargs
     ) -> 'ARIMAModel':
         """
         Train the ARIMA model on given data.
@@ -70,7 +71,7 @@ class ARIMAModel(BaseModel):
         self.is_fitted = True
         return self
         
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None,  y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def predict(self, y_context, y_target=None, x_context=None, x_target=None, y_start_date=None, x_start_date=None, **kwargs):
         """
         Make predictions using the trained ARIMA model.
         
