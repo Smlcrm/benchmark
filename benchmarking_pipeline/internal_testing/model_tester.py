@@ -178,38 +178,33 @@ def test_xgboost(all_australian_chunks):
 def test_random_forest(all_australian_chunks):
     rf_model = RandomForestModel({
         "lookback_window": 10,
-        "forecast_horizon": 2,
-        "model_params": {
-            "n_estimators": 50,
-            "max_depth": 5,
-            "random_state": 42,
-            "n_jobs": -1
-        }
+        "forecast_horizon": 5,
+        
+        "n_estimators": 50,
+        "max_depth": 5,
+        "random_state": 42,
+        "n_jobs": -1
+
     })
 
     rf_hyperparameter_tuner = HyperparameterTuner(rf_model, {
-        "lookback_window": [10],
-        "model_params__n_estimators": [50],
-        "model_params__max_depth": [3, 5],
+        "lookback_window": [10, 20],
+        "n_estimators": [10, 50],
+        "max_depth": [3,7],
     }, False)
 
     validation_score_hyperparameter_tuple = rf_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
 
     best_hyperparameters_dict = {
         "lookback_window": validation_score_hyperparameter_tuple[1][0],
-        "model_params__n_estimators": validation_score_hyperparameter_tuple[1][1],
-        "model_params__max_depth": validation_score_hyperparameter_tuple[1][2],
+        "n_estimators": validation_score_hyperparameter_tuple[1][1],
+        "max_depth": validation_score_hyperparameter_tuple[1][2],
     }
     print(f"Final Evaluation Random Forest australia: {rf_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
     print(f"Test Evaluation Random Forest australia: {rf_hyperparameter_tuner.final_evaluation({'lookback_window': 10, 'model_params__n_estimators': 50, 'model_params__max_depth': 5}, all_australian_chunks)}")
     print("Random Forest WORKS!")
 
 def test_prophet(all_australian_chunks):
-    # Ensure all y values are Pandas Series with a DatetimeIndex
-    for chunk in all_australian_chunks:
-        for split in ['train', 'validation', 'test']:
-            features = getattr(chunk, split).features
-            features['y'] = ProphetModel.ensure_series_with_datetimeindex(features['y'])
 
     prophet_model = ProphetModel({
         "model_params": {
@@ -294,7 +289,7 @@ def test_lstm(all_australian_chunks):
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -312,9 +307,9 @@ if __name__ == "__main__":
   # test_arima(all_australian_chunks)
   # test_seasonal_naive(all_australian_chunks)
   #test_theta(all_australian_chunks)
-  test_deep_ar(all_australian_chunks)
+  # test_deep_ar(all_australian_chunks)
   # test_xgboost(all_australian_chunks)
-  # test_random_forest(all_australian_chunks)
+  test_random_forest(all_australian_chunks)
   # test_prophet(all_australian_chunks)
   # test_lstm(all_australian_chunks)
 
