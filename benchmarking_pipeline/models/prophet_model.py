@@ -36,7 +36,7 @@ class ProphetModel(BaseModel):
             index=pd.date_range(fallback_start, periods=len(y), freq=freq)
         )
 
-    def train(self, y_context, x_context=None, y_context_timestamps=None):
+    def train(self, y_context, x_context=None, y_context_timestamps=None, **kwargs):
         if y_context_timestamps is None:
             raise ValueError("y_context_timestamps must be provided for Prophet training.")
         # Create a new Prophet model instance for each training
@@ -57,7 +57,7 @@ class ProphetModel(BaseModel):
         self.is_fitted = True
         return self
 
-    def predict(self, y_context, y_target, x_context=None, x_target=None, start_date=None, y_target_timestamps=None, y_context_timestamps=None):
+    def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
         if y_context is None or y_target is None:
@@ -67,11 +67,11 @@ class ProphetModel(BaseModel):
         if y_target_timestamps is not None:
             future_index = pd.to_datetime(y_target_timestamps)
         else:
-            if start_date is None:
+            if kwargs.get('start_date') is None:
                 raise ValueError("Either y_target_timestamps or start_date must be provided.")
             # The first prediction should start after the last training data point
             # Assuming daily frequency for now
-            future_index = pd.date_range(start=start_date, periods=len(y_target), freq='D')
+            future_index = pd.date_range(start=kwargs['start_date'], periods=len(y_target), freq='D')
         
         # Create future dataframe with the correct timestamps
         future_df = pd.DataFrame({'ds': future_index})
