@@ -43,7 +43,8 @@ class ThetaModel(BaseModel):
               x_context: Union[pd.Series, np.ndarray] = None, 
               x_target: Union[pd.Series, np.ndarray] = None, 
               y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None
+              x_start_date: Optional[str] = None,
+              **kwargs
     ) -> 'ThetaModel':
         """
         Train the Theta model on given data. For this model, "training" involves
@@ -69,7 +70,7 @@ class ThetaModel(BaseModel):
         print("Training complete.")
         return self
         
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None,  y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
         """
         Make predictions using the trained Theta model.
         
@@ -84,8 +85,8 @@ class ThetaModel(BaseModel):
             raise ValueError("Model is not trained yet. Call train() first.")
         
         # Create a forecasting horizon based on the number of samples in the input X.
-        if x_target is not None:
-            fh = np.arange(1, len(x_target) + 1)
+        if y_target is not None:
+            fh = np.arange(1, len(y_target) + 1)
         else:
             fh = self.forecast_horizon
         
