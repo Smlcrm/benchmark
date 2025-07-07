@@ -55,16 +55,23 @@ class DeepARModel(BaseModel):
         self.target_col = self.config.get('target_col', 'y')
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        self.max_encoder_length = self.config.get('max_encoder_length', 24)
-        self.max_prediction_length = self.config.get('max_prediction_length', 6)
+        self.max_encoder_length = self.config.get('max_encoder_length', 2)
+        self.max_prediction_length = self.config.get('max_prediction_length', 2)
         self.epochs = self.config.get('epochs', 100)
         self.gradient_clip_val = self.config.get('gradient_clip_val', 0.1)
         self.num_workers = self.config.get('num_workers', 7)
         self.model = None
     
     def _series_to_TimeSeriesDataset(self, series):
+        
+        values = None
+        if isinstance(series, pd.Series):
+            values = series.values
+        else:
+            values = series
+
         dataset_altered_form = pd.DataFrame({
-            "value": series.values,
+            "value": values,
             "time_idx": list(range(len(series))),
             "group_id": ["0"] * len(series)
         })

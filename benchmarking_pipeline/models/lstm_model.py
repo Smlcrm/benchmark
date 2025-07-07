@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from tensorflow.keras.optimizers import Adam
-from typing import Dict, Any, Union, Tuple
+from typing import Dict, Any, Union, Tuple, Optional
 import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
@@ -99,7 +99,7 @@ class LSTMModel(BaseModel):
             y_seq.append(X[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon, 0])
         return np.array(X_seq), np.array(y_seq)
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'LSTMModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None) -> 'LSTMModel':
         """
         Train the LSTM model on given data.
         
@@ -115,6 +115,9 @@ class LSTMModel(BaseModel):
             y_target: Future target values (optional, for validation)
             x_context: Past exogenous variables (optional, ignored for now)
             x_target: Future exogenous variables (optional, ignored for now)
+            y_start_date: The start date timestamp for y_context and y_target in string form
+            x_start_date: The start date timestamp for x_context and x_target in string form
+
             
         Returns:
             self: The fitted model instance

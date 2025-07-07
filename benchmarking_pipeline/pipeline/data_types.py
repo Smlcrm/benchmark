@@ -11,6 +11,7 @@ class DatasetSplit:
     """Represents a dataset split (train/val/test)."""
     features: Union[np.ndarray, pd.DataFrame]
     labels: Union[np.ndarray, pd.Series]
+    timestamps: np.ndarray
     metadata: Optional[Dict[str, Any]] = None
 
 @dataclass

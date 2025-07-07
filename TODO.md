@@ -25,7 +25,13 @@ This document tracks future issues and improvements that need to be addressed in
   - [ ] Modify evaluation metrics for multivariate predictions
   - [ ] Extend all models for multivariate forecasting
 
-## Code Quality & Maintenance
+  ### 3. Runaway Predictions for Random Forest
+- **Status**: Not Started
+- **Priority**: Medium
+- **Description**: The predictions for random forest increase over time due to iterative prediction.
+- **Tasks**:
+  - [ ] Store scaler and inverse transform
+  - [ ] Clip predictions to keep within normalized space
 
 ### 3. Error Handling and Robustness
 - **Status**: Not Started
