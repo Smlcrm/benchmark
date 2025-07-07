@@ -303,14 +303,14 @@ if __name__ == "__main__":
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
 
-  # test_arima(all_australian_chunks)
+  test_arima(all_australian_chunks)
   # test_seasonal_naive(all_australian_chunks)
-  # test_theta(all_australian_chunks)
-  # # test_deep_ar(all_australian_chunks)
-  # test_xgboost(all_australian_chunks)
+  test_theta(all_australian_chunks)
+  test_deep_ar(all_australian_chunks)
+  test_xgboost(all_australian_chunks)
   test_random_forest(all_australian_chunks)
-  # test_prophet(all_australian_chunks)
-  # test_lstm(all_australian_chunks)
+  test_prophet(all_australian_chunks)
+  test_lstm(all_australian_chunks)
   test_croston_classic(all_australian_chunks)
 
 
