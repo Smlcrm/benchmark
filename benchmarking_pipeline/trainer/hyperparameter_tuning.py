@@ -134,7 +134,7 @@ class HyperparameterTuner:
         ])
       
       target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
-      trained_model = self.model_class.train(y_context=target, y_target=None)
+      trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.features[self.model_class.target_col])
             
       predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.features[self.model_class.target_col])
       train_loss_dict = trained_model.compute_loss(time_series_dataset.test.features[self.model_class.target_col], predictions)
