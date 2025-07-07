@@ -59,14 +59,17 @@ class SeasonalNaiveModel(BaseModel):
         self.is_fitted = True
         return self
         
-    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+    def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
         """
         Make predictions using the trained Seasonal Naive model.
         
         Args:
-            X: Input data for prediction. The number of rows in X determines the
-               number of steps to forecast. The content of X is ignored by this model.
-            
+            y_context: Context time series values (pd.Series or np.ndarray).
+            y_target: Target time series values (pd.Series or np.ndarray).
+            y_context_timestamps: Timestamps for context time series.
+            y_target_timestamps: Timestamps for target time series.
+            **kwargs: Additional keyword arguments.
+        
         Returns:
             np.ndarray: Model predictions with shape (n_samples,).
         """
@@ -74,7 +77,7 @@ class SeasonalNaiveModel(BaseModel):
             raise ValueError("Model is not trained yet. Call train() first.")
         
         # Assume we want one prediction for each row of the input X.
-        fh = np.arange(1, len(X) + 1)
+        fh = np.arange(1, len(y_context) + 1)
         
         # The sktime predict method uses the forecasting horizon (fh).
         predictions = self.model.predict(fh=fh)
