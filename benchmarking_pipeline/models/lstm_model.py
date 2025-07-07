@@ -99,7 +99,7 @@ class LSTMModel(BaseModel):
             y_seq.append(X[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon, 0])
         return np.array(X_seq), np.array(y_seq)
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None) -> 'LSTMModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None, **kwargs) -> 'LSTMModel':
         """
         Train the LSTM model on given data.
         
@@ -117,6 +117,7 @@ class LSTMModel(BaseModel):
             x_target: Future exogenous variables (optional, ignored for now)
             y_start_date: The start date timestamp for y_context and y_target in string form
             x_start_date: The start date timestamp for x_context and x_target in string form
+            **kwargs: Additional keyword arguments
 
             
         Returns:
@@ -146,7 +147,7 @@ class LSTMModel(BaseModel):
         self.is_fitted = True
         return self
         
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, **kwargs) -> np.ndarray:
         """
         Make predictions using the trained LSTM model.
         Predicts len(y_target) steps ahead using non-overlapping windows.
