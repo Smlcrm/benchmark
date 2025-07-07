@@ -6,6 +6,10 @@ import pandas as pd
 from typing import Dict, Any, Union
 import pickle
 import os
+import xarray as xr
+
+
+from sympy import series
 from benchmarking_pipeline.models.base_model import BaseModel
 
 class CrostonClassicModel(BaseModel):
@@ -46,25 +50,48 @@ class CrostonClassicModel(BaseModel):
         Returns:
             self: The fitted model instance.
         """
-        if isinstance(y_context, pd.Series):
-            series = y_context.values
+        print("Croston train called", flush=True)
+        # Convert y_context to a 1D numpy array of numbers
+        # Handle custom Dataset and DatasetSplit types
+        series = y_context
+        # Unwrap Dataset/DatasetSplit until we get to a pd.Series or np.ndarray
+        while True:
+            if hasattr(series, "labels"):  # DatasetSplit or similar
+                series = series.labels
+            elif hasattr(series, "train"):  # Dataset
+                series = series.train.labels
+            else:
+                break
+
+        if isinstance(series, pd.Series):
+            series = series.values
+        elif isinstance(series, pd.DataFrame):
+            # If it's a DataFrame, take the first column (or raise an error)
+            series = series.iloc[:, 0].values
         else:
-            series = y_context
-            
+            series = np.asarray(series)
+
+        series = np.atleast_1d(series).astype(float)
+
         # Find indices of non-zero demand
-        non_zero_indices = np.where(series > 0)[0]
-        
+        non_zero_indices = np.nonzero(series)
+
+        print(non_zero_indices)
+        print(series)
+
         # If there's no demand or only one demand point we cannot forecast
-        if len(non_zero_indices) < 2:
+        if len(non_zero_indices[0]) < 2:
             # Set levels to a default state (e.g., average of the whole series)
-            self.demand_level_ = np.mean(series) if len(series) > 0 else 0
+            #self.demand_level_ = np.mean(series) if len(series) > 0 else 0
+            self.demand_level_ = 0 # Placeholder
+            
             self.interval_level_ = len(series) if len(series) > 0 else 1
             self.is_fitted = True
             return self
 
         # Get demand values and intervals
         demands = series[non_zero_indices]
-        intervals = np.diff(non_zero_indices)
+        intervals = np.diff(non_zero_indices[0])
         
         # Demand level starts with the first non-zero demand
         current_demand_level = demands[0]
