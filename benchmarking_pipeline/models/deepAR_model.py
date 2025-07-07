@@ -8,7 +8,7 @@ import pandas as pd
 import tensorflow as tf
 import lightning.pytorch as pl
 from pytorch_forecasting import DeepAR, TimeSeriesDataSet
-from typing import Dict, Any, Union, Tuple, Optional
+from typing import Dict, Any, Union, Tuple, Optional, List
 import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
@@ -51,7 +51,7 @@ class DeepARModel(BaseModel):
         self.rnn_layers = self.config.get('rnn_layers', 2)
         self.dropout = self.config.get('dropout', 0.1)
         self.learning_rate = self.config.get('learning_rate', 0.001)
-        self.batch_size = self.config.get('batch_size', 32)
+        self.batch_size = self.config.get('batch_size', 16)
         self.target_col = self.config.get('target_col', 'y')
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
@@ -70,10 +70,25 @@ class DeepARModel(BaseModel):
         else:
             values = series
 
+        # Increase speed of training
+        list_of_sub_chunks = self._evenly_split_array(values, self.batch_size)
+        #for sub_chunk in list_of_sub_chunks:
+        
+
+        # Each array, besides the last one, has to have the same number of elements
+        list_of_ids = []
+        sub_chunk_idx = 0
+        for sub_chunk in list_of_sub_chunks:
+            current_number_of_ids = len(sub_chunk)
+            current_id_list = [str(sub_chunk_idx)] * current_number_of_ids
+            list_of_ids.extend(current_id_list)
+            sub_chunk_idx += 1
+        
+
         dataset_altered_form = pd.DataFrame({
             "value": values,
-            "time_idx": list(range(len(series))),
-            "group_id": ["0"] * len(series)
+            "time_idx": np.concatenate([np.arange(len(sub_chunk)) for sub_chunk in list_of_sub_chunks]),
+            "group_id": list_of_ids
         })
 
         dataset = TimeSeriesDataSet(
@@ -174,7 +189,6 @@ class DeepARModel(BaseModel):
         return predictions
         
         
-
       
     def set_params(self, **params: Dict[str, Any]) -> 'BaseModel':
         """
@@ -196,7 +210,7 @@ class DeepARModel(BaseModel):
             self.model = None
             
         return self
-      
+    
     def get_params(self) -> Dict[str, Any]:
         """
         Get the current model parameters.
@@ -222,3 +236,7 @@ class DeepARModel(BaseModel):
         "num_workers" : self.num_workers
         })
     
+
+    def _evenly_split_array(self, array: np.ndarray, batch_size: int) -> List[np.ndarray]:
+        assert len(array) >= batch_size
+        return np.array_split(array, self.batch_size)
