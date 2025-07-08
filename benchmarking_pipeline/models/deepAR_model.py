@@ -12,6 +12,8 @@ from typing import Dict, Any, Union, Tuple, Optional
 import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
+from pytorch_lightning.loggers import TensorBoardLogger
+import time
 
 # Using this link to assist in building this model file implementation:
 # https://pytorch-forecasting.readthedocs.io/en/stable/tutorials/deepar.html
@@ -105,12 +107,6 @@ class DeepARModel(BaseModel):
               x_start_date: Optional[str] = None,
               **kwargs
     ) -> 'DeepARModel':
-        #print(f"y_context: {y_context}")
-        #print(f"y_target: {y_target}")
-        #print(f"x_context: {x_context}")
-        #print(f"x_target: {x_target}")
-        #print(f"y_start_date: {y_start_date}")
-        #print(f"x_start_date: {x_start_date}")
         training_dataset = self._series_to_TimeSeriesDataset(y_context)
         validation_dataset = self._series_to_TimeSeriesDataset(y_target)
 
@@ -126,17 +122,12 @@ class DeepARModel(BaseModel):
             train=False, batch_size=self.batch_size, batch_sampler="synchronized",
             num_workers=self.num_workers, persistent_workers=True
         )
-        
-        #print(f"Secondly altered training dataset: {training_dataset}")
-        #print(f"Secondly altered validation dataset: {validation_dataset}")
-
-        #print("Creating the DeepAR trainer!")
-        trainer = pl.Trainer(accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
-
-        #print("Training DeepAR!")
+        # Set up TensorBoard logger
+        log_dir = os.path.join("runs", "DeepAR")
+        tb_logger = TensorBoardLogger(save_dir=log_dir, name=time.strftime("%Y%m%d-%H%M%S"))
+        # Create the PyTorch Lightning trainer with logger
+        trainer = pl.Trainer(logger=tb_logger, accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
         trainer.fit(self.model,train_dataloader,validation_dataloader)
-        #print("All done training!")
-
         return self
         
         
