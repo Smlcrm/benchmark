@@ -91,7 +91,8 @@ def test_deep_ar(all_australian_chunks):
     "feature_cols" : None,
     "forecast_horizon" : 100,
     "epochs": 1,
-    "num_workers":8
+    "num_workers":8 # please be aware that, if you have more threads/cores, you can bump this number up
+                    # my mac only has 8 cores, so that's why num workers is only 8.
   })
 
   deep_ar_hyperparameter_tuner = HyperparameterTuner(deep_ar_model, {
