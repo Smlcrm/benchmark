@@ -62,7 +62,6 @@ class DeepARModel(BaseModel):
         self.gradient_clip_val = self.config.get('gradient_clip_val', 0.1)
         self.num_workers = self.config.get('num_workers', 7)
         self.model = None
-        self.trainer = None
     
     def _series_to_TimeSeriesDataset(self, series, train=True):
         
@@ -110,8 +109,7 @@ class DeepARModel(BaseModel):
             time_varying_unknown_reals=["value"],
             max_encoder_length = self.max_encoder_length,
             max_prediction_length = self.max_prediction_length,
-            static_categoricals=["group_id"],
-            predict_mode = not train
+            static_categoricals=["group_id"]
         )
 
         return dataset
@@ -122,7 +120,6 @@ class DeepARModel(BaseModel):
                                            hidden_size=self.hidden_size,
                                            rnn_layers=self.rnn_layers,
                                            dropout=self.dropout)
-        self.trainer = pl.Trainer(accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
     
     def train(self, 
               y_context: Union[pd.Series, np.ndarray], 
@@ -142,7 +139,7 @@ class DeepARModel(BaseModel):
         training_dataset = self._series_to_TimeSeriesDataset(y_context)
         validation_dataset = self._series_to_TimeSeriesDataset(y_target)
 
-        if self.model is None or self.trainer is None:
+        if self.model is None:
             self._build_model(training_dataset)
 
         train_dataloader = training_dataset.to_dataloader(
@@ -159,11 +156,11 @@ class DeepARModel(BaseModel):
         #print(f"Secondly altered validation dataset: {validation_dataset}")
 
         #print("Creating the DeepAR trainer!")
-        
+        trainer = pl.Trainer(accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
 
         #print("Training DeepAR!")
         #trainer.fit(self.model,train_dataloader,validation_dataloader)
-        self.trainer.fit(self.model,train_dataloader)
+        trainer.fit(self.model,train_dataloader)
         #print("All done training!")
 
         return self
@@ -191,15 +188,9 @@ class DeepARModel(BaseModel):
         Returns:
             np.ndarray: Model predictions with shape (n_samples, forecast_horizon)
         """
-        if self.model is None or self.trainer is None:
+        if self.model is None:
             raise ValueError("Model not initialized. Call train first.")
         # Fix this so we 
-
-        validation_dataset = self._series_to_TimeSeriesDataset(y_target, train=False)
-        validation_dataloader = validation_dataset.to_dataloader(
-            train=False, batch_size=1, batch_sampler="synchronized",
-            num_workers=self.num_workers, persistent_workers=True
-        )
 
         #train_dataset = self._series_to_TimeSeriesDataset(y_context, train=False)
         #train_dataloader = train_dataset.to_dataloader(
@@ -208,9 +199,8 @@ class DeepARModel(BaseModel):
         #)
 
         # Fix this code so we do sliding window inference on previously made predictions.
-        #all_predictions = []
+        all_predictions = []
 
-        """
         values = None
         if isinstance(y_context, pd.Series):
             values = y_context.values
@@ -244,10 +234,7 @@ class DeepARModel(BaseModel):
             # Append model predictions all_predictions, to prep for future forecasting
             all_predictions.extend(current_predictions[0])
         
-        return np.array(all_predictions[self.max_prediction_length:self.max_prediction_length+val_length])"""
-        predictions = self.trainer.predict(self.model,validation_dataloader)
-        print(f"Current predictions: {predictions}")
-        return predictions
+        return np.array(all_predictions[self.max_prediction_length:self.max_prediction_length+val_length])
         
         
       
