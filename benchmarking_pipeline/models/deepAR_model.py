@@ -57,7 +57,7 @@ class DeepARModel(BaseModel):
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.max_encoder_length = self.config.get('max_encoder_length', 2)
-        self.max_prediction_length = self.config.get('max_prediction_length', 2)
+        self.max_prediction_length = self.config.get('max_prediction_length', 6)
         self.epochs = self.config.get('epochs', 100)
         self.gradient_clip_val = self.config.get('gradient_clip_val', 0.1)
         self.num_workers = self.config.get('num_workers', 7)
@@ -141,11 +141,13 @@ class DeepARModel(BaseModel):
 
         if self.model is None:
             self._build_model(training_dataset)
+        print("Model built!")
 
         train_dataloader = training_dataset.to_dataloader(
             train=True, batch_size=self.batch_size, batch_sampler="synchronized",
             num_workers=self.num_workers, persistent_workers=True
         )
+        print("Train Dataloader Finished")
 
         #validation_dataloader = validation_dataset.to_dataloader(
         #    train=False, batch_size=self.batch_size, batch_sampler="synchronized",
@@ -157,10 +159,12 @@ class DeepARModel(BaseModel):
 
         #print("Creating the DeepAR trainer!")
         trainer = pl.Trainer(accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
+        print("Trainer initialized")
 
         #print("Training DeepAR!")
         #trainer.fit(self.model,train_dataloader,validation_dataloader)
         trainer.fit(self.model,train_dataloader)
+        print("Trainer fitted")
         #print("All done training!")
 
         return self
@@ -217,19 +221,24 @@ class DeepARModel(BaseModel):
         for window in range(num_windows):
 
             # Get enough input to formulate next prediction
+            
             current_encoder_sequence = all_predictions[-(self.max_encoder_length+self.max_prediction_length):] 
+            print("DEBUG: Current Encoder Sequence", current_encoder_sequence)
 
             # Convert to form compatible with data loader
             current_encoder_sequence_TimeSeriesDataset = self._series_to_TimeSeriesDataset(np.array(current_encoder_sequence), train=False)
+            print("Time Series Dataset Conversion Finished")
 
             # Create dataloader - dataloaders are needed to predict with Pytorch Lightning models
             current_encoder_sequence_dataloader = current_encoder_sequence_TimeSeriesDataset.to_dataloader(
                 train=False, batch_size=1, batch_sampler="synchronized",
                 num_workers=self.num_workers, persistent_workers=True
             )
+            print("Time Series Dataset Dataloader Finished")
 
             # Get the prediction for the current encoder sequence input
             current_predictions = self.model.predict(current_encoder_sequence_dataloader).cpu().numpy()
+            print(f"Current predictions: {current_predictions}")
             print(f"Window {window} out of {num_windows}")
             # Append model predictions all_predictions, to prep for future forecasting
             all_predictions.extend(current_predictions[0])
