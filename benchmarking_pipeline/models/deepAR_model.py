@@ -56,7 +56,7 @@ class DeepARModel(BaseModel):
         self.target_col = self.config.get('target_col', 'y')
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        self.max_encoder_length = self.config.get('max_encoder_length', 2)
+        self.max_encoder_length = self.config.get('max_encoder_length', 6)
         self.max_prediction_length = self.config.get('max_prediction_length', 6)
         self.epochs = self.config.get('epochs', 100)
         self.gradient_clip_val = self.config.get('gradient_clip_val', 0.1)
