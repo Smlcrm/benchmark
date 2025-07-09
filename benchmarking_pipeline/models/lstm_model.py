@@ -14,6 +14,8 @@ from typing import Dict, Any, Union, Tuple, Optional
 import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
+import time
+from tensorflow.keras.callbacks import TensorBoard
 
 
 class LSTMModel(BaseModel):
@@ -135,13 +137,16 @@ class LSTMModel(BaseModel):
         # Build model if not already built
         if self.model is None:
             self._build_model(input_shape=(self.sequence_length, 1))
-        
+        # Set up TensorBoard callback
+        log_dir = os.path.join("runs", "LSTM", time.strftime("%Y%m%d-%H%M%S"))
+        tensorboard_callback = TensorBoard(log_dir=log_dir, histogram_freq=0)
         # Train model
         self.model.fit(
             X_seq, y_seq,
             batch_size=self.batch_size,
             epochs=self.epochs,
-            verbose=0
+            verbose=0,
+            callbacks=[tensorboard_callback]
         )
         
         self.is_fitted = True

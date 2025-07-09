@@ -85,13 +85,13 @@ def test_deep_ar(all_australian_chunks):
     "hidden_size": 2,
     "rnn_layers" : 2,
     "dropout" : 0.1,
-    "batch_size" : 1,
+    "batch_size" : 64,
     "learning_rate" : 0.001,
     "target_col" : 'y',
     "feature_cols" : None,
     "forecast_horizon" : 100,
     "epochs": 1,
-    "num_workers":4
+    "num_workers":8
   })
 
   deep_ar_hyperparameter_tuner = HyperparameterTuner(deep_ar_model, {
@@ -288,7 +288,7 @@ def test_lstm(all_australian_chunks):
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -303,15 +303,15 @@ if __name__ == "__main__":
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
 
-  test_arima(all_australian_chunks)
+  # test_arima(all_australian_chunks)
   # test_seasonal_naive(all_australian_chunks)
-  test_theta(all_australian_chunks)
+  # test_theta(all_australian_chunks)
   test_deep_ar(all_australian_chunks)
-  test_xgboost(all_australian_chunks)
-  test_random_forest(all_australian_chunks)
-  test_prophet(all_australian_chunks)
-  test_lstm(all_australian_chunks)
-  test_croston_classic(all_australian_chunks)
+  # test_xgboost(all_australian_chunks)
+  # test_random_forest(all_australian_chunks)
+  # test_prophet(all_australian_chunks)
+  # test_lstm(all_australian_chunks)
+  # test_croston_classic(all_australian_chunks)
 
 
 
