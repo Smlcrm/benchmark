@@ -24,6 +24,8 @@ import pandas as pd
 import re
 import os
 import json
+import datetime
+import matplotlib.pyplot as plt
 
 class BenchmarkRunner:
     def __init__(self, config):
@@ -38,7 +40,8 @@ class BenchmarkRunner:
         
     def run(self):
         """Execute the end-to-end benchmarking pipeline."""
-        writer = SummaryWriter(log_dir="runs/benchmark_runner/{}".format(time.strftime("%Y%m%d-%H%M%S")))
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        writer = SummaryWriter(log_dir=f"runs/benchmark_runner_australian_electricity_{timestamp}")
         data_loader = DataLoader({"dataset": {
             "path": "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
             "name": "australian_electricity_demand",
@@ -69,6 +72,15 @@ def _extract_number_before_capital(freq_str):
     else:
         raise ValueError(f"Invalid frequency string: {freq_str}")
 
+def log_preds_vs_true(writer, model_name, y_true, y_pred, step):
+    fig, ax = plt.subplots()
+    ax.plot(y_true, label='True')
+    ax.plot(y_pred, label='Predicted')
+    ax.set_title(f'{model_name} Predictions vs True')
+    ax.legend()
+    writer.add_figure(f'{model_name}/pred_vs_true', fig, global_step=step)
+    plt.close(fig)
+
 def run_arima(all_australian_chunks, writer=None):
     print("[DEBUG] Starting ARIMA...")
     arima_model = ARIMAModel({
@@ -98,10 +110,13 @@ def run_arima(all_australian_chunks, writer=None):
     print(f"Final Evaluation ARIMA australia: {results}")
     if writer is not None:
         for metric, value in results.items():
-            writer.add_scalar('ARIMA/' + metric, value)
+            writer.add_scalar('ARIMA/' + metric, value, 1)
+        # Log preds vs true
+        y_true, y_pred = arima_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'ARIMA', y_true, y_pred, 1)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/ARIMA.json', 'w') as f:
+    with open(f'results/ARIMA_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
     print(f"Test Evaluation ARIMA australia: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)}")
     print("[DEBUG] Finished ARIMA.")
@@ -125,10 +140,12 @@ def run_theta(all_australian_chunks, writer=None):
     print(f"Final Evaluation Theta australia: {results}")
     if writer is not None:
         for metric, value in results.items():
-            writer.add_scalar('Theta/' + metric, value)
+            writer.add_scalar('Theta/' + metric, value, 7)
+        y_true, y_pred = theta_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'Theta', y_true, y_pred, 7)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/Theta.json', 'w') as f:
+    with open(f'results/Theta_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
     print(f"Test Evaluation Theta australia: {theta_hyperparameter_tuner.final_evaluation({'sp':3,}, all_australian_chunks)}")
     print("Theta WORKS!")
@@ -158,9 +175,11 @@ def run_deep_ar(all_australian_chunks, writer=None):
     if writer is not None:
         for metric, value in results.items():
             writer.add_scalar('DeepAR/' + metric, value)
+        y_true, y_pred = deep_ar_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'DeepAR', y_true, y_pred, 8)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/DeepAR.json', 'w') as f:
+    with open(f'results/DeepAR_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
     print(f"Test Evaluation DeepAR australia: {deep_ar_hyperparameter_tuner.final_evaluation({'rnn_layers':2,}, all_australian_chunks)}")
     print("Deep AR WORKS!")
@@ -194,10 +213,12 @@ def run_xgboost(all_australian_chunks, writer=None):
     print(f"Final Evaluation XGBoost australia: {results}")
     if writer is not None:
         for metric, value in results.items():
-            writer.add_scalar('XGBoost/' + metric, value)
+            writer.add_scalar('XGBoost/' + metric, value, 2)
+        y_true, y_pred = xgb_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'XGBoost', y_true, y_pred, 2)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/XGBoost.json', 'w') as f:
+    with open(f'results/XGBoost_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
     print(f"Test Evaluation XGBoost australia: {xgb_hyperparameter_tuner.final_evaluation({'lookback_window': 10, 'model_params__n_estimators': 50, 'model_params__max_depth': 5, 'model_params__learning_rate': 0.1}, all_australian_chunks)}")
     print("XGBoost WORKS!")
@@ -226,10 +247,12 @@ def run_random_forest(all_australian_chunks, writer=None):
     print(f"Final Evaluation Random Forest australia: {results}")
     if writer is not None:
         for metric, value in results.items():
-            writer.add_scalar('RandomForest/' + metric, value)
+            writer.add_scalar('RandomForest/' + metric, value, 3)
+        y_true, y_pred = rf_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'RandomForest', y_true, y_pred, 3)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/RandomForest.json', 'w') as f:
+    with open(f'results/RandomForest_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
     print(f"Test Evaluation Random Forest australia: {rf_hyperparameter_tuner.final_evaluation({'lookback_window': 10, 'model_params__n_estimators': 50, 'model_params__max_depth': 5}, all_australian_chunks)}")
     print("Random Forest WORKS!")
@@ -260,10 +283,12 @@ def run_prophet(all_australian_chunks, writer=None):
     print(f"Final Evaluation Prophet australia: {results}")
     if writer is not None:
         for metric, value in results.items():
-            writer.add_scalar('Prophet/' + metric, value)
+            writer.add_scalar('Prophet/' + metric, value, 4)
+        y_true, y_pred = prophet_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'Prophet', y_true, y_pred, 4)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/Prophet.json', 'w') as f:
+    with open(f'results/Prophet_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
     print(f"Test Evaluation Prophet australia: {prophet_hyperparameter_tuner.final_evaluation({'seasonality_mode': 'additive', 'changepoint_prior_scale': 0.05, 'seasonality_prior_scale': 10.0}, all_australian_chunks)}")
     print("Prophet WORKS!")
@@ -288,10 +313,12 @@ def run_croston_classic(all_australian_chunks, writer=None):
     print(f"Final Evaluation CrostonClassic australia: {results}")
     if writer is not None:
         for metric, value in results.items():
-            writer.add_scalar('CrostonClassic/' + metric, value)
+            writer.add_scalar('CrostonClassic/' + metric, value, 6)
+        y_true, y_pred = croston_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'CrostonClassic', y_true, y_pred, 6)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/CrostonClassic.json', 'w') as f:
+    with open(f'results/CrostonClassic_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
 
 def run_lstm(all_australian_chunks, writer=None):
@@ -300,7 +327,7 @@ def run_lstm(all_australian_chunks, writer=None):
         "layers": 1,
         "dropout": 0.1,
         "learning_rate": 0.001,
-        "batch_size": 16,
+        "batch_size": 32,
         "epochs": 20,
         "sequence_length": 20,
         "target_col": "y",
@@ -309,24 +336,24 @@ def run_lstm(all_australian_chunks, writer=None):
         "forecast_horizon": 10
     })
     lstm_hyperparameter_tuner = HyperparameterTuner(lstm_model, {
-        "units": [32],
-        "layers": [1],
+        "learning_rate": [0.001, 0.01, 0.1],
     }, False)
     validation_score_hyperparameter_tuple = lstm_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_australian_chunks)
     best_hyperparameters_dict = {
-        "units": validation_score_hyperparameter_tuple[1][0],
-        "layers": validation_score_hyperparameter_tuple[1][1]
+        "learning_rate": validation_score_hyperparameter_tuple[1][0]
     }
     results = lstm_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)
     print(f"Final Evaluation LSTM australia: {results}")
     if writer is not None:
         for metric, value in results.items():
-            writer.add_scalar('LSTM/' + metric, value)
+            writer.add_scalar('LSTM/' + metric, value, 5)
+        y_true, y_pred = lstm_hyperparameter_tuner.get_last_eval_true_pred()
+        log_preds_vs_true(writer, 'LSTM', y_true, y_pred, 5)
     # Save results locally
     os.makedirs('results', exist_ok=True)
-    with open('results/LSTM.json', 'w') as f:
+    with open(f'results/LSTM_australian_electricity_{time.strftime("%Y%m%d-%H%M%S")}.json', 'w') as f:
         json.dump(results, f, indent=2)
-    print(f"Test Evaluation LSTM australia: {lstm_hyperparameter_tuner.final_evaluation({'units': 32, 'layers': 2}, all_australian_chunks)}")
+    print(f"Test Evaluation LSTM australia: {lstm_hyperparameter_tuner.final_evaluation({'learning_rate': 0.001}, all_australian_chunks)}")
     print("LSTM WORKS!") 
 
 if __name__ == "__main__":

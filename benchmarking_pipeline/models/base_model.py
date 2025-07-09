@@ -37,6 +37,9 @@ class BaseModel(ABC):
         self.target_col = self.config.get('target_col', 'y')
         self.is_fitted = False
         self.evaluator = Evaluator(config=self.config)
+        # For logging last eval
+        self._last_y_true = None
+        self._last_y_pred = None
         
     @abstractmethod
     def train(self, 
@@ -123,6 +126,9 @@ class BaseModel(ABC):
         y_pred = y_pred[:min_length]
         print(f"y_pred: {y_pred}")
         print(f"y_true: {y_true}")
+        # Store for TensorBoard logging
+        self._last_y_true = y_true
+        self._last_y_pred = y_pred
         
         # Convert inputs to DataFrame format required by Evaluator
         
@@ -224,3 +230,9 @@ class BaseModel(ABC):
             'is_fitted': self.is_fitted,
             'parameters': self.get_params()
         } 
+
+    def get_last_eval_true_pred(self):
+        """
+        Return the last y_true and y_pred used in compute_loss for TensorBoard logging.
+        """
+        return self._last_y_true, self._last_y_pred 
