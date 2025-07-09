@@ -8,7 +8,7 @@ import pandas as pd
 import tensorflow as tf
 import lightning.pytorch as pl
 from pytorch_forecasting import DeepAR, TimeSeriesDataSet
-from typing import Dict, Any, Union, Tuple, Optional
+from typing import Dict, Any, Union, Tuple, Optional, List
 import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
@@ -53,7 +53,7 @@ class DeepARModel(BaseModel):
         self.rnn_layers = self.config.get('rnn_layers', 2)
         self.dropout = self.config.get('dropout', 0.1)
         self.learning_rate = self.config.get('learning_rate', 0.001)
-        self.batch_size = self.config.get('batch_size', 32)
+        self.batch_size = self.config.get('batch_size', 16)
         self.target_col = self.config.get('target_col', 'y')
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
@@ -72,10 +72,25 @@ class DeepARModel(BaseModel):
         else:
             values = series
 
+        # Increase speed of training
+        list_of_sub_chunks = self._evenly_split_array(values, self.batch_size)
+        #for sub_chunk in list_of_sub_chunks:
+        
+
+        # Each array, besides the last one, has to have the same number of elements
+        list_of_ids = []
+        sub_chunk_idx = 0
+        for sub_chunk in list_of_sub_chunks:
+            current_number_of_ids = len(sub_chunk)
+            current_id_list = [str(sub_chunk_idx)] * current_number_of_ids
+            list_of_ids.extend(current_id_list)
+            sub_chunk_idx += 1
+        
+
         dataset_altered_form = pd.DataFrame({
             "value": values,
-            "time_idx": list(range(len(series))),
-            "group_id": ["0"] * len(series)
+            "time_idx": np.concatenate([np.arange(len(sub_chunk)) for sub_chunk in list_of_sub_chunks]),
+            "group_id": list_of_ids
         })
 
         dataset = TimeSeriesDataSet(
@@ -141,33 +156,61 @@ class DeepARModel(BaseModel):
         **kwargs
     ) -> np.ndarray:
         """
-        Make predictions using the trained model.
+        Make autoregressive predictions using the trained model.
         
         Args:
             y_context: Recent/past target values 
-            y_target: Future target values 
+            y_target: Future target values (used to determine forecast length)
             x_context: Recent/past exogenous variables 
             x_target: Future exogenous variables for the forecast horizon 
             forecast_horizon: Number of steps to forecast (defaults to model config if not provided)
             
         Returns:
-            np.ndarray: Model predictions with shape (n_samples, forecast_horizon)
+            np.ndarray: Model predictions with shape (forecast_horizon,)
         """
         if self.model is None:
             raise ValueError("Model not initialized. Call train first.")
-        validation_dataset = self._series_to_TimeSeriesDataset(y_target)
-        validation_dataloader = validation_dataset.to_dataloader(
-            train=False, batch_size=self.batch_size, batch_sampler="synchronized",
-            num_workers=self.num_workers, persistent_workers=True
-        )
-
-        predictions = self.model.predict(validation_dataloader)
-        predictions = predictions.cpu().numpy() # shape is (length of val set, self.max_prediction_length)
-        predictions = predictions[:,0]
+        
+        # Determine forecast horizon
+        if forecast_horizon is None:
+            forecast_horizon = len(y_target) if y_target is not None else self.forecast_horizon
+        
+        # Convert input to numpy array
+        if isinstance(y_context, pd.Series):
+            context_values = y_context.values
+        else:
+            context_values = y_context
+        
+        # Initialize predictions array
+        predictions = np.zeros(forecast_horizon)
+        
+        # Start with the context data (last max_encoder_length values)
+        current_context = context_values[-self.max_encoder_length:].copy()
+        
+        # Autoregressive prediction loop
+        for step in range(forecast_horizon):
+            # Create dataset for current context
+            context_dataset = self._series_to_TimeSeriesDataset(current_context)
+            context_dataloader = context_dataset.to_dataloader(
+                train=False, batch_size=1, batch_sampler="synchronized",
+                num_workers=self.num_workers, persistent_workers=True
+            )
+            
+            # Get prediction for next step
+            step_prediction = self.model.predict(context_dataloader)
+            step_prediction = step_prediction.cpu().numpy()
+            
+            # Extract the first prediction (next step)
+            next_value = step_prediction[0, 0]  # First sample, first prediction step
+            predictions[step] = next_value
+            
+            # Update context for next iteration by appending the prediction
+            # Keep only the last max_encoder_length values to maintain context window
+            current_context = np.append(current_context, next_value)[-self.max_encoder_length:]
+        
         return predictions
         
         
-
       
     def set_params(self, **params: Dict[str, Any]) -> 'BaseModel':
         """
@@ -189,7 +232,7 @@ class DeepARModel(BaseModel):
             self.model = None
             
         return self
-      
+    
     def get_params(self) -> Dict[str, Any]:
         """
         Get the current model parameters.
@@ -215,3 +258,7 @@ class DeepARModel(BaseModel):
         "num_workers" : self.num_workers
         })
     
+
+    def _evenly_split_array(self, array: np.ndarray, batch_size: int) -> List[np.ndarray]:
+        assert len(array) >= batch_size
+        return np.array_split(array, self.batch_size)
