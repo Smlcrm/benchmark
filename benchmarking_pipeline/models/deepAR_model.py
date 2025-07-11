@@ -14,6 +14,7 @@ import os
 from benchmarking_pipeline.models.base_model import BaseModel
 from pytorch_lightning.loggers import TensorBoardLogger
 import time
+import math
 
 # Using this link to assist in building this model file implementation:
 # https://pytorch-forecasting.readthedocs.io/en/stable/tutorials/deepar.html
@@ -57,14 +58,14 @@ class DeepARModel(BaseModel):
         self.target_col = self.config.get('target_col', 'y')
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        self.max_encoder_length = self.config.get('max_encoder_length', 2)
-        self.max_prediction_length = self.config.get('max_prediction_length', 2)
+        self.max_encoder_length = self.config.get('max_encoder_length', 6)
+        self.max_prediction_length = self.config.get('max_prediction_length', 6)
         self.epochs = self.config.get('epochs', 100)
         self.gradient_clip_val = self.config.get('gradient_clip_val', 0.1)
         self.num_workers = self.config.get('num_workers', 7)
         self.model = None
     
-    def _series_to_TimeSeriesDataset(self, series):
+    def _series_to_TimeSeriesDataset(self, series, train=True):
         
         values = None
         if isinstance(series, pd.Series):
@@ -72,26 +73,35 @@ class DeepARModel(BaseModel):
         else:
             values = series
 
-        # Increase speed of training
-        list_of_sub_chunks = self._evenly_split_array(values, self.batch_size)
-        #for sub_chunk in list_of_sub_chunks:
         
+        if train:
+            # Increase speed of training
+            list_of_sub_chunks = self._evenly_split_array(values, self.batch_size)
+            #for sub_chunk in list_of_sub_chunks:
+            
 
-        # Each array, besides the last one, has to have the same number of elements
-        list_of_ids = []
-        sub_chunk_idx = 0
-        for sub_chunk in list_of_sub_chunks:
-            current_number_of_ids = len(sub_chunk)
-            current_id_list = [str(sub_chunk_idx)] * current_number_of_ids
-            list_of_ids.extend(current_id_list)
-            sub_chunk_idx += 1
-        
+            # Each array, besides the last one, has to have the same number of elements
+            list_of_ids = []
+            sub_chunk_idx = 0
+            for sub_chunk in list_of_sub_chunks:
+                current_number_of_ids = len(sub_chunk)
+                current_id_list = [str(sub_chunk_idx)] * current_number_of_ids
+                list_of_ids.extend(current_id_list)
+                sub_chunk_idx += 1
+            
 
-        dataset_altered_form = pd.DataFrame({
-            "value": values,
-            "time_idx": np.concatenate([np.arange(len(sub_chunk)) for sub_chunk in list_of_sub_chunks]),
-            "group_id": list_of_ids
-        })
+            dataset_altered_form = pd.DataFrame({
+                "value": values,
+                "time_idx": np.concatenate([np.arange(len(sub_chunk)) for sub_chunk in list_of_sub_chunks]),
+                "group_id": list_of_ids
+            })
+        else:
+            dataset_altered_form = pd.DataFrame({
+                "value": values,
+                "time_idx": list(range(len(series))),
+                "group_id": ["0"] * len(series)
+            })
+            
 
         dataset = TimeSeriesDataSet(
             dataset_altered_form,
@@ -127,22 +137,27 @@ class DeepARModel(BaseModel):
 
         if self.model is None:
             self._build_model(training_dataset)
+        print("Model built!")
 
         train_dataloader = training_dataset.to_dataloader(
             train=True, batch_size=self.batch_size, batch_sampler="synchronized",
             num_workers=self.num_workers, persistent_workers=True
         )
+        print("Train Dataloader Finished")
 
-        validation_dataloader = validation_dataset.to_dataloader(
-            train=False, batch_size=self.batch_size, batch_sampler="synchronized",
-            num_workers=self.num_workers, persistent_workers=True
-        )
+        #validation_dataloader = validation_dataset.to_dataloader(
+        #    train=False, batch_size=self.batch_size, batch_sampler="synchronized",
+        #    num_workers=self.num_workers, persistent_workers=True
+        #)
         # Set up TensorBoard logger
         log_dir = os.path.join("runs", "DeepAR")
         tb_logger = TensorBoardLogger(save_dir=log_dir, name=time.strftime("%Y%m%d-%H%M%S"))
         # Create the PyTorch Lightning trainer with logger
         trainer = pl.Trainer(logger=tb_logger, accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
-        trainer.fit(self.model,train_dataloader,validation_dataloader)
+        print("Trainer initialized")
+        #trainer.fit(self.model,train_dataloader,validation_dataloader)
+        trainer.fit(self.model,train_dataloader)
+        print("Trainer fitted")
         return self
         
         
@@ -170,45 +185,56 @@ class DeepARModel(BaseModel):
         """
         if self.model is None:
             raise ValueError("Model not initialized. Call train first.")
-        
-        # Determine forecast horizon
-        if forecast_horizon is None:
-            forecast_horizon = len(y_target) if y_target is not None else self.forecast_horizon
-        
-        # Convert input to numpy array
+        # Fix this so we 
+
+        #train_dataset = self._series_to_TimeSeriesDataset(y_context, train=False)
+        #train_dataloader = train_dataset.to_dataloader(
+        #    train=False, batch_size=1, batch_sampler="synchronized",
+        #    num_workers=self.num_workers, persistent_workers=True
+        #)
+
+        # Fix this code so we do sliding window inference on previously made predictions.
+        all_predictions = []
+
+        values = None
         if isinstance(y_context, pd.Series):
-            context_values = y_context.values
+            values = y_context.values
         else:
-            context_values = y_context
+            values = y_context
+
+        # We need at least self.max_encoder_length+self.max_prediction_length values to get enough data to predict
+        # So we get that amount of values by sampling the end of y_context
+        all_predictions.extend(values[-(self.max_encoder_length+self.max_prediction_length):])
         
-        # Initialize predictions array
-        predictions = np.zeros(forecast_horizon)
-        
-        # Start with the context data (last max_encoder_length values)
-        current_context = context_values[-self.max_encoder_length:].copy()
-        
-        # Autoregressive prediction loop
-        for step in range(forecast_horizon):
-            # Create dataset for current context
-            context_dataset = self._series_to_TimeSeriesDataset(current_context)
-            context_dataloader = context_dataset.to_dataloader(
+        val_length = len(y_target)
+
+        num_windows = math.ceil((val_length) / self.max_prediction_length)
+        for window in range(num_windows):
+
+            # Get enough input to formulate next prediction
+            
+            current_encoder_sequence = all_predictions[-(self.max_encoder_length+self.max_prediction_length):] 
+            print("DEBUG: Current Encoder Sequence", current_encoder_sequence)
+
+            # Convert to form compatible with data loader
+            current_encoder_sequence_TimeSeriesDataset = self._series_to_TimeSeriesDataset(np.array(current_encoder_sequence), train=False)
+            print("Time Series Dataset Conversion Finished")
+
+            # Create dataloader - dataloaders are needed to predict with Pytorch Lightning models
+            current_encoder_sequence_dataloader = current_encoder_sequence_TimeSeriesDataset.to_dataloader(
                 train=False, batch_size=1, batch_sampler="synchronized",
                 num_workers=self.num_workers, persistent_workers=True
             )
-            
-            # Get prediction for next step
-            step_prediction = self.model.predict(context_dataloader)
-            step_prediction = step_prediction.cpu().numpy()
-            
-            # Extract the first prediction (next step)
-            next_value = step_prediction[0, 0]  # First sample, first prediction step
-            predictions[step] = next_value
-            
-            # Update context for next iteration by appending the prediction
-            # Keep only the last max_encoder_length values to maintain context window
-            current_context = np.append(current_context, next_value)[-self.max_encoder_length:]
+            print("Time Series Dataset Dataloader Finished")
+
+            # Get the prediction for the current encoder sequence input
+            current_predictions = self.model.predict(current_encoder_sequence_dataloader).cpu().numpy()
+            print(f"Current predictions: {current_predictions}")
+            print(f"Window {window} out of {num_windows}")
+            # Append model predictions all_predictions, to prep for future forecasting
+            all_predictions.extend(current_predictions[0])
         
-        return predictions
+        return np.array(all_predictions[self.max_prediction_length:self.max_prediction_length+val_length])
         
         
       
