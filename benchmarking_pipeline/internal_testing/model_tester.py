@@ -289,7 +289,7 @@ def test_lstm(all_australian_chunks):
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/alifabdullah/Collaboration/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/alifabdullah/Collaboration/Benchmark-Simulacrum/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})

@@ -5,7 +5,7 @@ import pandas as pd
 if __name__ == "__main__":
   print("Data loader testing suite!")
   data_loader_to_be_tested = DataLoader({"dataset": {
-    "path" : "/Users/aryannair/smlcrm-benchmark/benchmarking_pipeline/internal_testing/internal_testing_data/data_loader_testing",
+    "path" : "/Users/alifabdullah/Collaboration/Benchmark-Simulacrum/benchmark/benchmarking_pipeline/internal_testing/internal_testing_data/data_loader_testing",
     "name" : "data_loader_testing",
     "split_ratio" : [0.8,0.1,0.1]
   }})
