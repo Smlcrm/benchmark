@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
 from typing import Dict, Any, Union, Tuple, Optional
-import itertools
 import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
@@ -32,7 +31,11 @@ class ARIMAModel(BaseModel):
         self.d = self.config.get('d', 1)
         self.q = self.config.get('q', 1)
         self.target_col = self.config.get('target_col', 'y')
-        self.model = None
+        self.model_ = None  # Use model_ consistently
+        self.is_fitted = False  # Explicitly initialize
+        self.loss_functions = self.config.get('loss_functions', ['mae'])
+        self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
+        self.forecast_horizon = self.config.get('forecast_horizon', 1)
         
     def train(self, 
               y_context: Union[pd.Series, np.ndarray], 

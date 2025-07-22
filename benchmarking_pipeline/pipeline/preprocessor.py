@@ -9,6 +9,20 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from .data_types import Dataset, DatasetSplit, PreprocessedData
 
 
+class MinMaxScalerSafe:
+    def __init__(self, feature_range=(1e-4, 1.0)):
+        self.scaler = MinMaxScaler(feature_range=feature_range)
+
+    def fit_transform(self, X):
+        return self.scaler.fit_transform(X)
+
+    def transform(self, X):
+        return self.scaler.transform(X)
+
+    def inverse_transform(self, X_scaled):
+        return self.scaler.inverse_transform(X_scaled)
+
+
 class Preprocessor:
     def __init__(self, config: Dict[str, Any]):
         """
@@ -28,7 +42,7 @@ class Preprocessor:
         dataset_cfg = self.config.get("dataset", {})
         return {
             "normalize": dataset_cfg.get("normalize", True),
-            "normalization_method": dataset_cfg.get("normalization_method", "standard"),
+            "normalization_method": dataset_cfg.get("normalization_method", "minmax"),
             "handle_missing": dataset_cfg.get("handle_missing", "interpolate"),
             "remove_outliers": dataset_cfg.get("remove_outliers", False),
             "outlier_threshold": dataset_cfg.get("outlier_threshold", 3)
@@ -47,7 +61,8 @@ class Preprocessor:
         elif strategy == 'median':
             return df.fillna(df.median(numeric_only=True))
         elif strategy == 'interpolate':
-            return df.interpolate()
+            # Fill all NaNs, including at the edges
+            return df.interpolate().ffill().bfill()
         elif strategy == 'forward_fill':
             return df.fillna(method='ffill')
         elif strategy == 'backward_fill':
@@ -69,7 +84,10 @@ class Preprocessor:
 
         for col in numerical_cols:
             if is_training:
-                scaler = StandardScaler() if method == 'standard' else MinMaxScaler()
+                if method == 'standard':
+                    scaler = StandardScaler()
+                else:
+                    scaler = MinMaxScalerSafe()
                 df_normalized[col] = scaler.fit_transform(df[[col]]).flatten()
                 self.scalers[col] = scaler
             else:

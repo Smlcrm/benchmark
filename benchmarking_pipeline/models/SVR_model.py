@@ -1,7 +1,5 @@
 """
 SVR model implementation.
-
-TO BE CHANGED: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
 """
 
 import os
@@ -12,70 +10,125 @@ import pandas as pd
 from sklearn.svm import SVR
 from sklearn.preprocessing import StandardScaler
 from benchmarking_pipeline.models.base_model import BaseModel
+from sklearn.multioutput import MultiOutputRegressor
 
 
 class SVRModel(BaseModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize Support Vector Regression (SVR) model with a given configuration.
-        
-        Args:
-            config: Configuration dictionary for SVR parameters.
-                    e.g., {'model_params': {'kernel': 'rbf', 'C': 1.0, 'gamma': 'scale'}}
-            config_file: Path to a JSON configuration file.
+        Uses direct multi-output strategy via sklearn's MultiOutputRegressor.
         """
         super().__init__(config, config_file)
         self.scaler = StandardScaler() # SVR is sensitive to feature scaling
+        # Extract lookback_window and forecast_horizon from config
+        self.lookback_window = self.config.get('lookback_window', 10)
+        self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self._build_model()
-        
+
     def _build_model(self):
         """
-        Build the SVR model instance from the configuration.
+        Build the SVR model instance from the configuration using MultiOutputRegressor for direct multi-output forecasting.
         """
         model_params = self.config.get('model_params', {})
-        self.model = SVR(**model_params)
+        base_svr = SVR(**model_params)
+        self.model = MultiOutputRegressor(base_svr)
         self.is_fitted = False
 
-    def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'SVRModel':
+    def _create_features_targets(self, y_series, lookback_window, forecast_horizon):
         """
-        Train the SVR model on given data. This method will also fit a scaler 
-        to the training data, which will be used for predictions.
-        
-        Args:
-            X: Training features of shape (n_samples, n_features).
-            y: Target values of shape (n_samples,).
-        
-        Returns:
-            self: The fitted model instance.
+        Create features and multi-step targets for direct multi-output forecasting.
+        Each sample uses the previous lookback_window values as features and the next forecast_horizon values as targets.
+        """
+        X, y = [], []
+        for i in range(len(y_series) - lookback_window - forecast_horizon + 1):
+            X.append(y_series[i:i+lookback_window])
+            y.append(y_series[i+lookback_window:i+lookback_window+forecast_horizon])
+        return np.array(X), np.array(y)
+
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'SVRModel':
+        """
+        Train the SVR model for direct multi-output forecasting using MultiOutputRegressor.
         """
         if self.model is None:
             self._build_model()
-        
-        # Scale the data.
-        X_scaled = self.scaler.fit_transform(X)
-        
+        if y_context is None:
+            raise ValueError("y_context (target series) must be provided for training.")
+        # Combine context and target for full training series if y_target is provided
+        if y_target is not None:
+            if isinstance(y_target, (pd.Series, pd.DataFrame)):
+                y_target = y_target.values.flatten()
+            y_series = np.concatenate([y_context, y_target])
+        else:
+            y_series = y_context if not isinstance(y_context, (pd.Series, pd.DataFrame)) else y_context.values.flatten()
+        X, y = self._create_features_targets(y_series, self.lookback_window, self.forecast_horizon)
+        print(f"[DEBUG][SVR] Training X shape: {X.shape}, y shape: {y.shape}")
+        if np.isnan(X).any() or np.isnan(y).any():
+            print("[ERROR][SVR] NaNs found in training data! X NaNs:", np.isnan(X).sum(), "y NaNs:", np.isnan(y).sum())
+            raise ValueError("NaNs in SVR training data")
+        # Scale features (time index is not used; features are lagged values)
+        self.scaler.fit(X)
+        X_scaled = self.scaler.transform(X)
         self.model.fit(X_scaled, y)
         self.is_fitted = True
         return self
-        
-    def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
+
+    def rolling_predict(self, y_context, y_target, **kwargs):
         """
-        Make predictions using the trained SVR model.
-        This method will use the scaler fitted during training to transform the new data.
-        
-        Args:
-            X: Input data for prediction, shape (n_samples, n_features).
-            
-        Returns:
-            np.ndarray: Model predictions.
+        Autoregressive rolling prediction for MultiOutputRegressor SVR.
+        Predicts the entire length of y_target by repeatedly using its own predictions as context.
+        """
+        import numpy as np
+        # Debug: Print initial context info
+        print(f"[DEBUG][SVR] Initial y_context: {y_context}")
+        print(f"[DEBUG][SVR] Initial y_context length: {len(y_context)}, lookback_window: {self.lookback_window}")
+        if len(y_context) < self.lookback_window:
+            raise ValueError(f"y_context too short: {len(y_context)} < lookback_window {self.lookback_window}")
+        if np.isnan(y_context).any():
+            raise ValueError("NaNs in initial y_context!")
+        preds = []
+        context = np.array(y_context).flatten().tolist()
+        total_steps = len(y_target)
+        steps_done = 0
+        while steps_done < total_steps:
+            steps = min(self.forecast_horizon, total_steps - steps_done)
+            X_pred = np.array(context[-self.lookback_window:]).reshape(1, -1)
+            if np.isnan(X_pred).any():
+                print("[ERROR][SVR] NaNs found in prediction input! X_pred NaNs:", np.isnan(X_pred).sum())
+                raise ValueError("NaNs in SVR prediction input")
+            X_pred_scaled = self.scaler.transform(X_pred)
+            pred = self.model.predict(X_pred_scaled).flatten()
+            print(f"[DEBUG][SVR] Rolling predict X_pred shape: {X_pred.shape}, pred shape: {pred.shape}")
+            # Only take as many steps as needed
+            pred = pred[:steps]
+            preds.extend(pred)
+            context.extend(pred)
+            steps_done += steps
+        return np.array(preds)
+
+    def predict(self, y_context=None, y_target=None, x_context=None, x_target=None, **kwargs) -> np.ndarray:
+        """
+        Make direct multi-output predictions using the trained SVR model.
+        If y_target is provided, use rolling_predict to predict the entire length autoregressively.
+        Returns a vector of length forecast_horizon or full test length.
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
-        
-        # Scale the new data using the scaler that was fitted on the training data
-        X_scaled = self.scaler.transform(X)
-        
-        return self.model.predict(X_scaled)
+        if y_context is None:
+            raise ValueError("y_context must be provided to determine prediction context.")
+        if y_target is not None:
+            # Use rolling prediction to cover the full test set
+            preds = self.rolling_predict(y_context, y_target)
+            print(f"[DEBUG][SVR] Final rolling preds shape: {preds.shape}")
+            return preds
+        # Use the last lookback_window values as features for a single multi-output prediction
+        if isinstance(y_context, (pd.Series, pd.DataFrame)):
+            y_context = y_context.values.flatten()
+        X_pred = np.array(y_context[-self.lookback_window:]).reshape(1, -1)
+        X_pred_scaled = self.scaler.transform(X_pred)
+        preds = self.model.predict(X_pred_scaled)
+        print(f"[DEBUG][SVR] Single predict X_pred shape: {X_pred.shape}, preds shape: {preds.shape}")
+        return preds  # shape: (1, forecast_horizon)
 
     def get_params(self) -> Dict[str, Any]:
         """
@@ -89,14 +142,34 @@ class SVRModel(BaseModel):
     def set_params(self, **params: Dict[str, Any]) -> 'SVRModel':
         """
         Set model parameters. This will rebuild the model instance with the new parameters.
+        Handles MultiOutputRegressor by prefixing SVR params with 'estimator__'.
+        Model-level params (lookback_window, forecast_horizon) are set as attributes.
         """
-        if self.model:
-            self.model.set_params(**params)
-        
-        # Update internal config as well
+        # Handle model-level params
+        model_level_keys = ['lookback_window', 'forecast_horizon']
+        for k in model_level_keys:
+            if k in params:
+                setattr(self, k, params[k])
+        # Prepare params for underlying SVR
+        svr_param_names = SVR().get_params().keys()
+        mo_params = {}
+        for k, v in params.items():
+            if k in svr_param_names:
+                mo_params[f'estimator__{k}'] = v
+            elif k == 'n_jobs':
+                mo_params[k] = v
+        if hasattr(self, 'model') and isinstance(self.model, MultiOutputRegressor):
+            self.model.set_params(**mo_params)
+        elif hasattr(self, 'model') and self.model is not None:
+            # fallback for non-multioutput
+            self.model.set_params(**{k: v for k, v in params.items() if k in svr_param_names or k == 'n_jobs'})
+        # Update config as well
         if 'model_params' not in self.config:
             self.config['model_params'] = {}
-        self.config['model_params'].update(params)
+        self.config['model_params'].update({k: v for k, v in params.items() if k in svr_param_names or k == 'n_jobs'})
+        for k in model_level_keys:
+            if k in params:
+                self.config[k] = params[k]
         return self
         
     def save(self, path: str) -> None:
