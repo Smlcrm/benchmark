@@ -1,0 +1,22 @@
+test_type: deterministic
+dataset:
+  name: australian_electricity_demand
+  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  frequency: D
+  forecast_horizon: 5
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: false
+  handle_missing: interpolate
+  chunks: 2
+model:
+  name: ["croston_classic"]
+  parameters:
+    CrostonClassic:
+      alpha: [0.1, 0.5, 1]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [5]
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse] 

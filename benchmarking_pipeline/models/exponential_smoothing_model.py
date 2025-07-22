@@ -1,7 +1,5 @@
 """
 Exponential Smoothing model implementation.
-
-TO BE CHANGED: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
 """
 
 import os
@@ -20,52 +18,67 @@ class ExponentialSmoothingModel(BaseModel):
         
         Args:
             config: Configuration dictionary for model parameters.
-                    e.g., {'model_params': {
-                    'trend': 'add', 
-                    'seasonal': 'add', 
-                    'seasonal_periods': 12 }
-                          }
+                    e.g., {'trend': 'add', 'seasonal': 'add', 'seasonal_periods': 12, ...}
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
-        self.trend = self.config.get('trend', None)
-        self.seasonal = self.config.get('seasonal', None)
-        self.seasonal_periods = self.config.get('seasonal_periods', None)
-        self.damped_trend = self.config.get('damped_trend', False)
+        def _cast_param(key, value):
+            if key == 'seasonal_periods':
+                return int(value) if value is not None else None
+            if key == 'damped_trend':
+                if isinstance(value, str):
+                    return value.lower() == 'true'
+                return bool(value)
+            if key == 'forecast_horizon':
+                return int(value) if value is not None else 1
+            if key in ['trend', 'seasonal']:
+                if isinstance(value, str) and value.lower() == 'none':
+                    return None
+                return value
+            return value
+        self.trend = _cast_param('trend', self.config.get('trend', None))
+        self.seasonal = _cast_param('seasonal', self.config.get('seasonal', None))
+        self.seasonal_periods = _cast_param('seasonal_periods', self.config.get('seasonal_periods', None))
+        self.damped_trend = _cast_param('damped_trend', self.config.get('damped_trend', False))
         self.model_ = None
+        self.is_fitted = False
+        self.loss_functions = self.config.get('loss_functions', ['mae'])
+        self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
+        self.forecast_horizon = _cast_param('forecast_horizon', self.config.get('forecast_horizon', 1))
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None) -> 'ExponentialSmoothingModel':
-        """
-        Train the Exponential Smoothing model on given data.
-
-        Args:
-            y_context: Past target values (time series) - used for training
-        
-        Returns:
-            self: The fitted model instance
-        """
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'ExponentialSmoothingModel':
+        print(f"[ExponentialSmoothing train] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
+        # Ensure correct types for model parameters
+        trend = self.trend
+        seasonal = self.seasonal
+        if isinstance(trend, str) and trend.lower() == 'none':
+            trend = None
+        if isinstance(seasonal, str) and seasonal.lower() == 'none':
+            seasonal = None
+        seasonal_periods = int(self.seasonal_periods) if self.seasonal_periods is not None else None
+        damped_trend = bool(self.damped_trend)
+        if isinstance(damped_trend, str):
+            damped_trend = damped_trend.lower() == 'true'
+        # Only allow damped_trend if trend is not None
+        if trend is None:
+            damped_trend = None
         if isinstance(y_context, pd.Series):
             endog = y_context.values
         else:
             endog = y_context
-        # Optionally, could use y_target for validation/early stopping in future
         self.model_ = ExponentialSmoothing(
             endog,
-            trend=self.trend,
-            seasonal=self.seasonal,
-            seasonal_periods=self.seasonal_periods,
-            damped_trend=self.damped_trend
+            trend=trend,
+            seasonal=seasonal,
+            seasonal_periods=seasonal_periods,
+            damped_trend=damped_trend
         ).fit()
         self.is_fitted = True
         return self
 
     def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, **kwargs) -> np.ndarray:
-        """
-        Make predictions using the trained Exponential Smoothing model.
-
-        Returns:
-            np.ndarray: Model predictions with shape (1, forecast_horizon)
-        """
+        print(f"[ExponentialSmoothing predict] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
+        print(f"[ExponentialSmoothing predict] y_target type: {type(y_target)}, shape: {getattr(y_target, 'shape', 'N/A')}")
         if not self.is_fitted:
             raise ValueError("Model not initialized. Call train first.")
         if y_target is None:
@@ -76,22 +89,44 @@ class ExponentialSmoothingModel(BaseModel):
 
     def get_params(self) -> Dict[str, Any]:
         """
-        Get the current model parameters from the configuration.
+        Get the current model parameters from the configuration and instance attributes.
         """
-        return self.config.get('model_params', {})
+        return {
+            'trend': self.trend,
+            'seasonal': self.seasonal,
+            'seasonal_periods': self.seasonal_periods,
+            'damped_trend': self.damped_trend,
+            'loss_functions': self.loss_functions,
+            'primary_loss': self.primary_loss,
+            'forecast_horizon': self.forecast_horizon,
+            'is_fitted': self.is_fitted
+        }
 
     def set_params(self, **params: Dict[str, Any]) -> 'ExponentialSmoothingModel':
         """
-        Set model parameters by updating the configuration.
+        Set model parameters by updating the configuration and instance attributes.
         The model will be rebuilt with these new parameters on the next .train() call.
         """
-        if 'model_params' not in self.config:
-            self.config['model_params'] = {}
-        self.config['model_params'].update(params)
-        
+        def _cast_param(key, value):
+            if key == 'seasonal_periods':
+                return int(value) if value is not None else None
+            if key == 'damped_trend':
+                if isinstance(value, str):
+                    return value.lower() == 'true'
+                return bool(value)
+            if key == 'forecast_horizon':
+                return int(value) if value is not None else 1
+            if key in ['trend', 'seasonal']:
+                if isinstance(value, str) and value.lower() == 'none':
+                    return None
+                return value
+            return value
+        for key, value in params.items():
+            casted_value = _cast_param(key, value)
+            setattr(self, key, casted_value)
+            self.config[key] = casted_value
         self.is_fitted = False
         self.model_ = None
-        
         return self
 
     def save(self, path: str) -> None:

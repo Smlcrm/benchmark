@@ -6,10 +6,8 @@ import pandas as pd
 from typing import Dict, Any, Union
 import pickle
 import os
-import xarray as xr
 
 
-from sympy import series
 from benchmarking_pipeline.models.base_model import BaseModel
 
 class CrostonClassicModel(BaseModel):
@@ -30,12 +28,17 @@ class CrostonClassicModel(BaseModel):
         # Smoothing parameter, with a common default of 0.1
         self.alpha = self.config.get('alpha', 0.1)
         self.target_col = self.config.get('target_col', 'y')
+        self.is_fitted = False
+        self.loss_functions = self.config.get('loss_functions', ['mae'])
+        self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
+        self.forecast_horizon = self.config.get('forecast_horizon', 1)
         
         # Fitted parameters, initialized to None
         self.demand_level_ = None
         self.interval_level_ = None
         
     def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'CrostonClassicModel':
+        print(f"[Croston train] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
         """
         Train the Croston's Classic model on the given time series data.
         
@@ -93,6 +96,8 @@ class CrostonClassicModel(BaseModel):
         return self
 
     def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
+        print(f"[Croston predict] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
+        print(f"[Croston predict] y_target type: {type(y_target)}, shape: {getattr(y_target, 'shape', 'N/A')}")
         """
         Make predictions using the trained Croston's Classic model.
         

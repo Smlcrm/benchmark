@@ -31,9 +31,8 @@ class ThetaModel(BaseModel):
         """
         Build the ThetaForecaster model instance from the configuration.
         """
-        # Get hyperparameters from config
+        # Only pass supported arguments to ThetaForecaster
         model_params = {"sp": self.sp}
-        
         self.model = ThetaForecaster(**model_params)
         self.is_fitted = False
 

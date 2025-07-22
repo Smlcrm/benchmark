@@ -1,15 +1,15 @@
-test_type: regularly_sampled
+test_type: deterministic
 dataset:
-  name: bdg-2_bear
-  path: benchmarking_pipeline/datasets/bdg-2_bear
-  frequency: H
-  forecast_horizon: 10
+  name: covid_deaths
+  path: benchmarking_pipeline/datasets/covid_deaths
+  frequency: D
+  forecast_horizon: 5
   split_ratio: [0.8, 0.1, 0.1]
   normalize: false
   handle_missing: interpolate
-  chunks: 2
+  chunks: 20
 model:
-  name: ["ARIMA", "ExponentialSmoothing", "RandomForest", "XGBoost", "Prophet", "LSTM", "CrostonClassic", "DeepAR", "SVR", "SeasonalNaive"]
+  name: ["ARIMA", "ExponentialSmoothing", "RandomForest", "XGBoost", "Prophet", "LSTM", "CrostonClassic", "SVR", "SeasonalNaive"]
   parameters:
     ARIMA:
       p: [0, 1, 2]
@@ -18,13 +18,13 @@ model:
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [10]
+      forecast_horizon: [5]
     ExponentialSmoothing:
       trend: ["add"]
       seasonal: ["add"]
       seasonal_periods: [7]
       damped_trend: [false]
-      forecast_horizon: [10]
+      forecast_horizon: [5]
     LSTM:
       units: [32]
       layers: [1]
@@ -32,58 +32,49 @@ model:
       learning_rate: [0.01, 0.1, 1]
       batch_size: [32]
       epochs: [20]
-      sequence_length: [20]
+      sequence_length: [10]
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [10]
+      forecast_horizon: [5]
     RandomForest:
       lookback_window: [10, 20]
-      forecast_horizon: [10]
+      forecast_horizon: [5]
       n_estimators: [10, 50]
       max_depth: [3, 7]
       random_state: [42]
       n_jobs: [-1]
     Theta:
-      sp: [1, 2]
+      sp: [1, 2, 3, 4]
       forecast_horizon: [10]
+      seasonality_mode: ["additive"]
     XGBoost:
       lookback_window: [10]
-      forecast_horizon: [10]
+      forecast_horizon: [5]
       n_estimators: [50, 100]
       max_depth: [5, 10]
       learning_rate: [0.1, 0.5]
       random_state: [42]
       n_jobs: [-1]
     Prophet:
-      seasonality_mode: ["additive", "multiplicative"]
-      changepoint_prior_scale: [0.05]
-      seasonality_prior_scale: [10.0]
-      yearly_seasonality: [false, true]
-      weekly_seasonality: [false, true]
-      daily_seasonality: [false, true]
+      seasonality_mode: ["additive"]
+      changepoint_prior_scale: [0.05, 0.1, 0.5]
+      seasonality_prior_scale: [10.0, 20.0, 50.0]
+      yearly_seasonality: [true]
+      weekly_seasonality: [true]
+      daily_seasonality: [false]
     CrostonClassic:
       alpha: [0.1, 0.5, 1]
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [10]
-    DeepAR:
-      hidden_size: [2]
-      rnn_layers: [2, 3]
-      dropout: [0.1]
-      batch_size: [1]
-      learning_rate: [0.001]
-      target_col: ["y"]
-      forecast_horizon: [10]
-      epochs: [1]
-      num_workers: [4]
+      forecast_horizon: [5]
     SVR:
       kernel: ["rbf", "poly", "sigmoid"]
       C: [1.0]
       epsilon: [0.1]
       lookback_window: [10, 20]
-      forecast_horizon: [10]
+      forecast_horizon: [5]
       random_state: [42]
     SeasonalNaive:
       sp: [7, 14]
