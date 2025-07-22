@@ -1,15 +1,15 @@
 test_type: deterministic
 dataset:
-  name: taxi_30min
-  path: benchmarking_pipeline/datasets/taxi_30min
+  name: australian_electricity_demand
+  path: benchmarking_pipeline/datasets/australian_electricity_demand
   frequency: 30T
-  forecast_horizon: 2
+  forecast_horizon: 50
   split_ratio: [0.8, 0.1, 0.1]
-  normalize: false
+  normalize: true
   handle_missing: interpolate
-  chunks: 50
+  chunks: 3
 model:
-  name: ["ARIMA", "ExponentialSmoothing", "RandomForest", "Theta", "XGBoost", "Prophet", "LSTM", "CrostonClassic", "SVR", "SeasonalNaive"]
+  name: ["svr", "theta", "arima", "exponential_smoothing", "random_forest", "xgboost", "prophet", "lstm", "croston_classic", "seasonalnaive"]
   parameters:
     ARIMA:
       p: [0, 1, 2]
@@ -18,48 +18,48 @@ model:
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [2]
+      forecast_horizon: [50]
     ExponentialSmoothing:
-      trend: ["add"]
-      seasonal: ["add"]
+      trend: ["none", "add"]
+      seasonal: ["none", "add", "mul"]
       seasonal_periods: [7]
       damped_trend: [false]
-      forecast_horizon: [2]
+      forecast_horizon: [50]
     LSTM:
       units: [32]
       layers: [1]
       dropout: [0.1]
-      learning_rate: [0.01, 0.1, 1]
+      learning_rate: [0.01, 1]
       batch_size: [32]
       epochs: [20]
       sequence_length: [10]
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [2]
+      forecast_horizon: [50]
     RandomForest:
-      lookback_window: [10, 20]
-      forecast_horizon: [2]
+      lookback_window: [50, 100]
+      forecast_horizon: [50]
       n_estimators: [10, 50]
       max_depth: [3, 7]
       random_state: [42]
       n_jobs: [-1]
     Theta:
-      sp: [1, 2, 3, 4]
+      sp: [1, 2, 3]
       forecast_horizon: [10]
-      seasonality_mode: ["additive"]
+      method: ["additive"]
     XGBoost:
-      lookback_window: [10]
-      forecast_horizon: [2]
-      n_estimators: [50, 100]
+      lookback_window: [50, 100]
+      forecast_horizon: [50]
+      n_estimators: [50]
       max_depth: [5, 10]
-      learning_rate: [0.1, 0.5]
+      learning_rate: [0.1]
       random_state: [42]
       n_jobs: [-1]
     Prophet:
       seasonality_mode: ["additive"]
-      changepoint_prior_scale: [0.05, 0.1, 0.5]
-      seasonality_prior_scale: [10.0, 20.0, 50.0]
+      changepoint_prior_scale: [0.05]
+      seasonality_prior_scale: [10.0]
       yearly_seasonality: [true]
       weekly_seasonality: [true]
       daily_seasonality: [false]
@@ -68,17 +68,17 @@ model:
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [2]
+      forecast_horizon: [50]
     SVR:
-      kernel: ["rbf", "poly", "sigmoid"]
+      kernel: ["rbf"]
       C: [1.0]
       epsilon: [0.1]
-      lookback_window: [10, 20]
-      forecast_horizon: [2]
+      lookback_window: [100]
+      forecast_horizon: [50]
       random_state: [42]
     SeasonalNaive:
       sp: [7, 14]
-      forecast_horizon: [2]
+      forecast_horizon: [50]
 evaluation:
   type: deterministic
   metrics: [mae, rmse]

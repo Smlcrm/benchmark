@@ -44,6 +44,39 @@ pip install -r requirements.txt
 python benchmarking_pipeline/cli.py --config configs/default_config.yaml
 ```
 
+## How to Run the Benchmarking Pipeline
+
+To run the benchmarking pipeline with a specific configuration file:
+
+```bash
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/your_config.yaml
+```
+
+- Replace `your_config.yaml` with the path to your desired YAML config file.
+- The config file controls which models are run, their hyperparameters, and the dataset used.
+- Results and TensorBoard logs will be saved in the `runs/` and `results/` directories.
+
+## How to Plot a Dataset
+
+To quickly visualize a dataset (after preprocessing) using the provided script:
+
+```bash
+python test_plot.py --dataset_path benchmarking_pipeline/datasets/your_dataset_folder
+```
+
+- Replace `your_dataset_folder` with the path to your dataset directory.
+- Optionally, you can pass a custom config for preprocessing:
+
+```bash
+python test_plot.py --dataset_path benchmarking_pipeline/datasets/your_dataset_folder --config benchmarking_pipeline/configs/your_config.yaml
+```
+
+This will display a plot of the full time series after preprocessing.
+
+---
+
+For more details on configuration options and model-specific settings, see the example YAML files in `benchmarking_pipeline/configs/`.
+
 ## Configuration
 
 The pipeline is configured using YAML files in the `configs/` directory. See `configs/default_config.yaml` for an example configuration.

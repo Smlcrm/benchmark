@@ -36,53 +36,48 @@ class SeasonalNaiveModel(BaseModel):
         self.model = NaiveForecaster(strategy="last", sp=sp)
         self.is_fitted = False
 
-    def train(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> 'SeasonalNaiveModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'SeasonalNaiveModel':
         """
         Train the Seasonal Naive model on given data. For this model, "training"
         simply means storing the historical data for future lookups.
         
         Args:
-            X: Training features (ignored by this model, but required for API consistency).
-            y: Target time series values (pd.Series or np.ndarray).
+            y_context: Past target values (pd.Series or np.ndarray).
+            y_target, x_context, x_target: Not used by this model, but included for compatibility.
         
         Returns:
             self: The fitted model instance.
         """
         if self.model is None:
             self._build_model()
-            
-        if not isinstance(y, pd.Series):
+        if not isinstance(y_context, pd.Series):
             # works best with a proper index
-            y = pd.Series(y)
-            
-        self.model.fit(y=y, X=X)
+            y_context = pd.Series(y_context)
+        self.model.fit(y=y_context, X=None)
         self.is_fitted = True
         return self
         
-    def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
+    def predict(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs):
         """
         Make predictions using the trained Seasonal Naive model.
         
         Args:
             y_context: Context time series values (pd.Series or np.ndarray).
-            y_target: Target time series values (pd.Series or np.ndarray).
-            y_context_timestamps: Timestamps for context time series.
-            y_target_timestamps: Timestamps for target time series.
+            y_target: Used to determine the number of steps to forecast.
+            x_context, x_target: Not used by this model, but included for compatibility.
             **kwargs: Additional keyword arguments.
         
         Returns:
-            np.ndarray: Model predictions with shape (n_samples,).
+            np.ndarray: Model predictions with shape (1, forecast_horizon).
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
-        
-        # Assume we want one prediction for each row of the input X.
-        fh = np.arange(1, len(y_context) + 1)
-        
-        # The sktime predict method uses the forecasting horizon (fh).
+        if y_target is None:
+            raise ValueError("y_target must be provided to determine prediction length.")
+        forecast_horizon = len(y_target)
+        fh = np.arange(1, forecast_horizon + 1)
         predictions = self.model.predict(fh=fh)
-        
-        return predictions.values
+        return predictions.values.reshape(1, -1)
 
     def get_params(self) -> Dict[str, Any]:
         """

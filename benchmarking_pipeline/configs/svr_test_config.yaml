@@ -1,0 +1,23 @@
+test_type: regularly_sampled
+dataset:
+  name: australian_electricity_demand
+  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  frequency: 30T
+  forecast_horizon: 5
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: true
+  handle_missing: interpolate
+  chunks: 1
+model:
+  name: ["SVR"]
+  parameters:
+    SVR:
+      kernel: ["rbf"]
+      C: [1.0]
+      epsilon: [0.1]
+      lookback_window: [20]
+      forecast_horizon: [5]
+      random_state: [42]
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse] 

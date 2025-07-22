@@ -194,13 +194,13 @@ class LSTMModel(BaseModel):
             # Predict forecast_horizon steps at once
             predictions = self.model.predict(current_sequence, verbose=0)
             all_predictions.extend(predictions[0])
-            
             # Advance window by forecast_horizon steps and use predictions as input
             if window < num_windows - 1:  # Don't update on last iteration
                 # Move window forward by forecast_horizon steps
                 current_sequence = np.roll(current_sequence, -self.forecast_horizon, axis=1)
-                # Use the predictions as input for the next window
-                current_sequence[0, -self.forecast_horizon:, 0] = predictions[0]
+                # Only update as many as fit
+                n = min(self.forecast_horizon, self.sequence_length)
+                current_sequence[0, -n:, 0] = predictions[0][:n]
         
         # Return only the requested number of predictions
         return np.array(all_predictions[:forecast_steps]).reshape(1, -1)

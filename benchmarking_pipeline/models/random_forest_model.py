@@ -30,8 +30,11 @@ class RandomForestModel(BaseModel):
         """
         Build the RandomForestRegressor model instance from the configuration.
         """
-        # Get hyperparameters from config, with sensible defaults from sklearn
-        model_params = self.config.get('model_params', {})
+        # Get hyperparameters from config, excluding model-level parameters
+        model_params = {}
+        for key, value in self.config.items():
+            if key not in ['lookback_window', 'forecast_horizon']:
+                model_params[key] = value
 
         # Filter out keys that are not valid for RandomForestRegressor
         valid_keys = set(RandomForestRegressor().get_params().keys())
@@ -260,6 +263,44 @@ class RandomForestModel(BaseModel):
         preds = self.model.predict(X_last)
         return preds
     
+    def rolling_predict(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray], x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_context_timestamps: np.ndarray = None, y_target_timestamps: np.ndarray = None, **kwargs) -> np.ndarray:
+        """
+        Generate full-length predictions for the test set using a rolling window approach.
+        This method repeatedly calls the model's predict method, each time advancing the context by forecast_horizon steps,
+        until the total number of predictions matches the length of y_target.
+
+        Args:
+            y_context: Initial context (typically last lookback_window values from train set)
+            y_target: The full test set (used to determine total prediction length)
+            x_context, x_target: Exogenous variables (optional)
+            y_context_timestamps, y_target_timestamps: Timestamps (optional)
+            **kwargs: Additional keyword arguments
+        Returns:
+            np.ndarray: Full-length predictions matching the length of y_target
+        """
+        context = np.copy(y_context)
+        preds = []
+        steps_remaining = len(y_target)
+        idx = 0
+        while steps_remaining > 0:
+            steps = min(self.forecast_horizon, steps_remaining)
+            dummy_y_target = np.zeros(steps)
+            pred = self.predict(
+                y_context=context,
+                y_target=dummy_y_target,
+                x_context=x_context,
+                x_target=x_target,
+                y_context_timestamps=y_context_timestamps,
+                y_target_timestamps=y_target_timestamps,
+                **kwargs
+            )
+            pred = pred.flatten()[:steps]
+            preds.extend(pred)
+            context = np.concatenate([context, pred])
+            steps_remaining -= steps
+            idx += steps
+        return np.array(preds)
+
     def _create_step_features(self, y_data: np.ndarray, x_data: np.ndarray = None, context_timestamps: np.ndarray = None, target_timestamp: np.ndarray = None) -> np.ndarray:
         """
         Create features for a single prediction step.
@@ -339,23 +380,15 @@ class RandomForestModel(BaseModel):
         """
         Set model parameters. This will rebuild the model.
         """
-        if 'model_params' not in self.config:
-            self.config['model_params'] = {}
-        
-        # Handle nested parameter names like 'model_params__n_estimators'
+        # Update config with new parameters
         for key, value in params.items():
-            if '__' in key:
-                # Split on '__' to get the nested structure
-                parts = key.split('__')
-                if parts[0] == 'model_params':
-                    # This is a model parameter
-                    self.config['model_params'][parts[1]] = value
-                else:
-                    # This is a top-level parameter
-                    self.config[parts[0]] = value
-            else:
-                # This is a top-level parameter
-                self.config[key] = value
+            self.config[key] = value
+            
+            # Update instance attributes for model-level parameters
+            if key == 'lookback_window':
+                self.lookback_window = value
+            elif key == 'forecast_horizon':
+                self.forecast_horizon = value
         
         # Rebuild the model with new parameters
         self._build_model()
