@@ -43,7 +43,7 @@ class TinyTimeMixer:
 
         
     
-    def _sub_predict(self, dataframe : pd.DataFrame):
+    def predict(self, dataframe : pd.DataFrame):
         """
         We assume the dataframe looks as follows:
         It has one column called 'date', which contains all the 
