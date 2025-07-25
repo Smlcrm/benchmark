@@ -34,7 +34,7 @@ class MoiraiModel:
     self.test = test
     self.num_samples = num_samples
   
-  def _sub_predict(self, dataframe: pd.DataFrame):
+  def predict(self, dataframe: pd.DataFrame):
     """
     We assume dataframe is in the following format:
     Its index column is a bunch of date timestamps.
