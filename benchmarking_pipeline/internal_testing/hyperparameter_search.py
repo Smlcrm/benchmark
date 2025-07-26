@@ -17,7 +17,7 @@ australian_dataloader = DataLoader({"dataset" : {
   "name": "australian_electricity_demand",
   "split_ratio" : [0.8, 0.1, 0.1]
   }})
-single_chunk = australian_dataloader.load_single_chunk(1)
+single_chunk = australian_dataloader.load_single_chunk(3)
 
 
 # Preprocess the data with default params
@@ -127,8 +127,8 @@ def test_arima(all_australian_chunks):
   })
 
   hyperparameter_ranges = {
-    "p": [10,20,40,80],
-    "d": [1],
+    "p": [10, 20, 40],
+    "d": [1,5],
     "q": [0]
     }
   
@@ -149,5 +149,5 @@ def test_theta(all_australian_chunks):
   hyperparameter_grid_search_several_time_series("theta",theta_model,hyperparameter_ranges,all_australian_chunks)
   
       
-#test_arima(all_australian_chunks)
-test_theta(all_australian_chunks)
+test_arima(all_australian_chunks)
+#test_theta(all_australian_chunks)
