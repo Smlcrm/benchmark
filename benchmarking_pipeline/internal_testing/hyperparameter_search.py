@@ -127,9 +127,10 @@ def test_arima(all_australian_chunks):
   })
 
   hyperparameter_ranges = {
-    "p": [10, 20, 40],
-    "d": [1,5],
-    "q": [0]
+    "p": [10, 15],
+    "d": [0,1],
+    "q": [0],
+    "s": [2,4,6,10,20]
     }
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
