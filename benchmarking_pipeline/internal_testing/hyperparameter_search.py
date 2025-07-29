@@ -13,7 +13,7 @@ import re
 # Load first chunk of ARIMA dataset
 print("Model testing suite!")
 australian_dataloader = DataLoader({"dataset" : {
-  "path": "/Users/alifabdullah/Collaboration/Simulacrum-Benchmark/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+  "path": "benchmarking_pipeline/datasets/australian_electricity_demand",
   "name": "australian_electricity_demand",
   "split_ratio" : [0.8, 0.1, 0.1]
   }})
@@ -22,8 +22,8 @@ single_chunk = australian_dataloader.load_single_chunk(3)
 
 # Preprocess the data with default params
 preprocessor = Preprocessor({"dataset":
-                              {"normalize":False}
-                              }) # by default interpolate missing values
+                              {"normalize":True, "normalization_method": "minmax"}
+                              }) # normalize data and interpolate missing values
 all_australian_chunks = [preprocessor.preprocess(single_chunk).data]
 
 def _extract_number_before_capital(freq_str):
@@ -127,9 +127,9 @@ def test_arima(all_australian_chunks):
   })
 
   hyperparameter_ranges = {
-    "p": [10, 20, 40],
-    "d": [1,5],
-    "q": [0]
+    "p": [0, 1, 2, 3],
+    "d": [0, 1, 2],
+    "q": [0, 1, 2]
     }
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
@@ -142,7 +142,7 @@ def test_theta(all_australian_chunks):
     })
 
   hyperparameter_ranges = {
-     'sp':[300,350,400,800,1200,1600,2048,2500,3000,3100,3200,3230]  
+     'sp':[7, 14, 30, 48, 96]  # More reasonable seasonal periods
     #'sp':[256,300,350,400,512,1024,2048,4000]  
       }
   
