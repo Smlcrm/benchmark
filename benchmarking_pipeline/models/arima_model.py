@@ -101,7 +101,64 @@ class ARIMAModel(BaseModel):
         
         forecast_steps = len(y_target)
         forecast = self.model_.forecast(steps=forecast_steps, exog=exog)
-        return forecast.reshape(1, -1)  # Return as (1, forecast_steps) to make it consistent with other models
+        
+        # Store predictions and true values for evaluation
+        self._last_y_pred = forecast.reshape(1, -1)
+        self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
+        
+        return self._last_y_pred
+        
+    def rolling_predict(self, y_context, y_target=None, x_context=None, x_target=None, y_start_date=None, x_start_date=None, **kwargs):
+        """
+        Perform rolling window predictions for time series forecasting.
+        This method retrains the model at each step with updated data.
+        
+        Args:
+            y_context: Initial training data
+            y_target: Target values to predict
+            x_context: Exogenous variables for training (optional)
+            x_target: Future exogenous variables (optional)
+            
+        Returns:
+            np.ndarray: Rolling predictions with shape (1, len(y_target))
+        """
+        if y_target is None:
+            raise ValueError("y_target must be provided for rolling predictions.")
+        
+        predictions = []
+        current_context = y_context.copy()
+        current_x_context = x_context.copy() if x_context is not None else None
+        
+        # Perform rolling predictions
+        for i in range(len(y_target)):
+            # Train model on current context
+            if current_x_context is not None:
+                # Update exogenous variables if provided
+                if x_target is not None and i < len(x_target):
+                    current_x_context = np.append(current_x_context, x_target[i:i+1], axis=0)
+                
+                self.train(y_context=current_context, x_context=current_x_context)
+            else:
+                self.train(y_context=current_context)
+            
+            # Make one-step prediction
+            if current_x_context is not None and x_target is not None and i < len(x_target):
+                pred = self.predict(y_context=current_context, y_target=y_target[i:i+1], x_target=x_target[i:i+1])
+            else:
+                pred = self.predict(y_context=current_context, y_target=y_target[i:i+1])
+            
+            predictions.append(pred[0, 0])  # Extract single prediction value
+            
+            # Update context for next iteration
+            current_context = np.append(current_context, y_target[i:i+1])
+            if len(current_context) > len(y_context):  # Keep context size manageable
+                current_context = current_context[-len(y_context):]
+        
+        # Store final predictions and true values
+        self._last_y_pred = np.array(predictions).reshape(1, -1)
+        self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
+        
+        return self._last_y_pred
         
     def get_params(self) -> Dict[str, Any]:
         """
@@ -229,4 +286,16 @@ class ARIMAModel(BaseModel):
                 'nobs': getattr(self.model_, 'nobs', None)  # Number of observations
             })
             
-        return summary 
+        return summary
+        
+    def get_last_eval_true_pred(self) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Get the last evaluation's true values and predictions.
+        
+        Returns:
+            Tuple[np.ndarray, np.ndarray]: (y_true, y_pred) from last evaluation
+        """
+        if hasattr(self, '_last_y_true') and hasattr(self, '_last_y_pred'):
+            return self._last_y_true, self._last_y_pred
+        else:
+            return None, None 

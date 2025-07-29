@@ -6,21 +6,49 @@ A flexible and modular benchmarking pipeline for machine learning models.
 
 ```
 benchmarking_pipeline/
-├── configs/                # User-defined YAML/JSON files for test configuration
-├── datasets/              # User-extendable dataset chunks 
-├── models/               # User-pluggable models as Python classes
-│   └── my_model/
-│       └── model.py
-├── pipeline/             # Core pipeline components
-│   ├── data_loader.py    # Data loading functionality (HuggingFace datasets)
-│   ├── preprocessing.py   # Data preprocessing
-│   ├── feature_extraction.py  # Feature extraction
-│   ├── trainer.py        # Model training
-│   ├── evaluator.py      # Model evaluation
-│   └── logger.py         # Logging utilities
-├── cli.py               # Command-line interface
-└── run_benchmark.py     # End-to-end orchestration
+├── configs/                # YAML/JSON files for experiment configuration (models, datasets, hyperparameters)
+├── datasets/               # Datasets (organized in chunks for time series experiments)
+├── models/                 # Model implementations (each model as a Python class)
+│   ├── arima_model.py          # ARIMA model wrapper
+│   ├── croston_classic_model.py# Croston's method for intermittent demand
+│   ├── exponential_smoothing_model.py # Exponential Smoothing model
+│   ├── lstm_model.py           # LSTM (deep learning) model
+│   ├── prophet_model.py        # Prophet model
+│   ├── random_forest_model.py  # Random Forest regressor
+│   ├── SVR_model.py            # Support Vector Regression
+│   ├── theta_model.py          # Theta model (sktime)
+│   ├── xgboost_model.py        # XGBoost regressor
+│   └── ...                     # Other models
+├── pipeline/                # Core pipeline components
+│   ├── data_loader.py           # Loads datasets, handles chunking and splits
+│   ├── preprocessor.py          # Data preprocessing (normalization, missing values, outliers)
+│   ├── feature_extraction.py    # Feature engineering for ML models
+│   ├── trainer.py               # Model training logic
+│   ├── evaluator.py             # Model evaluation and metrics
+│   └── logger.py                # Logging utilities (TensorBoard, CSV, etc.)
+├── trainer/                 # Hyperparameter tuning and training utilities
+│   └── hyperparameter_tuning.py # Grid/random search, evaluation logic
+├── test_plot.py             # Script to quickly plot a dataset after preprocessing
+├── run_benchmark.py         # Main script: runs the full benchmarking pipeline
+├── cli.py                   # (Optional) Command-line interface for running experiments
+└── ...                      # Other utility scripts and files
 ```
+
+### Key Files Explained
+
+- **run_benchmark.py**: Main entry point for running the benchmarking pipeline. Loads config, runs models, logs results.
+- **test_plot.py**: Standalone script to visualize a dataset (after preprocessing) for quick inspection.
+- **configs/**: Contains YAML/JSON files specifying which models to run, their hyperparameters, and dataset details.
+- **models/**: Contains Python classes for each supported model. Each model implements a common interface for training and prediction.
+- **pipeline/data_loader.py**: Loads datasets, handles chunking, and splits into train/val/test.
+- **pipeline/preprocessor.py**: Handles normalization, missing value imputation, and outlier removal.
+- **pipeline/feature_extraction.py**: Creates features for ML models (e.g., lagged values for XGBoost, Random Forest).
+- **pipeline/trainer.py**: Contains logic for training models on the data.
+- **pipeline/evaluator.py**: Evaluates model predictions and computes metrics.
+- **pipeline/logger.py**: Handles logging of metrics and results (e.g., to TensorBoard).
+- **trainer/hyperparameter_tuning.py**: Implements grid/random search for hyperparameter optimization and final evaluation.
+
+For more details, see the docstrings in each file or explore the example configs in `benchmarking_pipeline/configs/`.
 
 ## Installation
 
