@@ -33,6 +33,7 @@ def test_arima(all_australian_chunks):
     "p": -1,
     "d": -1,
     "q": -1,
+    "s": -1,
     "target_col": "y",
     "exog_cols": None,
     "loss_functions": ["mae"],
@@ -43,7 +44,8 @@ def test_arima(all_australian_chunks):
   arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
     "p": [0, 1, 2],
     "d": [0, 1],
-    "q": [0, 1, 2]
+    "q": [0, 1, 2],
+    "s": [2, 4, 6]
     }, False)
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
@@ -52,7 +54,8 @@ def test_arima(all_australian_chunks):
   best_hyperparameters_dict = {
     "p": validation_score_hyperparameter_tuple[1][0], 
     "d": validation_score_hyperparameter_tuple[1][1], 
-    "q": validation_score_hyperparameter_tuple[1][2]
+    "q": validation_score_hyperparameter_tuple[1][2],
+    "s": validation_score_hyperparameter_tuple[1][3]
     }
   print(f"Final Evaluation ARIMA australia: {arima_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_australian_chunks)}")
   print(f"Test Evaluation ARIMA australia: {arima_hyperparameter_tuner.final_evaluation({'p':0,'d':2,'q':0}, all_australian_chunks)}")
@@ -289,7 +292,7 @@ def test_lstm(all_australian_chunks):
 if __name__ == "__main__":
   print("Model testing suite!")
   australian_dataloader = DataLoader({"dataset" : {
-    "path": "/Users/alifabdullah/Collaboration/Benchmark-Simulacrum/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
+    "path": "/Users/alifabdullah/Collaboration/Simulacrum-Benchmark/benchmark/benchmarking_pipeline/datasets/australian_electricity_demand",
     "name": "australian_electricity_demand",
     "split_ratio" : [0.8, 0.1, 0.1]
     }})
@@ -304,10 +307,10 @@ if __name__ == "__main__":
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
 
-  # test_arima(all_australian_chunks)
+  test_arima(all_australian_chunks)
   # test_seasonal_naive(all_australian_chunks)
   # test_theta(all_australian_chunks)
-  test_deep_ar(all_australian_chunks)
+  # test_deep_ar(all_australian_chunks)
   # test_xgboost(all_australian_chunks)
   # test_random_forest(all_australian_chunks)
   # test_prophet(all_australian_chunks)
