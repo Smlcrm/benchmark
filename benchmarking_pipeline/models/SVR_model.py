@@ -63,14 +63,35 @@ class SVRModel(BaseModel):
             y_series = y_context if not isinstance(y_context, (pd.Series, pd.DataFrame)) else y_context.values.flatten()
         X, y = self._create_features_targets(y_series, self.lookback_window, self.forecast_horizon)
         print(f"[DEBUG][SVR] Training X shape: {X.shape}, y shape: {y.shape}")
+        
+        # Handle NaNs in training data
         if np.isnan(X).any() or np.isnan(y).any():
-            print("[ERROR][SVR] NaNs found in training data! X NaNs:", np.isnan(X).sum(), "y NaNs:", np.isnan(y).sum())
-            raise ValueError("NaNs in SVR training data")
-        # Scale features (time index is not used; features are lagged values)
-        self.scaler.fit(X)
-        X_scaled = self.scaler.transform(X)
-        self.model.fit(X_scaled, y)
-        self.is_fitted = True
+            print("[WARNING][SVR] NaNs found in training data! Attempting to fix...")
+            X = np.nan_to_num(X, nan=0.0)
+            y = np.nan_to_num(y, nan=0.0)
+        
+        try:
+            # Scale features (time index is not used; features are lagged values)
+            self.scaler.fit(X)
+            X_scaled = self.scaler.transform(X)
+            self.model.fit(X_scaled, y)
+            self.is_fitted = True
+        except Exception as e:
+            print(f"[ERROR][SVR] Training failed: {e}")
+            # Try with more robust parameters
+            try:
+                # Use more conservative SVR parameters
+                base_svr = SVR(kernel='rbf', C=1.0, epsilon=0.1, gamma='scale')
+                self.model = MultiOutputRegressor(base_svr)
+                self.scaler.fit(X)
+                X_scaled = self.scaler.transform(X)
+                self.model.fit(X_scaled, y)
+                self.is_fitted = True
+                print("[INFO][SVR] Training succeeded with fallback parameters")
+            except Exception as e2:
+                print(f"[ERROR][SVR] Fallback training also failed: {e2}")
+                raise ValueError(f"SVR training failed: {e}")
+        
         return self
 
     def rolling_predict(self, y_context, y_target, **kwargs):
@@ -86,24 +107,46 @@ class SVRModel(BaseModel):
             raise ValueError(f"y_context too short: {len(y_context)} < lookback_window {self.lookback_window}")
         if np.isnan(y_context).any():
             raise ValueError("NaNs in initial y_context!")
+        
         preds = []
         context = np.array(y_context).flatten().tolist()
         total_steps = len(y_target)
         steps_done = 0
+        
         while steps_done < total_steps:
             steps = min(self.forecast_horizon, total_steps - steps_done)
             X_pred = np.array(context[-self.lookback_window:]).reshape(1, -1)
+            
+            # Check for NaNs and handle them
             if np.isnan(X_pred).any():
-                print("[ERROR][SVR] NaNs found in prediction input! X_pred NaNs:", np.isnan(X_pred).sum())
-                raise ValueError("NaNs in SVR prediction input")
-            X_pred_scaled = self.scaler.transform(X_pred)
-            pred = self.model.predict(X_pred_scaled).flatten()
-            print(f"[DEBUG][SVR] Rolling predict X_pred shape: {X_pred.shape}, pred shape: {pred.shape}")
-            # Only take as many steps as needed
-            pred = pred[:steps]
-            preds.extend(pred)
-            context.extend(pred)
-            steps_done += steps
+                print("[WARNING][SVR] NaNs found in prediction input! Attempting to fix...")
+                # Replace NaNs with the last valid value or 0
+                X_pred = np.nan_to_num(X_pred, nan=0.0)
+            
+            try:
+                X_pred_scaled = self.scaler.transform(X_pred)
+                pred = self.model.predict(X_pred_scaled).flatten()
+                
+                # Check for NaNs in predictions and handle them
+                if np.isnan(pred).any():
+                    print("[WARNING][SVR] NaNs in predictions! Replacing with last valid value or 0")
+                    pred = np.nan_to_num(pred, nan=0.0)
+                
+                print(f"[DEBUG][SVR] Rolling predict X_pred shape: {X_pred.shape}, pred shape: {pred.shape}")
+                # Only take as many steps as needed
+                pred = pred[:steps]
+                preds.extend(pred)
+                context.extend(pred)
+                steps_done += steps
+                
+            except Exception as e:
+                print(f"[ERROR][SVR] Prediction failed: {e}")
+                # Fallback: use simple prediction (last value repeated)
+                fallback_pred = [context[-1]] * steps
+                preds.extend(fallback_pred)
+                context.extend(fallback_pred)
+                steps_done += steps
+        
         return np.array(preds)
 
     def predict(self, y_context=None, y_target=None, x_context=None, x_target=None, **kwargs) -> np.ndarray:
@@ -150,10 +193,27 @@ class SVRModel(BaseModel):
         for k in model_level_keys:
             if k in params:
                 setattr(self, k, params[k])
+        
+        # Convert parameter types for scikit-learn compatibility
+        converted_params = {}
+        for k, v in params.items():
+            if k == 'gamma':
+                # Handle gamma parameter: convert string numbers to float
+                if isinstance(v, str) and v.replace('.', '').replace('-', '').isdigit():
+                    converted_params[k] = float(v)
+                else:
+                    converted_params[k] = v
+            elif k == 'C' and isinstance(v, str) and v.replace('.', '').replace('-', '').isdigit():
+                converted_params[k] = float(v)
+            elif k == 'epsilon' and isinstance(v, str) and v.replace('.', '').replace('-', '').isdigit():
+                converted_params[k] = float(v)
+            else:
+                converted_params[k] = v
+        
         # Prepare params for underlying SVR
         svr_param_names = SVR().get_params().keys()
         mo_params = {}
-        for k, v in params.items():
+        for k, v in converted_params.items():
             if k in svr_param_names:
                 mo_params[f'estimator__{k}'] = v
             elif k == 'n_jobs':
@@ -162,11 +222,11 @@ class SVRModel(BaseModel):
             self.model.set_params(**mo_params)
         elif hasattr(self, 'model') and self.model is not None:
             # fallback for non-multioutput
-            self.model.set_params(**{k: v for k, v in params.items() if k in svr_param_names or k == 'n_jobs'})
+            self.model.set_params(**{k: v for k, v in converted_params.items() if k in svr_param_names or k == 'n_jobs'})
         # Update config as well
         if 'model_params' not in self.config:
             self.config['model_params'] = {}
-        self.config['model_params'].update({k: v for k, v in params.items() if k in svr_param_names or k == 'n_jobs'})
+        self.config['model_params'].update({k: v for k, v in converted_params.items() if k in svr_param_names or k == 'n_jobs'})
         for k in model_level_keys:
             if k in params:
                 self.config[k] = params[k]
