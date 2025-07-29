@@ -20,6 +20,7 @@ class ARIMAModel(BaseModel):
                 - p: int, AR order
                 - d: int, differencing order
                 - q: int, MA order
+                - s: int, seasonality
                 - target_col: str, name of target column
                 - loss_functions: List[str], list of loss function names to use
                 - primary_loss: str, primary loss function for training
@@ -30,6 +31,7 @@ class ARIMAModel(BaseModel):
         self.p = self.config.get('p', 1)
         self.d = self.config.get('d', 1)
         self.q = self.config.get('q', 1)
+        self.s = self.config.get('s', 1)
         self.target_col = self.config.get('target_col', 'y')
         self.model_ = None  # Use model_ consistently
         self.is_fitted = False  # Explicitly initialize
@@ -69,7 +71,7 @@ class ARIMAModel(BaseModel):
             else:
                 exog = x_context
         
-        model = ARIMA(endog=endog, order=(self.p, self.d, self.q), exog=exog)
+        model = ARIMA(endog=endog, seasonal_order=(self.p, self.d, self.q, self.s), exog=exog)
         self.model_ = model.fit()
         self.is_fitted = True
         return self
@@ -194,7 +196,7 @@ class ARIMAModel(BaseModel):
         for key, value in params.items():
             if hasattr(self, key):
                 # Check if this is a model parameter that requires refitting
-                if key in ['p', 'd', 'q'] and getattr(self, key) != value:
+                if key in ['p', 'd', 'q', 's'] and getattr(self, key) != value:
                     model_params_changed = True
                 setattr(self, key, value)
             else:
