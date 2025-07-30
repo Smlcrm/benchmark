@@ -110,6 +110,26 @@ def run_moirai(all_dataset_chunks, writer=None, config=None, config_path=None):
     """
     print("MOIRAI WORKS!")
 
+def run_moirai_moe(all_dataset_chunks, writer=None, config=None, config_path=None):
+
+    dataset_name = config['dataset']['name']
+    moirai_params = config['model']['parameters']['Moirai_MoE']
+    model_params = {k: v[0] if isinstance(v, list) else v for k, v in moirai_params.items()}
+
+
+    moirai_moe_model = MoiraiModel(model_params)
+
+    hyper_grid = {k: v for k, v in moirai_params.items() if isinstance(v, list)}
+
+    moirai_hyperparameter_tuner = FoundationModelTuner(moirai_moe_model, hyper_grid, False)
+    validation_score_hyperparameter_tuple = moirai_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(hyper_grid.keys())}
+    results = moirai_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
+    print(f"Moirai_MoE results: {results}")
+   
+    print("MOIRAI_MOE WORKS!")
+
+
 def _extract_number_before_capital(freq_str):
     match = re.match(r'(\d+)?[A-Z]', freq_str)
     if match:
