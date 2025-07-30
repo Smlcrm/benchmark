@@ -10,10 +10,13 @@ from huggingface_hub import hf_hub_download
 from uni2ts.eval_util.plot import plot_single
 from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
 from uni2ts.model.moirai_moe import MoiraiMoEForecast, MoiraiMoEModule
+from typing import Dict, Any
+from benchmarking_pipeline.models.foundation_model import FoundationModel
+from typing import Optional, List, Union
 
-class MoiraiModel:
+class MoiraiModel(FoundationModel):
 
-  def __init__(self, model_name="moirai", size="small", pdt=4, ctx=10, psz="auto", bsz=8, test=8, num_samples=5):
+  def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
     """
     Args:
       model_name: the type of moirai model you want to use - choose from {'moirai', 'moirai-moe'}
@@ -25,16 +28,55 @@ class MoiraiModel:
       test: test set length - any positive integer
       num_samples: number of samples to generate during prediction time - any positive integer
     """
-    self.model_name = model_name
-    self.size = size
-    self.pdt = pdt
-    self.ctx = ctx
-    self.psz = psz
-    self.bsz = bsz
-    self.test = test
-    self.num_samples = num_samples
+    
+    super().__init__(config, config_file)
+    self.model_name = self.config.get('model_name', 'moirai')
+    self.size = self.config.get('size', 'small')
+    self.pdt = self.config.get('pdt', '4')
+    self.ctx = self.config.get('ctx', '10')
+    self.psz = self.config.get('psz', '8')
+    self.bsz = self.config.get('bsz', '8')
+    self.test = self.config.get('test', '8')
+    self.num_samples = self.config.get('num_samples', '5')
+    self.target_col = self.config.get('target_col', 'y')
   
-  def predict(self, dataframe: pd.DataFrame):
+  def set_params(self, **params: Dict[str, Any]) -> 'MoiraiModel':
+    for key, value in params.items():
+      if hasattr(self, key):
+        setattr(self, key, value)
+    return self
+         
+  def predict(self,
+        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_target: Union[pd.Series, np.ndarray] = None,
+        y_target_timestamps = None,
+        **kwargs):
+    #print("HUH")
+    #print(y_target)
+    #print("YUHUHU?")
+    #print(y_target_timestamps[0].strftime('%Y-%m-%d %X'))
+    #raise Exception("UNgas")
+    #timestamp_strings = [ts.strftime('%Y-%m-%d %X') for ts in y_target_timestamps]
+    
+    # Construct DataFrame
+    if len(y_target.shape) == 1:
+      columns = ['1']
+    else:
+      columns = list(range(y_target.shape[0])) 
+    df = pd.DataFrame(y_target, index=y_target_timestamps, columns=columns)
+    results = self._sub_predict(df)
+    if len(list(results.keys())) == 1:
+      return np.array(results["1"])
+    else:
+      multivariate_values = []
+      for key in results.keys():
+        multivariate_values.append(results[key])
+      return np.array(multivariate_values)
+  
+
+      
+  
+  def _sub_predict(self, dataframe: pd.DataFrame):
     """
     We assume dataframe is in the following format:
     Its index column is a bunch of date timestamps.
