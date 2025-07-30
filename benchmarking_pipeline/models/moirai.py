@@ -19,7 +19,7 @@ class MoiraiModel(FoundationModel):
   def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
     """
     Args:
-      model_name: the type of moirai model you want to use - choose from {'moirai', 'moirai-moe'}
+      model_name: the type of moirai model you want to use - choose from {'moirai', 'moirai_moe'}
       size: the model size - choose from {'small', 'base', 'large'}
       pdt: prediction length - any positive integer
       ctz: context length - any positive integer
@@ -39,6 +39,7 @@ class MoiraiModel(FoundationModel):
     self.test = self.config.get('test', '8')
     self.num_samples = self.config.get('num_samples', '5')
     self.target_col = self.config.get('target_col', 'y')
+    self.is_fitted = False
   
   def set_params(self, **params: Dict[str, Any]) -> 'MoiraiModel':
     for key, value in params.items():
@@ -105,7 +106,7 @@ class MoiraiModel(FoundationModel):
       distance=self.pdt 
     )
 
-    # Create either a Moirai or Moirai-MoE model.
+    # Create either a Moirai or Moirai_MoE model.
     if self.model_name == "moirai":
       model = MoiraiForecast(
             module=MoiraiModule.from_pretrained(f"Salesforce/moirai-1.1-R-{self.size}"),
@@ -117,7 +118,7 @@ class MoiraiModel(FoundationModel):
             feat_dynamic_real_dim=gluon_pandas_dataset.num_feat_dynamic_real,
             past_feat_dynamic_real_dim=gluon_pandas_dataset.num_past_feat_dynamic_real,
         )
-    elif self.model_name == "moirai-moe":
+    elif self.model_name == "moirai_moe":
       model = MoiraiMoEForecast(
             module=MoiraiMoEModule.from_pretrained(f"Salesforce/moirai-moe-1.0-R-{self.size}"),
             prediction_length=self.pdt,
@@ -129,7 +130,7 @@ class MoiraiModel(FoundationModel):
             past_feat_dynamic_real_dim=gluon_pandas_dataset.num_past_feat_dynamic_real,
         )
     else:
-      raise ValueError("self.model_name must have the value 'moirai' or 'moirai-moe'.")
+      raise ValueError("self.model_name must have the value 'moirai' or 'moirai_moe'.")
 
     predictor = model.create_predictor(batch_size=self.bsz)
     forecasts = predictor.predict(test_data.input)
