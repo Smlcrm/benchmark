@@ -5,7 +5,6 @@ import itertools
 from ..models.base_model import BaseModel
 from typing import Dict, List
 import numpy as np
-from benchmarking_pipeline.models.lstm_model import LSTMModel
 import pandas as pd
 import re
 

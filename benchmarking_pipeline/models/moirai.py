@@ -32,12 +32,12 @@ class MoiraiModel(FoundationModel):
     super().__init__(config, config_file)
     self.model_name = self.config.get('model_name', 'moirai')
     self.size = self.config.get('size', 'small')
-    self.pdt = self.config.get('pdt', '4')
-    self.ctx = self.config.get('ctx', '10')
-    self.psz = self.config.get('psz', '8')
-    self.bsz = self.config.get('bsz', '8')
-    self.test = self.config.get('test', '8')
-    self.num_samples = self.config.get('num_samples', '5')
+    self.pdt = self.config.get('pdt', 4)
+    self.ctx = self.config.get('ctx', 10)
+    self.psz = self.config.get('psz', 8)
+    self.bsz = self.config.get('bsz', 8)
+    self.test = self.config.get('test', 8)
+    self.num_samples = self.config.get('num_samples', 5)
     self.target_col = self.config.get('target_col', 'y')
     self.is_fitted = False
   

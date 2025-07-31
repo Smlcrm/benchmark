@@ -1,0 +1,28 @@
+test_type: deterministic
+dataset:
+  name: australian_electricity_demand
+  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  frequency: D
+  forecast_horizon: 5
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: false
+  handle_missing: interpolate
+  chunks: 2
+model:
+  name: ["ttm"]
+  parameters:
+    TinyTimeMixer:
+      model_name: ["ibm-granite/granite-timeseries-ttm-r2"] 
+      context_length: [52]
+      prediction_length: [8] 
+      timestamp_column_name: ["date"]
+      batch_size: [8]
+      split_config: [{
+        "train": [0, 52],
+        "valid": [52, 53],
+        "test": [53, 900],
+      }] 
+
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse] 

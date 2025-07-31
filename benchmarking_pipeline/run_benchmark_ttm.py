@@ -7,7 +7,7 @@ from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 #from benchmarking_pipeline.pipeline.logger import Logger
 from torch.utils.tensorboard import SummaryWriter
 import time
-from benchmarking_pipeline.models.moirai import MoiraiModel
+from benchmarking_pipeline.models.ttm import TinyTimeMixer
 from benchmarking_pipeline.trainer.foundation_model_tuning import FoundationModelTuner
 import numpy as np
 import pandas as pd
@@ -69,22 +69,22 @@ class BenchmarkRunner:
         print(f"\nTensorBoard logs saved in 'runs/benchmark_runner_{config_file_name}_{timestamp}/'. To view, run: tensorboard --logdir runs/benchmark_runner\n")
         #self.logger.log_metrics({"status": "Pipeline completed"}, step=0)
   
-def run_moirai(all_dataset_chunks, writer=None, config=None, config_path=None):
+def run_ttm(all_dataset_chunks, writer=None, config=None, config_path=None):
 
     dataset_name = config['dataset']['name']
-    moirai_params = config['model']['parameters']['Moirai']
-    model_params = {k: v[0] if isinstance(v, list) else v for k, v in moirai_params.items()}
+    ttm_params = config['model']['parameters']['TinyTimeMixer']
+    model_params = {k: v[0] if isinstance(v, list) else v for k, v in ttm_params.items()}
 
 
-    moirai_model = MoiraiModel(model_params)
+    ttm_model = TinyTimeMixer(model_params)
 
-    hyper_grid = {k: v for k, v in moirai_params.items() if isinstance(v, list)}
+    hyper_grid = {k: v for k, v in ttm_params.items() if isinstance(v, list)}
 
-    moirai_hyperparameter_tuner = FoundationModelTuner(moirai_model, hyper_grid, False)
-    validation_score_hyperparameter_tuple = moirai_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    ttm_hyperparameter_tuner = FoundationModelTuner(ttm_model, hyper_grid, False)
+    validation_score_hyperparameter_tuple = ttm_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(hyper_grid.keys())}
-    results = moirai_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
-    print(f"Moirai results: {results}")
+    results = ttm_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
+    print(f"TinyTimeMixer results: {results}")
     """
     print(f"Final Evaluation Moirai {dataset_name}: {results}")
 
@@ -108,27 +108,7 @@ def run_moirai(all_dataset_chunks, writer=None, config=None, config_path=None):
     os.makedirs('results', exist_ok=True)
     pd.DataFrame([results]).to_csv(f'results/Moirai_{dataset_name}_{time.strftime("%Y%m%d-%H%M%S")}.csv', index=False)
     """
-    print("MOIRAI WORKS!")
-
-def run_moirai_moe(all_dataset_chunks, writer=None, config=None, config_path=None):
-
-    dataset_name = config['dataset']['name']
-    moirai_params = config['model']['parameters']['Moirai_MoE']
-    model_params = {k: v[0] if isinstance(v, list) else v for k, v in moirai_params.items()}
-
-
-    moirai_moe_model = MoiraiModel(model_params)
-
-    hyper_grid = {k: v for k, v in moirai_params.items() if isinstance(v, list)}
-
-    moirai_hyperparameter_tuner = FoundationModelTuner(moirai_moe_model, hyper_grid, False)
-    validation_score_hyperparameter_tuple = moirai_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(hyper_grid.keys())}
-    results = moirai_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
-    print(f"Moirai_MoE results: {results}")
-   
-    print("MOIRAI_MOE WORKS!")
-
+    print("TinyTimeMixer WORKS!")
 
 def _extract_number_before_capital(freq_str):
     match = re.match(r'(\d+)?[A-Z]', freq_str)

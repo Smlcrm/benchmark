@@ -13,10 +13,13 @@ from tsfm_public import TimeSeriesPreprocessor, TrackingCallback, count_paramete
 from tsfm_public.toolkit.get_model import get_model
 from tsfm_public.toolkit.lr_finder import optimal_lr_finder
 from tsfm_public.toolkit.visualization import plot_predictions
+from benchmarking_pipeline.models.foundation_model import FoundationModel
+
+from typing import Dict, Any, Optional, Union, List
 
 
-class TinyTimeMixer:
-    def __init__(self, model_name, context_length=52, prediction_length=7, timestamp_column_name="date", split_config={}, batch_size=8):
+class TinyTimeMixer(FoundationModel):
+    def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Args:
             model_name (str): Name of the model. Choice of three: 
@@ -24,26 +27,72 @@ class TinyTimeMixer:
             or "ibm-research/ttm-research-r2"}
             context_length (int): Length of the context. Minimum context length is 52 (this is from testing the model).
         """
-        self.model_name = model_name
+
+        super().__init__(config, config_file)
+        self.model_name = self.config.get('model_name', 'ibm-granite/granite-timeseries-ttm-r2')
         
 
         # Context length, Or Length of the history.
         # Currently supported values are: 512/1024/1536 for Granite-TTM-R2 and Research-Use-TTM-R2, and 512/1024 for Granite-TTM-R1
 
         # Shortest context length is 52.
-        self.context_length = context_length
+        self.context_length = self.config.get('context_length', 52)
 
-        # Granite-TTM-R2 supports forecast length upto 720 and Granite-TTM-R1 supports forecast length upto 96
-        self.prediction_length = prediction_length
+        # Granite-TTM-R2 supports forecast length upto 720 and Granite-TTM-R1 supports forecast length up to 96
+        self.prediction_length = self.config.get('prediction_length', 7)
 
-        self.timestamp_column_name = timestamp_column_name
+        self.timestamp_column_name = self.config.get('timestamp_column_name', 'date')
 
-        self.batch_size = batch_size
-        self.split_config = split_config
+        self.batch_size = self.config.get('batch_size', 8)
+        self.split_config = self.config.get('split_config', {})
+    
+    def set_params(self, **params: Dict[str, Any]) -> 'TinyTimeMixer':
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
 
         
+    def predict(self,
+        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_target: Union[pd.Series, np.ndarray] = None,
+        y_target_timestamps: List[Any] = None,
+        **kwargs):
+        #print("HUH")
+        #print(y_target)
+        #print("YUHUHU?")
+        #print(y_target_timestamps[0].strftime('%Y-%m-%d %X'))
+        #raise Exception("UNgas")
+        #timestamp_strings = [ts.strftime('%Y-%m-%d %X') for ts in y_target_timestamps]
+        
+        
+        # We add two temporary values to y_target, and two temporary timestamps 
+        # to y_target_timestamps. We do this step because get_datasets demands 
+        # we specify a train, val,and test split. Thus, we add two fake elements
+        #  - the first for train, and the second for val. Since we don't use 
+        # these elements anyways, it doesn't matter what goes in these first 
+        # two slots.
+
+        """
+        y_target = np.concatenate( (np.array([0,0]), y_target) )
+
+        delta = y_target_timestamps[1] - y_target_timestamps[0]
+        y_target_timestamps = [
+            y_target_timestamps[0] - 2 * delta,
+            y_target_timestamps[0] - delta,
+        ] + y_target_timestamps"""
+        
+        if len(y_target.shape) == 1:
+            columns = ['1']
+        else:
+            columns = list(range(y_target.shape[0])) 
+        df = pd.DataFrame(y_target, index=y_target_timestamps, columns=columns)
+        df.index.rename("date", inplace=True)
+        df.reset_index(inplace=True)
+        return self._sub_predict(df)
+        
     
-    def predict(self, dataframe : pd.DataFrame):
+    def _sub_predict(self, dataframe : pd.DataFrame):
         """
         We assume the dataframe looks as follows:
         It has one column called 'date', which contains all the 
@@ -55,9 +104,11 @@ class TinyTimeMixer:
         column_specifiers = {
           "timestamp_column": self.timestamp_column_name,
           "id_columns": [],
-          "target_columns": dataframe.drop(columns=[self]).columns.tolist(),
+          "target_columns": dataframe.drop(columns=[self.timestamp_column_name]).columns.tolist(),
           "control_columns": [],
         }
+
+        inferred_freq = pd.infer_freq(dataframe[self.timestamp_column_name])
 
         tsp = TimeSeriesPreprocessor(
               **column_specifiers,
@@ -66,6 +117,7 @@ class TinyTimeMixer:
               scaling=True,
               encode_categorical=False,
               scaler_type="standard",
+              freq=inferred_freq
         )
 
         # Obtain model

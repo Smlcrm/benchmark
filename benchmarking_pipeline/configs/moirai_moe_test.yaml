@@ -1,7 +1,7 @@
 test_type: deterministic
 dataset:
-  name: australian_electricity_demand
-  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  name: azure_vm_traces_2017
+  path: benchmarking_pipeline/datasets/azure_vm_traces_2017
   frequency: D
   forecast_horizon: 5
   split_ratio: [0.8, 0.1, 0.1]
@@ -14,11 +14,11 @@ model:
     Moirai_MoE:
       model_name: ["moirai_moe"]
       size: ["small"]
-      pdt: [900]
+      pdt: [200]
       ctx: [10]
       psz: [8]
       bsz: [8]
-      test: [900]
+      test: [200]
       num_samples: [5]
 evaluation:
   type: deterministic
