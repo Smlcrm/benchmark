@@ -34,7 +34,7 @@ if __name__ == "__main__":
   #   "exog_cols": None,
   #   "loss_functions": ["mae"],
   #   "primary_loss": "mae",
-  #   "forecast_horizon": len(single_chunk.test.features["y"])
+  #   "forecast_horizon": len(single_chunk.test.targets["y"])
   # })
 
   # arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
@@ -63,11 +63,11 @@ if __name__ == "__main__":
   #   "learning_rate": 0.001,
   #   "batch_size": 16,
   #   "epochs": 5,
-  #   "sequence_length": (len(single_chunk.test.features["y"]) // 10),
+  #   "sequence_length": (len(single_chunk.test.targets["y"]) // 10),
   #   "target_col": "y",
   #   "loss_functions": ["mae"],
   #   "primary_loss": "mae",
-  #   "forecast_horizon": (len(single_chunk.test.features["y"]) // 10)
+  #   "forecast_horizon": (len(single_chunk.test.targets["y"]) // 10)
   # }
   # lstm_model = LSTMModel(lstm_config)
   # lstm_hyperparameter_tuner = HyperparameterTuner(lstm_model,{
@@ -147,8 +147,8 @@ if __name__ == "__main__":
   # Example: use the same chunking logic as for other models
 
   # Use the first chunk for demonstration
-  y_context = single_chunk.train.features["y"]
-  y_target = single_chunk.validation.features["y"]
+  y_context = single_chunk.train.targets["y"]
+  y_target = single_chunk.validation.targets["y"]
 
   # Ensure they are Pandas Series with DatetimeIndex
   if not isinstance(y_context, pd.Series):

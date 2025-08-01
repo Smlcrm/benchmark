@@ -88,16 +88,16 @@ def main():
 
     # Train model
     logger.info("Training ARIMA model")
-    model = ARIMA(preprocessed_data.data.train.features['y'])
+    model = ARIMA(preprocessed_data.data.train.targets['y'])
     logger.info("Model initialized, starting training")
-    fitted_model = trainer.train(model, preprocessed_data.data.train.features)
+    fitted_model = trainer.train(model, preprocessed_data.data.train.targets)
     logger.info("Model training complete")
 
     # Generate forecasts
     logger.info("Generating forecasts")
-    train_y = preprocessed_data.data.train.features['y']
-    val_y = preprocessed_data.data.validation.features['y']
-    test_y = preprocessed_data.data.test.features['y']
+    train_y = preprocessed_data.data.train.targets['y']
+    val_y = preprocessed_data.data.validation.targets['y']
+    test_y = preprocessed_data.data.test.targets['y']
 
     logger.info(f"Forecasting {len(val_y)} validation steps")
     val_forecast = fitted_model.forecast(steps=len(val_y))
