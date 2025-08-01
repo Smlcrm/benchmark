@@ -15,10 +15,8 @@ model:
       model_name: ["moirai"]
       size: ["small"]
       pdt: [900]
-      ctx: [10]
       psz: [8]
       bsz: [8]
-      test: [900]
       num_samples: [5]
 evaluation:
   type: deterministic

@@ -9,15 +9,13 @@ dataset:
   handle_missing: interpolate
   chunks: 2
 model:
-  name: ["moirai_moe"]
+  name: ["toto"]
   parameters:
-    Moirai_MoE:
-      model_name: ["moirai_moe"]
-      size: ["small"]
-      pdt: [900]
-      psz: [8]
-      bsz: [8]
-      num_samples: [5]
+    Toto:
+      model_name: ["toto"]
+      self.prediction_length: [4]
+      self.num_samples: [4]
+      self.samples_per_batch: [4]
 evaluation:
   type: deterministic
   metrics: [mae, rmse] 
