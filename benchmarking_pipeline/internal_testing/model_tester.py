@@ -106,15 +106,15 @@ def test_deep_ar(all_australian_chunks):
   if shorten_australia:
     for australian_chunk in all_australian_chunks:
       #print("train", pd.Series(australian_chunk.train.features[6300:].squeeze(),index=list(range(900))).shape)
-      australian_chunk.train.features = pd.DataFrame({'y': australian_chunk.train.features[7000:].squeeze()})
-      australian_chunk.train.features.reset_index()
-      print("train", australian_chunk.train.features)
+      australian_chunk.train.targets = pd.DataFrame({'y': australian_chunk.train.targets[7000:].squeeze()})
+      australian_chunk.train.targets.reset_index()
+      print("train", australian_chunk.train.targets)
   
 
   time_series_dataset = all_australian_chunks[0]
   deep_ar_model.set_params(rnn_layers=2)
-  target = time_series_dataset.train.features[deep_ar_model.target_col]
-  validation_series = time_series_dataset.validation.features[deep_ar_model.target_col]
+  target = time_series_dataset.train.targets[deep_ar_model.target_col]
+  validation_series = time_series_dataset.validation.targets[deep_ar_model.target_col]
   start_date = time_series_dataset.metadata["start"]
   freq_str = time_series_dataset.metadata["freq"]
   first_capital_letter_finder = re.search(r'[A-Z]', freq_str)
@@ -129,7 +129,7 @@ def test_deep_ar(all_australian_chunks):
   print("Done training; starting predicting")
   model_predictions = trained_model.predict(y_context=target, y_target=validation_series)
   print("Done predicting; starting computing loss")
-  train_loss = trained_model.compute_loss(time_series_dataset.validation.features[deep_ar_model.target_col], model_predictions)
+  train_loss = trained_model.compute_loss(time_series_dataset.validation.targets[deep_ar_model.target_col], model_predictions)
   print(train_loss)
   print("Done computing loss")"""
 

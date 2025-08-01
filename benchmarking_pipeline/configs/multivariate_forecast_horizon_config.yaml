@@ -8,8 +8,9 @@ dataset:
   normalize: true
   handle_missing: interpolate
   chunks: 3
+  num_targets: 2
 model:
-  name: ["svr"]
+  name: ["lstm"]
   parameters:
     ARIMA:
       p: [0, 1, 2]
