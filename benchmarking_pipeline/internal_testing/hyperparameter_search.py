@@ -73,8 +73,8 @@ def hyperparameter_grid_search_several_time_series(model_name, model, hyperparam
         print(f"DEBUG: train.features columns: {time_series_dataset.train.features.columns}")
         print(f"DEBUG: train.features head:\n{time_series_dataset.train.features.head()}")
         print(f"DEBUG: model.target_col: {model.target_col}")
-        target = time_series_dataset.train.features[model.target_col].values
-        validation_series = time_series_dataset.validation.features[model.target_col].values
+        target = time_series_dataset.train.targets[model.target_col].values
+        validation_series = time_series_dataset.validation.targets[model.target_col].values
         start_date = time_series_dataset.metadata["start"]
         freq_str = time_series_dataset.metadata["freq"]
         first_capital_letter_finder = re.search(r'[A-Z]', freq_str)
@@ -92,8 +92,8 @@ def hyperparameter_grid_search_several_time_series(model_name, model, hyperparam
         # Get validation losses over every chunk
         current_train_loss = 0
         for time_series_dataset_from_all in list_of_time_series_datasets:
-          target = time_series_dataset_from_all.train.features[model.target_col].values
-          validation_series = time_series_dataset_from_all.validation.features[model.target_col].values
+          target = time_series_dataset_from_all.train.targets[model.target_col].values
+          validation_series = time_series_dataset_from_all.validation.targets[model.target_col].values
           #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
           # Handle different model types with different predict method signatures
           model_predictions = trained_model.predict(y_context=target, y_target=validation_series, y_target_timestamps=time_series_dataset_from_all.validation.timestamps)

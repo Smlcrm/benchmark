@@ -71,37 +71,83 @@ class DataLoader:
         start = pd.to_datetime(row['start'])
         freq = row['freq']
         target = ast.literal_eval(row['target'])
-        time_index = pd.date_range(start=start, periods=len(target), freq=freq)
-        ts_df = pd.DataFrame({'ds': time_index, 'y': target})
-
-        # Split the time series
-        train_end = int(len(ts_df) * self.split_ratio[0])
-        val_end = int(len(ts_df) * (self.split_ratio[0] + self.split_ratio[1]))
-        train = ts_df.iloc[:train_end]
-        val = ts_df.iloc[train_end:val_end]
-        test = ts_df.iloc[val_end:]
-
-        self._generate_timestamp_list(start, freq, 4)
         
-
-        train_timestamps_plus_val_start = self._generate_timestamp_list(start,freq,len(train[['y']])+1)
+        # Handle multivariate targets
+        if isinstance(target, list) and len(target) > 0:
+            # Check if this is a 2D structure (list of lists) or 1D structure (single list)
+            if isinstance(target[0], list):
+                # 2D structure: [[val1, val2], [val3, val4], ...] - Multiple target series
+                target_series = []
+                for i, series in enumerate(target):
+                    if series is not None:  # Skip None series
+                        target_series.append(pd.Series(series, name=f'target_{i}'))
+                
+                if target_series:
+                    targets_df = pd.concat(target_series, axis=1)
+                else:
+                    # Fallback to univariate if all series are None
+                    targets_df = pd.DataFrame({'y': [0] * 1000})  # Default length
+            else:
+                # 1D structure: [val1, val2, val3, ...] - Single univariate time series
+                targets_df = pd.DataFrame({'y': target})
+        else:
+            # Single target series (univariate)
+            targets_df = pd.DataFrame({'y': target})
         
-        train_timestamps = train_timestamps_plus_val_start[:len(train[['y']])]
+        # Handle exogenous features if present
+        exogenous_df = None
+        if 'past_feat_dynamic_real' in row and pd.notna(row['past_feat_dynamic_real']):
+            try:
+                past_features = ast.literal_eval(row['past_feat_dynamic_real'])
+                if isinstance(past_features, list) and len(past_features) > 0:
+                    # Multiple exogenous series
+                    exog_series = []
+                    for i, series in enumerate(past_features):
+                        if series is not None:  # Skip None series
+                            exog_series.append(pd.Series(series, name=f'feature_{i}'))
+                    
+                    if exog_series:
+                        exogenous_df = pd.concat(exog_series, axis=1)
+            except (ValueError, SyntaxError):
+                # If parsing fails, treat as no exogenous features
+                pass
+        
+        # Create time index
+        time_index = pd.date_range(start=start, periods=len(targets_df), freq=freq)
+        
+        # Split the data
+        train_end = int(len(targets_df) * self.split_ratio[0])
+        val_end = int(len(targets_df) * (self.split_ratio[0] + self.split_ratio[1]))
+        
+        # Split targets
+        train_targets = targets_df.iloc[:train_end]
+        val_targets = targets_df.iloc[train_end:val_end]
+        test_targets = targets_df.iloc[val_end:]
+        
+        # Split exogenous features if present
+        train_features = None
+        val_features = None
+        test_features = None
+        if exogenous_df is not None:
+            train_features = exogenous_df.iloc[:train_end]
+            val_features = exogenous_df.iloc[train_end:val_end]
+            test_features = exogenous_df.iloc[val_end:]
+
+        # Generate timestamps
+        train_timestamps_plus_val_start = self._generate_timestamp_list(start, freq, len(train_targets) + 1)
+        train_timestamps = train_timestamps_plus_val_start[:len(train_targets)]
         val_start = train_timestamps_plus_val_start[-1]
 
-        val_timestamps_plus_test_start = self._generate_timestamp_list(val_start,freq,len(val[['y']])+1)
-
-        val_timestamps = val_timestamps_plus_test_start[:len(val[['y']])]
+        val_timestamps_plus_test_start = self._generate_timestamp_list(val_start, freq, len(val_targets) + 1)
+        val_timestamps = val_timestamps_plus_test_start[:len(val_targets)]
         test_start = val_timestamps_plus_test_start[-1]
 
-        test_timestamps = self._generate_timestamp_list(test_start,freq,len(test[['y']]))
-        
-        #print("train timestamps", train_timestamps)
+        test_timestamps = self._generate_timestamp_list(test_start, freq, len(test_targets))
 
         return Dataset(
-            train=DatasetSplit(features=train[['y']], labels=None, timestamps=train_timestamps),
-            validation=DatasetSplit(features=val[['y']], labels=None, timestamps=val_timestamps),
-            test=DatasetSplit(features=test[['y']], labels=None, timestamps=test_timestamps),
+            train=DatasetSplit(targets=train_targets, features=train_features, timestamps=train_timestamps),
+            validation=DatasetSplit(targets=val_targets, features=val_features, timestamps=val_timestamps),
+            test=DatasetSplit(targets=test_targets, features=test_features, timestamps=test_timestamps),
             name=self.name,
             metadata={'start': start, 'freq': freq}
         )
