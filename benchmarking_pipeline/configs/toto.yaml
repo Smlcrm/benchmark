@@ -13,9 +13,9 @@ model:
   parameters:
     Toto:
       model_name: ["toto"]
-      self.prediction_length: [4]
-      self.num_samples: [4]
-      self.samples_per_batch: [4]
+      self.prediction_length: [900]
+      self.num_samples: [40]
+      self.samples_per_batch: [40]
 evaluation:
   type: deterministic
   metrics: [mae, rmse] 

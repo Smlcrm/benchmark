@@ -46,7 +46,11 @@ class TotoModel(FoundationModel):
         y_context_timestamps = None,
         y_target_timestamps = None,
         **kwargs):
-        print(y_context.shape)
+        if len(y_context.shape) == 1:
+            y_context = y_context.reshape(1, -1)
+        input_tensor = torch.from_numpy(y_context).float()
+        time_series_delta = int((y_context_timestamps[1] - y_context_timestamps[0]).total_seconds())
+        return self._sub_predict(input_tensor, time_series_delta)
 
     def _sub_predict(self, input_series: torch.Tensor, time_interval_sec: int = 900) -> dict:
         """
@@ -61,7 +65,7 @@ class TotoModel(FoundationModel):
         input_series = input_series.to(self.device)
 
         # Dummy timestamp-related info for compatibility
-        timestamp_seconds = torch.zeros(input_series, time_steps).to(self.device)
+        timestamp_seconds = torch.zeros_like(input_series).to(self.device)
         time_interval_seconds = torch.full((num_series,), time_interval_sec).to(self.device)
 
         # Construct MaskedTimeseries
