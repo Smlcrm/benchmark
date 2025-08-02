@@ -5,7 +5,6 @@ import itertools
 from ..models.base_model import BaseModel
 from typing import Dict, List
 import numpy as np
-from benchmarking_pipeline.models.lstm_model import LSTMModel
 import pandas as pd
 import re
 
@@ -94,7 +93,7 @@ class FoundationModelTuner:
           #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
           # Handle different model types with different predict method signatures
           
-          model_predictions = trained_model.predict(y_context=target, y_target=validation_series, y_target_timestamps=time_series_dataset_from_all.validation.timestamps)
+          model_predictions = trained_model.predict(y_context=target, y_target=validation_series, y_context_timestamps=time_series_dataset_from_all.train.timestamps, y_target_timestamps=time_series_dataset_from_all.validation.timestamps)
           train_loss = trained_model.compute_loss(time_series_dataset_from_all.validation.features[self.model_class.target_col], model_predictions)
           current_train_loss += train_loss[self.model_class.primary_loss]
         # Average validation losses over the chunks
