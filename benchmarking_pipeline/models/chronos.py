@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
-from chronos import ChronosPipeline
+from chronos import BaseChronosPipeline
 from typing import Dict, List, Optional
 
 class ChronosForecaster:
@@ -32,7 +32,7 @@ class ChronosForecaster:
         device = "cuda" if torch.cuda.is_available() else "cpu"
         
         print(f"Loading Chronos model '{hf_model_name}' to device '{device}'...")
-        self.pipeline = ChronosPipeline.from_pretrained(
+        self.pipeline = BaseChronosPipeline.from_pretrained(
             hf_model_name,
             device_map="auto",
             torch_dtype=torch.bfloat16,
