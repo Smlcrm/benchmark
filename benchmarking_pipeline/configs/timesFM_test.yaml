@@ -12,7 +12,7 @@ model:
   name: ["timesfm"]
   parameters:
     TimesFM:
-      model_path: "google/timesfm-1.0-200m"
+      model_path: "google/timesfm-2.0-500m-pytorch"
       forecast_horizon: 5
 evaluation:
   type: deterministic
