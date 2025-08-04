@@ -15,7 +15,7 @@ model:
       model_name: ["moirai"]
       size: ["small"]
       pdt: [900]
-      psz: [8]
+      psz: [32]
       bsz: [8]
       num_samples: [5]
 evaluation:
