@@ -1,27 +1,44 @@
 import pandas as pd
 import numpy as np
 import torch
-from transformers import TimesFmConfig, TimesFmForPrediction
+import timesfm
 from typing import Dict, List
 import warnings
 
 class TimesFmForecaster:
     def __init__(
         self,
-        model_path: str = "google/timesfm-1.0-200m",
+        config: Dict = None,
+        config_file: str = None,
     ):
         """
-        Initializes the TimesFM model wrapper.
+        Initializes the TimesFM model
 
         Args:
-            model_path (str): The Hugging Face path to the TimesFM model.
+            config (dict): Configuration dictionary for the model.
+            config_file (str): Optional path to a config file.
         """
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Loading TimesFM model: {model_path} to device '{self.device}'")
+        self.config = config or {}
+        self.config_file = config_file
 
-        self.config = TimesFmConfig.from_pretrained(model_path)
-        self.model = TimesFmForPrediction.from_pretrained(model_path).to(self.device)
-        self.context_length = self.config.context_length
+        self.model_path = self.config.get("model_path", "google/timesfm-1.0-200m")
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Loading TimesFM model: {self.model_path} to device '{self.device}'")
+
+        self.model = timesfm.TimesFm(
+            hparams=timesfm.TimesFmHparams(
+                backend="gpu" if self.device == "cuda" else "cpu",
+                per_core_batch_size=self.config.get("per_core_batch_size", 32),
+                horizon_len=self.config.get("horizon_len", 128),
+                num_layers=self.config.get("num_layers", 50),
+                use_positional_embedding=self.config.get("use_positional_embedding", False),
+                context_len=self.config.get("context_len", 2048),
+            ),
+            checkpoint=timesfm.TimesFmCheckpoint(
+                huggingface_repo_id=self.model_path
+            ),
+        )
+        self.context_length = self.model.context_len
         print("Model loaded successfully :D")
 
     def predict(
@@ -60,11 +77,10 @@ class TimesFmForecaster:
         # Convert data to a tensor for the model
         input_data = torch.tensor(np.stack(contexts), dtype=torch.float32).to(self.device)
 
-        # Generate forecasts
+        # Generate forecasts using the timesfm API
         point_forecasts = self.model.forecast(
             input_data,
-            prediction_length=prediction_length
-        ) # Returns a list of numpy arrays
+        )  # Returns a list of numpy arrays
 
         results = {}
         for i, series_name in enumerate(df.columns):
