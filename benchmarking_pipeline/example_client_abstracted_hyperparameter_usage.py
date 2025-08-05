@@ -1,6 +1,6 @@
 # ARIMA testing
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
-from benchmarking_pipeline.models.arima_model import ARIMAModel
+from benchmarking_pipeline.models.arima.arima_model import ARIMAModel
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from benchmarking_pipeline.models.lstm_model import LSTMModel

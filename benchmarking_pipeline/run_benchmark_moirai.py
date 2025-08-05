@@ -7,7 +7,7 @@ from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 #from benchmarking_pipeline.pipeline.logger import Logger
 from torch.utils.tensorboard import SummaryWriter
 import time
-from benchmarking_pipeline.models.moirai import MoiraiModel
+from benchmarking_pipeline.models.moirai.moirai import MoiraiModel
 from benchmarking_pipeline.trainer.foundation_model_tuning import FoundationModelTuner
 import numpy as np
 import pandas as pd
