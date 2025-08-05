@@ -1,18 +1,20 @@
-from benchmarking_pipeline.models.arima_model import ARIMAModel
+#from benchmarking_pipeline.models.arima.arima_model import ARIMAModel
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
-from benchmarking_pipeline.models.seasonal_naive_model import SeasonalNaiveModel
-from benchmarking_pipeline.models.exponential_smoothing_model import ExponentialSmoothingModel
-from benchmarking_pipeline.models.prophet_model import ProphetModel
-from benchmarking_pipeline.models.theta_model import ThetaModel
-from benchmarking_pipeline.models.deepAR_model import DeepARModel
-from benchmarking_pipeline.models.xgboost_model import XGBoostModel
-from benchmarking_pipeline.models.random_forest_model import RandomForestModel
-from benchmarking_pipeline.models.lstm_model import LSTMModel
-from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
-from benchmarking_pipeline.models.lstm_model import LSTMModel
-from benchmarking_pipeline.models.random_forest_model import RandomForestModel
+
+
+#from benchmarking_pipeline.models.seasonal_naive_model import SeasonalNaiveModel
+#from benchmarking_pipeline.models.exponential_smoothing_model import ExponentialSmoothingModel
+#from benchmarking_pipeline.models.prophet_model import ProphetModel
+from benchmarking_pipeline.models.theta.theta_model import ThetaModel
+#from benchmarking_pipeline.models.deepAR_model import DeepARModel
+#from benchmarking_pipeline.models.xgboost_model import XGBoostModel
+#from benchmarking_pipeline.models.random_forest_model import RandomForestModel
+#from benchmarking_pipeline.models.lstm_model import LSTMModel
+#from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
+#from benchmarking_pipeline.models.lstm_model import LSTMModel
+#from benchmarking_pipeline.models.random_forest_model import RandomForestModel
 import pandas as pd
 import re
 import numpy as np
@@ -42,10 +44,10 @@ def test_arima(all_australian_chunks):
   })
 
   arima_hyperparameter_tuner = HyperparameterTuner(arima_model,{
-    "p": [0, 1, 2],
+    "p": [0, 1],
     "d": [0, 1],
-    "q": [0, 1, 2],
-    "s": [2, 4, 6]
+    "q": [0, 1],
+    "s": [2, 4]
     }, False)
   
   # Give the ARIMA model the first chunk to hyperparameter tune on
@@ -307,9 +309,9 @@ if __name__ == "__main__":
   all_australian_chunks = [preprocessor.preprocess(chunk).data for chunk in all_australian_chunks]
 
 
-  test_arima(all_australian_chunks)
+  # test_arima(all_australian_chunks)
   # test_seasonal_naive(all_australian_chunks)
-  # test_theta(all_australian_chunks)
+  test_theta(all_australian_chunks)
   # test_deep_ar(all_australian_chunks)
   # test_xgboost(all_australian_chunks)
   # test_random_forest(all_australian_chunks)

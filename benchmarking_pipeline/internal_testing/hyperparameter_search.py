@@ -2,8 +2,8 @@
 import itertools
 import matplotlib.pyplot as plt
 import pandas as pd
-from benchmarking_pipeline.models.arima_model import ARIMAModel
-from benchmarking_pipeline.models.theta_model import ThetaModel
+from benchmarking_pipeline.models.arima.arima_model import ARIMAModel
+from benchmarking_pipeline.models.theta.theta_model import ThetaModel
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor

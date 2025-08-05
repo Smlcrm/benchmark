@@ -10,8 +10,8 @@ from benchmarking_pipeline.pipeline.evaluator import Evaluator
 from benchmarking_pipeline.pipeline.logger import Logger
 from torch.utils.tensorboard import SummaryWriter
 import time
-from benchmarking_pipeline.models.arima_model import ARIMAModel
-from benchmarking_pipeline.models.theta_model import ThetaModel
+from benchmarking_pipeline.models.arima.arima_model import ARIMAModel
+from benchmarking_pipeline.models.theta.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.xgboost_model import XGBoostModel
 from benchmarking_pipeline.models.random_forest_model import RandomForestModel
