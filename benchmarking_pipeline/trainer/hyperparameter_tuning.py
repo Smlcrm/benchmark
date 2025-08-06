@@ -127,16 +127,13 @@ class HyperparameterTuner:
     print(f"List of validation scores: {list_of_validation_scores}")
     print(f"List of hyperparameters per validation score: {list_of_hyperparameters_per_validation_score}")
 
-    list_of_validation_scores = np.array(list_of_validation_scores)
-    list_of_hyperparameters_per_validation_score = np.array(list_of_hyperparameters_per_validation_score)
+    min_score = min(list_of_validation_scores)
+    min_index = list_of_validation_scores.index(min_score)
 
-    print(f"Best hyperparameters: {list_of_hyperparameters_per_validation_score}")
-    print(f"Best validation scores: {list_of_validation_scores}")
-    print(f"Validation scores: {list_of_validation_scores}")
-    print(f"Chosen index: {list_of_validation_scores.argmin()}")
+    # Select the corresponding hyperparameters
+    best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[min_index]
 
-    best_hyperparameters_overall = list_of_hyperparameters_per_validation_score[list_of_validation_scores.argmin()]
-    return list_of_validation_scores.min(), best_hyperparameters_overall
+    return min_score, best_hyperparameters_overall
 
   def final_evaluation(self, best_hyperparamters: Dict[str, int], list_of_time_series_datasets):
     """
