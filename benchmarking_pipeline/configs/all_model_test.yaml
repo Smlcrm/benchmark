@@ -1,0 +1,40 @@
+test_type: deterministic
+dataset:
+  name: australian_electricity_demand
+  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  frequency: D
+  forecast_horizon: 5
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: false
+  handle_missing: interpolate
+  chunks: 2
+model:
+  name: ["arima;arima_model;ARIMAModel", "theta;theta_model;ThetaModel", "moirai;moirai;MoiraiModel"] #, "toto;toto_model;TotoModel"]
+  parameters:
+    arima:
+      p: [0, 1]
+      d: [0, 1]
+      q: [0, 1]
+      s: [2, 4]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [2]
+    theta:
+      sp: [1, 2]
+      forecast_horizon: [10]
+    moirai:
+      model_name: ["moirai"] #, moirai_moe"] # moirai and moirai_moe come from the same model file
+      size: ["small"]
+      pdt: [900]
+      psz: [32]
+      bsz: [8]
+      num_samples: [5]
+    #toto:
+    #  model_name: ["toto"]
+    #  self.prediction_length: [900]
+    #  self.num_samples: [40]
+    #  self.samples_per_batch: [40]
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse] 
