@@ -10,7 +10,7 @@ dataset:
   chunks: 2
 model:
   #name: ["arima;arima_model;ARIMAModel", "theta;theta_model;ThetaModel", "moirai;moirai;MoiraiModel"]
-  name: ["moirai_moe;moirai;MoiraiModel", "toto;toto_model;TotoModel"]
+  name: ["croston_classic;croston_classic_model;CrostonClassicModel", "seasonal_naive;seasonal_naive_model;SeasonalNaiveModel", "moirai_moe;moirai;MoiraiModel", "toto;toto_model;TotoModel"]
   parameters:
     arima:
       p: [0, 1]
@@ -43,6 +43,15 @@ model:
       self.prediction_length: [900]
       self.num_samples: [40]
       self.samples_per_batch: [40]
+    croston_classic:
+      alpha: [0.1]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [900]
+    seasonal_naive:
+      sp: [7, 14]
+      forecast_horizon: [2]
 evaluation:
   type: deterministic
   metrics: [mae, rmse] 
