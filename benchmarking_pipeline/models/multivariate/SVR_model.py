@@ -355,11 +355,12 @@ class MultivariateSVRModel(BaseModel):
             else:
                 converted_params[k] = v
         
-        # Prepare params for underlying SVR
+        # Prepare params for underlying SVR (exclude unsupported params)
         svr_param_names = SVR().get_params().keys()
+        unsupported_params = {'random_state'}  # SVR doesn't support random_state
         mo_params = {}
         for k, v in converted_params.items():
-            if k in svr_param_names:
+            if k in svr_param_names and k not in unsupported_params:
                 mo_params[f'estimator__{k}'] = v
             elif k == 'n_jobs':
                 mo_params[k] = v
@@ -370,10 +371,12 @@ class MultivariateSVRModel(BaseModel):
             # fallback for non-multioutput
             self.model.set_params(**{k: v for k, v in converted_params.items() if k in svr_param_names or k == 'n_jobs'})
             
-        # Update config as well
+        # Update config as well (exclude unsupported params)
         if 'model_params' not in self.config:
             self.config['model_params'] = {}
-        self.config['model_params'].update({k: v for k, v in converted_params.items() if k in svr_param_names or k == 'n_jobs'})
+        supported_params = {k: v for k, v in converted_params.items() 
+                          if k in svr_param_names and k not in unsupported_params or k == 'n_jobs'}
+        self.config['model_params'].update(supported_params)
         
         for k in model_level_keys:
             if k in params:
