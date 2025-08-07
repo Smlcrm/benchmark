@@ -1,7 +1,9 @@
 """
 Theta model implementation.
 
-HANDLING: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
+#HANDLING: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
+
+Updated : Updated to match the new interface with y_context, x_context, y_target, x_target parameters.
 """
 
 import os
@@ -38,8 +40,8 @@ class ThetaModel(BaseModel):
 
     def train(self, 
               y_context: Union[pd.Series, np.ndarray], 
-              y_target: Union[pd.Series, np.ndarray] = None, 
               x_context: Union[pd.Series, np.ndarray] = None, 
+              y_target: Union[pd.Series, np.ndarray] = None, 
               x_target: Union[pd.Series, np.ndarray] = None, 
               y_start_date: Optional[str] = None,
               x_start_date: Optional[str] = None,
@@ -50,8 +52,12 @@ class ThetaModel(BaseModel):
         decomposing the series and fitting exponential smoothing.
         
         Args:
-            x_context: Training features (ignored by this univariate model, but required for API consistency).
-            y_context: Target time series values (pd.Series or np.ndarray).
+            y_context: Historical target time series values (pd.Series or np.ndarray).
+            x_context: Historical exogenous features (ignored by this univariate model).
+            y_target: Target values for validation (ignored during training).
+            x_target: Future exogenous features (ignored during training).
+            y_start_date: Start date for y_context (optional).
+            x_start_date: Start date for x_context (optional).
         
         Returns:
             self: The fitted model instance.
@@ -64,32 +70,42 @@ class ThetaModel(BaseModel):
             y_context = pd.Series(y_context)
             
         print(f"Fitting ThetaForecaster with parameters: {self.model.get_params()}...")
-        self.model.fit(y=y_context, X=x_context) # X is ignored
+        # Theta is a univariate method, so we only use y_context and ignore x_context
+        self.model.fit(y=y_context, X=x_context)  # X is ignored by ThetaForecaster
         self.is_fitted = True
         print("Training complete.")
         return self
         
-    def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
+    def predict(self, 
+                y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+                x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
+                x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
+                forecast_horizon: Optional[int] = None) -> np.ndarray:
         """
         Make predictions using the trained Theta model.
         
         Args:
-            x_target: Input data for prediction. The number of rows in X determines the
-               number of steps to forecast. The content of X is ignored.
+            y_context: Recent/past target values (ignored by Theta - uses training data).
+            x_context: Recent/past exogenous variables (ignored by univariate model).
+            x_target: Future exogenous variables for forecast horizon (ignored by univariate model,
+                     but used to determine forecast length if forecast_horizon not provided).
+            forecast_horizon: Number of steps to forecast (defaults to model config if not provided).
             
         Returns:
-            np.ndarray: Model predictions.
+            np.ndarray: Model predictions with shape (n_samples, forecast_horizon).
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
         
-        # Create a forecasting horizon based on the number of samples in the input X.
-        if y_target is not None:
-            fh = np.arange(1, len(y_target) + 1)
+        # Determine forecast horizon
+        if forecast_horizon is not None:
+            fh = np.arange(1, forecast_horizon + 1)
+        elif x_target is not None:
+            fh = np.arange(1, len(x_target) + 1)
         else:
-            fh = self.forecast_horizon
+            fh = np.arange(1, self.forecast_horizon + 1)
         
-        # The sktime predict method uses the forecasting horizon (fh).
+        # The sktime predict method uses the forecasting horizon (fh)
         predictions = self.model.predict(fh=fh)
         
         return predictions.values
