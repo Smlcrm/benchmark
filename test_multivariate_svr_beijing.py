@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import yaml
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
-from benchmarking_pipeline.models.multivariate.multivariate_svr_model import MultivariateSVRModel
+from benchmarking_pipeline.models.multivariate.SVR_model import MultivariateSVRModel
 
 def test_multivariate_svr_beijing_subway():
     """Test MultivariateSVR with Beijing Subway dataset."""
@@ -64,7 +64,7 @@ def test_multivariate_svr_beijing_subway():
     print(f"\nModel parameters: {model_params}")
     
     model = MultivariateSVRModel({'model_params': {k: v for k, v in model_params.items() 
-                                                  if k in ['kernel', 'C', 'epsilon', 'random_state']},
+                                                  if k in ['kernel', 'C', 'epsilon', 'gamma']},  # Removed random_state
                                  'lookback_window': model_params['lookback_window'],
                                  'forecast_horizon': model_params['forecast_horizon'],
                                  'target_cols': model_params['target_cols'],
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     
     print("\n" + "=" * 60)
     if success:
-        print("🎉 ALL TESTS PASSED! MultivariateSVR is working correctly!")
+        print(" ALL TESTS PASSED! MultivariateSVR is working correctly!")
         print("The model is ready for integration into the benchmarking pipeline.")
     else:
         print("❌ SOME TESTS FAILED! MultivariateSVR needs fixes.")
