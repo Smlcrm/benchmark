@@ -1,10 +1,11 @@
 import pandas as pd
 import numpy as np
 import torch
-from chronos import BaseChronosPipeline
+from benchmarking_pipeline.models.chronos.chronos import BaseChronosPipeline
+from benchmarking_pipeline.models.foundation_model import FoundationModel
 from typing import Dict, List, Optional
 
-class ChronosForecaster:
+class ChronosForecaster(FoundationModel):
 
     def __init__(
         self,

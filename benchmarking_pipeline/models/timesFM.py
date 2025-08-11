@@ -4,6 +4,7 @@ import torch
 import timesfm
 from typing import Dict, List
 import warnings
+from benchmarking_pipeline.models.foundation_model import FoundationModel
 
 class TimesFmForecaster:
     def __init__(

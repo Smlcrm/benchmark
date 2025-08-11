@@ -9,6 +9,7 @@ import subprocess
 import sys
 from gluonts.dataset.pandas import PandasDataset
 from gluonts.evaluation import make_evaluation_predictions
+from benchmarking_pipeline.models.foundation_model import FoundationModel
 
 # Import base model (adjust path as needed)
 from .base_model import BaseModel
