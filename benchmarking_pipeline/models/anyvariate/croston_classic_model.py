@@ -32,12 +32,12 @@ class CrostonClassicModel(BaseModel):
         self.loss_functions = self.config.get('loss_functions', ['mae'])
         self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        
         # Fitted parameters, initialized to None
-        self.demand_level_ = None
+        self.demand_level_ = None  # For univariate, float; for multivariate, dict
         self.interval_level_ = None
+        self._is_multivariate = False
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'CrostonClassicModel':
+    def train(self, y_context: Union[pd.Series, pd.DataFrame, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'CrostonClassicModel':
         print(f"[Croston train] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
         """
         Train the Croston's Classic model on the given time series data.
@@ -53,47 +53,66 @@ class CrostonClassicModel(BaseModel):
         Returns:
             self: The fitted model instance.
         """
-        # Convert y_context to a 1D numpy array of numbers
-        if isinstance(y_context, pd.Series):
-            series = y_context.values
-        elif isinstance(y_context, np.ndarray):
-            series = np.asarray(y_context).flatten()
-    
-        series = np.atleast_1d(series)
-
-        # Find indices of non-zero demand
-        non_zero_indices = np.nonzero(series)
-
-        # If there's no demand or only one demand point we cannot forecast
-        if len(non_zero_indices[0]) < 2:
-            # Set levels to a default state (e.g., average of the whole series)
-            self.demand_level_ = np.mean(series) if len(series) > 0 else 0
-            
-            self.interval_level_ = len(series) if len(series) > 0 else 1
+        # Multivariate support: if input is DataFrame or 2D array, fit each column independently
+        if isinstance(y_context, pd.DataFrame) or (isinstance(y_context, np.ndarray) and y_context.ndim == 2):
+            self._is_multivariate = True
+            if isinstance(y_context, pd.DataFrame):
+                columns = y_context.columns
+                data = y_context.values
+            else:
+                columns = range(y_context.shape[1])
+                data = y_context
+            self.demand_level_ = {}
+            self.interval_level_ = {}
+            for idx, col in enumerate(columns):
+                series = data[:, idx]
+                # Univariate logic below
+                series = np.atleast_1d(series)
+                non_zero_indices = np.nonzero(series)
+                if len(non_zero_indices[0]) < 2:
+                    self.demand_level_[col] = np.mean(series) if len(series) > 0 else 0
+                    self.interval_level_[col] = len(series) if len(series) > 0 else 1
+                    continue
+                demands = series[non_zero_indices]
+                intervals = np.diff(non_zero_indices[0])
+                current_demand_level = demands[0]
+                current_interval_level = intervals[0]
+                for i in range(1, len(demands)):
+                    current_demand_level = self.alpha * demands[i] + (1 - self.alpha) * current_demand_level
+                for i in range(1, len(intervals)):
+                    current_interval_level = self.alpha * intervals[i] + (1 - self.alpha) * current_interval_level
+                self.demand_level_[col] = current_demand_level
+                self.interval_level_[col] = current_interval_level
             self.is_fitted = True
             return self
-
-        # Get demand values and intervals
-        demands = series[non_zero_indices]
-        intervals = np.diff(non_zero_indices[0])
-        
-        # Demand level starts with the first non-zero demand
-        current_demand_level = demands[0]
-        # Interval level starts with the first interval
-        current_interval_level = intervals[0]
-        
-        # Apply SES to the rest of the demands and intervals
-        for i in range(1, len(demands)):
-            current_demand_level = self.alpha * demands[i] + (1 - self.alpha) * current_demand_level
-        
-        for i in range(1, len(intervals)):
-            current_interval_level = self.alpha * intervals[i] + (1 - self.alpha) * current_interval_level
-            
-        self.demand_level_ = current_demand_level
-        self.interval_level_ = current_interval_level
-        self.is_fitted = True
-        
-        return self
+        else:
+            self._is_multivariate = False
+            # Convert y_context to a 1D numpy array of numbers
+            if isinstance(y_context, pd.Series):
+                series = y_context.values
+            elif isinstance(y_context, np.ndarray):
+                series = np.asarray(y_context).flatten()
+            else:
+                raise ValueError("Unsupported y_context type for CrostonClassicModel train.")
+            series = np.atleast_1d(series)
+            non_zero_indices = np.nonzero(series)
+            if len(non_zero_indices[0]) < 2:
+                self.demand_level_ = np.mean(series) if len(series) > 0 else 0
+                self.interval_level_ = len(series) if len(series) > 0 else 1
+                self.is_fitted = True
+                return self
+            demands = series[non_zero_indices]
+            intervals = np.diff(non_zero_indices[0])
+            current_demand_level = demands[0]
+            current_interval_level = intervals[0]
+            for i in range(1, len(demands)):
+                current_demand_level = self.alpha * demands[i] + (1 - self.alpha) * current_demand_level
+            for i in range(1, len(intervals)):
+                current_interval_level = self.alpha * intervals[i] + (1 - self.alpha) * current_interval_level
+            self.demand_level_ = current_demand_level
+            self.interval_level_ = current_interval_level
+            self.is_fitted = True
+            return self
 
     def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
         print(f"[Croston predict] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
@@ -106,26 +125,40 @@ class CrostonClassicModel(BaseModel):
             y_context, x_context, x_target: Not used.
             
         Returns:
-            np.ndarray: Model predictions with shape (1, forecast_horizon).
+            np.ndarray: Model predictions with shape (n_columns, forecast_horizon) for multivariate, (1, forecast_horizon) for univariate.
         """
         if not self.is_fitted:
             raise ValueError("Model not fitted. Call train() first.")
-        
         if y_target is None:
             raise ValueError("y_target must be provided to determine prediction length.")
-        
         forecast_steps = len(y_target)
-        
-        # Avoid division by zero
-        if self.interval_level_ is None or self.interval_level_ == 0:
-            forecast_value = 0
+        if self._is_multivariate:
+            # Multivariate: predict for each column independently
+            if isinstance(y_target, pd.DataFrame):
+                columns = y_target.columns
+            elif isinstance(y_target, np.ndarray) and y_target.ndim == 2:
+                columns = range(y_target.shape[1])
+            else:
+                # If y_target is 1D, use keys from fitted model
+                columns = list(self.demand_level_.keys())
+            preds = []
+            for col in columns:
+                interval = self.interval_level_.get(col, 1)
+                demand = self.demand_level_.get(col, 0)
+                if interval is None or interval == 0:
+                    forecast_value = 0
+                else:
+                    forecast_value = demand / interval
+                preds.append(np.full(forecast_steps, forecast_value))
+            return np.stack(preds, axis=0)  # shape: (n_columns, forecast_steps)
         else:
-            forecast_value = self.demand_level_ / self.interval_level_
-            
-        # Croston's forecast is a constant value for all future steps
-        forecast = np.full(forecast_steps, forecast_value)
-        
-        return forecast.reshape(1, -1) # Reshape to (1, forecast_steps)
+            # Univariate
+            if self.interval_level_ is None or self.interval_level_ == 0:
+                forecast_value = 0
+            else:
+                forecast_value = self.demand_level_ / self.interval_level_
+            forecast = np.full(forecast_steps, forecast_value)
+            return forecast.reshape(1, -1) # Reshape to (1, forecast_steps)
 
     def get_params(self) -> Dict[str, Any]:
         """
