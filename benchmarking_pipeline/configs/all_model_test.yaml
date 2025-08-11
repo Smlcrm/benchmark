@@ -9,9 +9,39 @@ dataset:
   handle_missing: interpolate
   chunks: 2
 model:
+  # [TODO] svr, chronos, lagllama, lstm, moment, prophet, random_forest, tabPFN, timesFM, xgboost, exponential smoothing
+  # [DONE] arima, theta, moirai, croston, seasonal naive, moirai moe, toto 
+  #name: ["chronos;chronos;ChronosForecaster"]
+  #name: ["lstm;lstm_model;LSTMModel", "xgboost;xgboost_model;XGBoostModel"]
+  name: ["exponential_smoothing;exponential_smoothing_model;ExponentialSmoothingModel", "svr_model;SVR_model;SVRModel"]
   #name: ["arima;arima_model;ARIMAModel", "theta;theta_model;ThetaModel", "moirai;moirai;MoiraiModel"]
-  name: ["croston_classic;croston_classic_model;CrostonClassicModel", "seasonal_naive;seasonal_naive_model;SeasonalNaiveModel", "moirai_moe;moirai;MoiraiModel", "toto;toto_model;TotoModel"]
+  #name: ["croston_classic;croston_classic_model;CrostonClassicModel", "seasonal_naive;seasonal_naive_model;SeasonalNaiveModel", "moirai_moe;moirai;MoiraiModel", "toto;toto_model;TotoModel"]
   parameters:
+    lstm:
+      units: [32]
+      layers: [1]
+      dropout: [0.1]
+      learning_rate: [0.01, 0.1, 1]
+      batch_size: [32]
+      epochs: [20]
+      sequence_length: [20]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [10]
+    exponential_smoothing:
+      trend: ["add"]
+      seasonal: ["add"]
+      seasonal_periods: [7]
+      damped_trend: [false]
+      forecast_horizon: [900]
+    svr_model:
+      kernel: ["rbf"]
+      C: [1.0]
+      epsilon: [0.1]
+      lookback_window: [10]
+      forecast_horizon: [10]
+      random_state: [42]
     arima:
       p: [0, 1]
       d: [0, 1]
