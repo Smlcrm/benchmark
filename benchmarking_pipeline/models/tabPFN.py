@@ -5,6 +5,7 @@ import warnings
 import os
 
 from tabpfn import TabPFNRegressor 
+from benchmarking_pipeline.models.foundation_model import FoundationModel
 
 
 def make_time_features(n: int) -> pd.DataFrame:

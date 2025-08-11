@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 
-from benchmarking_pipeline.models.chronos import ChronosForecaster  # assumes the class lives here
+from benchmarking_pipeline.models.chronos.chronos import ChronosForecaster  # assumes the class lives here
 
 
 class BenchmarkRunner:

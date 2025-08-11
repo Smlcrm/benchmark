@@ -13,10 +13,10 @@ import time
 from benchmarking_pipeline.models.arima.arima_model import ARIMAModel
 from benchmarking_pipeline.models.theta.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
-from benchmarking_pipeline.models.xgboost_model import XGBoostModel
+from benchmarking_pipeline.models.xgboost.xgboost_model import XGBoostModel
 from benchmarking_pipeline.models.random_forest_model import RandomForestModel
-from benchmarking_pipeline.models.prophet_model import ProphetModel
-from benchmarking_pipeline.models.lstm_model import LSTMModel
+from benchmarking_pipeline.models.prophet.prophet_model import ProphetModel
+from benchmarking_pipeline.models.lstm.lstm_model import LSTMModel
 from benchmarking_pipeline.models.croston_classic.croston_classic_model import CrostonClassicModel
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 from benchmarking_pipeline.trainer.bayesian_hyperparameter_tuner import BayesianHyperparameterTuner
@@ -30,9 +30,9 @@ import json
 import datetime
 import matplotlib.pyplot as plt
 import yaml
-from benchmarking_pipeline.models.SVR_model import SVRModel
+from benchmarking_pipeline.models.svr_model.SVR_model import SVRModel
 from benchmarking_pipeline.models.seasonal_naive.seasonal_naive_model import SeasonalNaiveModel
-from benchmarking_pipeline.models.exponential_smoothing_model import ExponentialSmoothingModel
+from benchmarking_pipeline.models.exponential_smoothing.exponential_smoothing_model import ExponentialSmoothingModel
 import argparse
 
 class BenchmarkRunner:
