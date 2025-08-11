@@ -4,7 +4,7 @@ from benchmarking_pipeline.models.arima.arima_model import ARIMAModel
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from benchmarking_pipeline.models.lstm.lstm_model import LSTMModel
-from benchmarking_pipeline.models.random_forest_model import RandomForestModel
+from benchmarking_pipeline.models.random_forest.random_forest_model import RandomForestModel
 from benchmarking_pipeline.models.prophet.prophet_model import ProphetModel
 import pandas as pd
 
