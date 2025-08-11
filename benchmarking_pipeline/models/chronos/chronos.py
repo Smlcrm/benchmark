@@ -3,14 +3,29 @@ import numpy as np
 import torch
 from benchmarking_pipeline.models.chronos.chronos import BaseChronosPipeline
 from benchmarking_pipeline.models.foundation_model import FoundationModel
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 class ChronosForecaster(FoundationModel):
+
+    def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
+        """
+        Args:
+        model_size: the model size - choose from {'tiny', 'mini', 'small', 'base', 'large'}
+        context_length: context length - any positive integer
+        num_samples: number of samples to generate during prediction time - any positive integer
+        """
+        
+        super().__init__(config, config_file)
+        self.model_size = self.config.get('model_size', 'small')
+        self.context_length = self.config.get('context_length', '8')
+        self.num_samples = self.config.get('num_samples', '5')
+        self.target_col = self.config.get('target_col', 'y')
+        self.is_fitted = False
 
     def __init__(
         self,
         model_size: str = "small",
-        context_length: int = 64,
+        context_length: int = 8,
         num_samples: int = 10,
     ):
         """

@@ -14,7 +14,7 @@ from benchmarking_pipeline.models.arima.arima_model import ARIMAModel
 from benchmarking_pipeline.models.theta.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.xgboost.xgboost_model import XGBoostModel
-from benchmarking_pipeline.models.random_forest_model import RandomForestModel
+from benchmarking_pipeline.models.random_forest.random_forest_model import RandomForestModel
 from benchmarking_pipeline.models.prophet.prophet_model import ProphetModel
 from benchmarking_pipeline.models.lstm.lstm_model import LSTMModel
 from benchmarking_pipeline.models.croston_classic.croston_classic_model import CrostonClassicModel
