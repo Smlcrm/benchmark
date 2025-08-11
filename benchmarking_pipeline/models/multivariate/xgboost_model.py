@@ -58,7 +58,8 @@ class MultivariateXGBoostModel(BaseModel):
 
     def _create_multivariate_features(self, y_series: np.ndarray, x_series: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Create advanced multivariate time series features for XGBoost.
+        Create simple multivariate time series features for XGBoost.
+        Uses basic lag features similar to SVR approach for consistency.
         
         Args:
             y_series: Target time series with shape (timesteps, n_targets)
@@ -79,66 +80,14 @@ class MultivariateXGBoostModel(BaseModel):
         targets = []
         
         for i in range(n_samples):
-            sample_features = []
-            
             # Get lookback window for all targets
             lookback_data = y_series[i:i + self.lookback_window]  # Shape: (lookback_window, n_targets)
             
-            # 1. Lag features for each target (flattened)
+            # Simple approach: just flatten the lookback window (same as SVR)
             lag_features = lookback_data.flatten()  # Shape: (lookback_window * n_targets,)
-            sample_features.extend(lag_features)
+            sample_features = list(lag_features)
             
-            # 2. Rolling statistics for each target individually
-            for target_idx in range(self.n_targets):
-                target_data = lookback_data[:, target_idx]
-                
-                # Basic statistics
-                rolling_mean = np.mean(target_data)
-                rolling_std = np.std(target_data)
-                rolling_min = np.min(target_data)
-                rolling_max = np.max(target_data)
-                rolling_median = np.median(target_data)
-                
-                # Trend features
-                trend = np.polyfit(range(self.lookback_window), target_data, 1)[0]
-                
-                # Volatility features
-                rolling_range = rolling_max - rolling_min
-                rolling_iqr = np.percentile(target_data, 75) - np.percentile(target_data, 25)
-                
-                sample_features.extend([
-                    rolling_mean, rolling_std, rolling_min, rolling_max, rolling_median,
-                    trend, rolling_range, rolling_iqr
-                ])
-            
-            # 3. Cross-correlation features between targets (if multivariate)
-            if self.n_targets > 1:
-                for i_target in range(self.n_targets):
-                    for j_target in range(i_target + 1, self.n_targets):
-                        # Correlation between target pairs
-                        corr = np.corrcoef(lookback_data[:, i_target], lookback_data[:, j_target])[0, 1]
-                        if np.isnan(corr):
-                            corr = 0.0  # Handle constant series
-                        sample_features.append(corr)
-                        
-                        # Ratio features
-                        mean_i = np.mean(lookback_data[:, i_target])
-                        mean_j = np.mean(lookback_data[:, j_target])
-                        if mean_j != 0:
-                            ratio = mean_i / mean_j
-                        else:
-                            ratio = 0.0
-                        sample_features.append(ratio)
-            
-            # 4. Temporal features (if window is large enough)
-            if self.lookback_window >= 7:
-                # Weekly patterns (last 7 values for each target)
-                recent_data = lookback_data[-7:]
-                for target_idx in range(self.n_targets):
-                    recent_mean = np.mean(recent_data[:, target_idx])
-                    sample_features.append(recent_mean)
-            
-            # 5. Add exogenous features if available
+            # Add exogenous features if available
             if x_series is not None and len(x_series) > i + self.lookback_window:
                 current_x = x_series[i + self.lookback_window]
                 sample_features.extend(current_x.flatten())
@@ -155,12 +104,10 @@ class MultivariateXGBoostModel(BaseModel):
         """
         Train the Multivariate XGBoost model for direct multi-output forecasting.
         
-        TECHNIQUE: Advanced Multivariate Feature Engineering with Gradient Boosting
-        - Creates lag features from all target variables
-        - Adds rolling statistics per target (mean, std, min, max, median, trend, range, IQR)
-        - Includes cross-correlation and ratio features between target pairs
-        - Incorporates temporal patterns (weekly means if window ≥ 7)
-        - Uses XGBoost's gradient boosting with MultiOutputRegressor for non-linear pattern learning
+        TECHNIQUE: Simple Lag-based Feature Engineering with Gradient Boosting
+        - Creates flattened lag features from all target variables (same approach as SVR)
+        - Uses XGBoost's gradient boosting for non-linear pattern learning across targets
+        - Maintains consistency with other multivariate models in the pipeline
         
         Args:
             y_context: Past target values (time series) - used for training (can be DataFrame for multivariate)
@@ -301,55 +248,15 @@ class MultivariateXGBoostModel(BaseModel):
             current_window = context[-self.lookback_window:]
             
             try:
-                # Create features using the current window
-                sample_features = []
+                # Create features using the current window (simplified)
+                current_window = context[-self.lookback_window:]
                 
-                # 1. Lag features (flattened)
+                # Simple approach: just flatten the lookback window
                 lag_features = current_window.flatten()
-                sample_features.extend(lag_features)
+                sample_features = list(lag_features)
                 
-                # 2. Rolling statistics for each target
-                for target_idx in range(self.n_targets):
-                    target_data = current_window[:, target_idx]
-                    
-                    rolling_mean = np.mean(target_data)
-                    rolling_std = np.std(target_data)
-                    rolling_min = np.min(target_data)
-                    rolling_max = np.max(target_data)
-                    rolling_median = np.median(target_data)
-                    trend = np.polyfit(range(self.lookback_window), target_data, 1)[0]
-                    rolling_range = rolling_max - rolling_min
-                    rolling_iqr = np.percentile(target_data, 75) - np.percentile(target_data, 25)
-                    
-                    sample_features.extend([
-                        rolling_mean, rolling_std, rolling_min, rolling_max, rolling_median,
-                        trend, rolling_range, rolling_iqr
-                    ])
-                
-                # 3. Cross-correlation features (if multivariate)
-                if self.n_targets > 1:
-                    for i_target in range(self.n_targets):
-                        for j_target in range(i_target + 1, self.n_targets):
-                            corr = np.corrcoef(current_window[:, i_target], current_window[:, j_target])[0, 1]
-                            if np.isnan(corr):
-                                corr = 0.0
-                            sample_features.append(corr)
-                            
-                            mean_i = np.mean(current_window[:, i_target])
-                            mean_j = np.mean(current_window[:, j_target])
-                            ratio = mean_i / mean_j if mean_j != 0 else 0.0
-                            sample_features.append(ratio)
-                
-                # 4. Temporal features (if applicable)
-                if self.lookback_window >= 7:
-                    recent_data = current_window[-7:]
-                    for target_idx in range(self.n_targets):
-                        recent_mean = np.mean(recent_data[:, target_idx])
-                        sample_features.append(recent_mean)
-                
-                # 5. Handle exogenous features (simplified - use last available)
+                # Add exogenous features if available (simplified)
                 if x_context is not None:
-                    # For simplicity, repeat the last exogenous values
                     if x_context.ndim == 1:
                         sample_features.extend(x_context[-1:])
                     else:
@@ -399,8 +306,8 @@ class MultivariateXGBoostModel(BaseModel):
         """
         Make predictions using the trained Multivariate XGBoost model.
         
-        TECHNIQUE: Autoregressive Rolling Window Multi-step Forecasting with Advanced Features
-        - Uses last lookback_window values to create comprehensive multivariate features
+        TECHNIQUE: Simple Autoregressive Rolling Window Multi-step Forecasting
+        - Uses last lookback_window values to create basic lag features
         - Predicts forecast_horizon steps ahead using trained MultiOutputRegressor
         - Uses its own predictions to update the window and predict further steps
         - Repeats until forecast_steps are reached
@@ -450,53 +357,11 @@ class MultivariateXGBoostModel(BaseModel):
         # Use last lookback_window values for single prediction
         current_window = y_context_vals[-self.lookback_window:]
         
-        # Create features (same logic as in rolling_predict)
-        sample_features = []
-        
-        # Lag features
+        # Create features (simplified - same as training)
         lag_features = current_window.flatten()
-        sample_features.extend(lag_features)
+        sample_features = list(lag_features)
         
-        # Rolling statistics for each target
-        for target_idx in range(self.n_targets):
-            target_data = current_window[:, target_idx]
-            
-            rolling_mean = np.mean(target_data)
-            rolling_std = np.std(target_data)
-            rolling_min = np.min(target_data)
-            rolling_max = np.max(target_data)
-            rolling_median = np.median(target_data)
-            trend = np.polyfit(range(self.lookback_window), target_data, 1)[0]
-            rolling_range = rolling_max - rolling_min
-            rolling_iqr = np.percentile(target_data, 75) - np.percentile(target_data, 25)
-            
-            sample_features.extend([
-                rolling_mean, rolling_std, rolling_min, rolling_max, rolling_median,
-                trend, rolling_range, rolling_iqr
-            ])
-        
-        # Cross-correlation features
-        if self.n_targets > 1:
-            for i_target in range(self.n_targets):
-                for j_target in range(i_target + 1, self.n_targets):
-                    corr = np.corrcoef(current_window[:, i_target], current_window[:, j_target])[0, 1]
-                    if np.isnan(corr):
-                        corr = 0.0
-                    sample_features.append(corr)
-                    
-                    mean_i = np.mean(current_window[:, i_target])
-                    mean_j = np.mean(current_window[:, j_target])
-                    ratio = mean_i / mean_j if mean_j != 0 else 0.0
-                    sample_features.append(ratio)
-        
-        # Temporal features
-        if self.lookback_window >= 7:
-            recent_data = current_window[-7:]
-            for target_idx in range(self.n_targets):
-                recent_mean = np.mean(recent_data[:, target_idx])
-                sample_features.append(recent_mean)
-        
-        # Exogenous features
+        # Add exogenous features if available
         if x_context_vals is not None:
             if x_context_vals.ndim == 1:
                 sample_features.extend(x_context_vals[-1:])
