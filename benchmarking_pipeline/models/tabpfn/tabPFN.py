@@ -1,11 +1,12 @@
 import pandas as pd
 import numpy as np
-from typing import List
+from typing import List, Tuple, Dict, Any, Optional, Union
 import warnings
 import os
 
 from tabpfn import TabPFNRegressor 
 from benchmarking_pipeline.models.foundation_model import FoundationModel
+import torch
 
 
 def make_time_features(n: int) -> pd.DataFrame:
@@ -24,13 +25,10 @@ def make_time_features(n: int) -> pd.DataFrame:
     return pd.DataFrame(features)
 
 
-class TabPFNForecaster:
+class TabPFNForecaster(FoundationModel):
 
     def __init__(
-        self,
-        n_ensemble_configs: int = 32,  # retained for compatibility, not used directly here
-        device: str = 'cpu',
-        allow_large_cpu_dataset: bool = False,
+        self, config: Dict[str, Any] = None, config_file: str = None
     ):
         """
         Initializes a TabPFN-TS forecaster
@@ -41,19 +39,11 @@ class TabPFNForecaster:
             allow_large_cpu_dataset (bool): If True, bypasses the default CPU sample limit by
                 setting ignore_pretraining_limits=True. Otherwise will error if >1000 samples.
         """
-        if device.startswith("cuda"):
-            try:
-                import torch
-                if not torch.cuda.is_available():
-                    warnings.warn("CUDA requested but not available; falling back to CPU.", UserWarning)
-                    device = "cpu"
-            except ImportError:
-                warnings.warn("PyTorch not installed; assuming CPU.", UserWarning)
-                device = "cpu"
-
-        self.device = device
-        self.allow_large_cpu_dataset = True
-        self.max_sequence_length = 1024
+        super().__init__(config, config_file)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.allow_large_cpu_dataset = self.config.get('allow_large_cpu_dataset', True)
+        self.max_sequence_length = self.config.get('max_sequence_length', 32)
+        self.prediction_length = self.config.get('prediction_length', 40)
 
         if self.device == "cpu" and self.allow_large_cpu_dataset:
             # optional convenience: set env var to mirror behavior
@@ -62,7 +52,7 @@ class TabPFNForecaster:
         print(f"Initialized TabPFN-TS-style forecaster on device '{self.device}' "
               f"(allow_large_cpu_dataset={self.allow_large_cpu_dataset})...")
 
-    def _build_tabular(self, y_history: np.ndarray, X_history: np.ndarray) -> (np.ndarray, np.ndarray):
+    def _build_tabular(self, y_history: np.ndarray, X_history: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """
         Given history of target and exogenous features, build tabular training matrix and target vector.
         """
@@ -76,8 +66,34 @@ class TabPFNForecaster:
         X = df.to_numpy()
         y = y_history
         return X, y
+    
+    def set_params(self, **params: Dict[str, Any]) -> 'TabPFNForecaster':
+        for key, value in params.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+        return self
 
-    def predict(
+    def predict(self,
+        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_target: Union[pd.Series, np.ndarray] = None,
+        y_context_timestamps = None,
+        y_target_timestamps = None,
+        **kwargs):
+        #print("HUH")
+        #print(y_target)
+        #print("YUHUHU?")
+        #print(y_target_timestamps[0].strftime('%Y-%m-%d %X'))
+        #raise Exception("UNgas")
+        #timestamp_strings = [ts.strftime('%Y-%m-%d %X') for ts in y_target_timestamps]
+        
+        # Construct DataFrame
+        columns = ['1']
+        df = pd.DataFrame(y_context, index=y_context_timestamps, columns=columns)
+        self.ctx = len(df)
+        results = self._sub_predict(df, '1', self.prediction_length)
+        return np.array(results)
+
+    def _sub_predict(
         self,
         df: pd.DataFrame,
         target_col: str,
@@ -111,7 +127,7 @@ class TabPFNForecaster:
 
         forecasts = []
 
-        for step in range(prediction_length):
+        for _ in range(prediction_length):
             # Build training data from current history
             X_train, y_train = self._build_tabular(y_history, X_full)
 

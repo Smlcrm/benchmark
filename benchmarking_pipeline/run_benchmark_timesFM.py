@@ -6,7 +6,7 @@ from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from torch.utils.tensorboard import SummaryWriter
 import time
-from benchmarking_pipeline.models.timesFM import TimesFmForecaster
+from benchmarking_pipeline.models.timesfm.timesFM import TimesFmForecaster
 import numpy as np
 import pandas as pd
 import re
