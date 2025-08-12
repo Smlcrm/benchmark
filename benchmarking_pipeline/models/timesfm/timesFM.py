@@ -10,6 +10,7 @@ class TimesFMModel(FoundationModel):
         super().__init__(config, config_file)
         self.model_path = self.config.get("model_path", "google/timesfm-1.0-200m")
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.per_core_batch_size = self.config.get("per_core_batch_size", 32)
         print(f"Loading TimesFM model: {self.model_path} to device '{self.device}'")
 
         self.model = timesfm.TimesFm(
