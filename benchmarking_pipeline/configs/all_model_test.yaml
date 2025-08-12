@@ -9,14 +9,19 @@ dataset:
   handle_missing: interpolate
   chunks: 2
 model:
-  # [TODO] chronos, lagllama, lstm, moment, prophet, random_forest, tabPFN, timesFM, xgboost
-  # [DONE] arima, theta, moirai, croston, seasonal naive, moirai moe, toto, svr, exponential smoothing
-  #name: ["random_forest;random_forest_model;RandomForestModel","chronos;chronos;ChronosForecaster"]
-  name: ["lstm;lstm_model;LSTMModel", "xgboost;xgboost_model;XGBoostModel", "prophet;prophet_model;ProphetModel", "random_forest;random_forest_model;RandomForestModel"]
+  # [TODO] chronos, lagllama, moment, tabPFN, timesFM
+  # [DONE] arima, theta, moirai, croston, seasonal naive, moirai moe, toto, svr, exponential smoothing, lstm, prophet, random_forest, xgboost
+  name: ["chronos;chronos;ChronosForecaster"]
+  #name: ["lstm;lstm_model;LSTMModel", "xgboost;xgboost_model;XGBoostModel", "prophet;prophet_model;ProphetModel", "random_forest;random_forest_model;RandomForestModel"]
   #name: ["exponential_smoothing;exponential_smoothing_model;ExponentialSmoothingModel", "svr_model;SVR_model;SVRModel"]
   #name: ["arima;arima_model;ARIMAModel", "theta;theta_model;ThetaModel", "moirai;moirai;MoiraiModel"]
   #name: ["croston_classic;croston_classic_model;CrostonClassicModel", "seasonal_naive;seasonal_naive_model;SeasonalNaiveModel", "moirai_moe;moirai;MoiraiModel", "toto;toto_model;TotoModel"]
   parameters:
+    chronos:
+      model_size: ['small']
+      context_length: [8]
+      num_samples: [5]
+      prediction_length: [40]
     xgboost:
       lookback_window: [10]
       forecast_horizon: [10]
