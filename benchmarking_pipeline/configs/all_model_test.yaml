@@ -11,12 +11,19 @@ dataset:
 model:
   # [TODO] chronos, lagllama, moment, tabPFN, timesFM
   # [DONE] arima, theta, moirai, croston, seasonal naive, moirai moe, toto, svr, exponential smoothing, lstm, prophet, random_forest, xgboost
-  name: ["tabpfn;tabPFN;TabPFNForecaster", "chronos;chronos;ChronosForecaster"]
+  name: ["timesfm;timesFM;TimesFMModel"]
+  #name: ["tabpfn;tabPFN;TabPFNForecaster", "chronos;chronos;ChronosForecaster"]
   #name: ["lstm;lstm_model;LSTMModel", "xgboost;xgboost_model;XGBoostModel", "prophet;prophet_model;ProphetModel", "random_forest;random_forest_model;RandomForestModel"]
   #name: ["exponential_smoothing;exponential_smoothing_model;ExponentialSmoothingModel", "svr_model;SVR_model;SVRModel"]
   #name: ["arima;arima_model;ARIMAModel", "theta;theta_model;ThetaModel", "moirai;moirai;MoiraiModel"]
   #name: ["croston_classic;croston_classic_model;CrostonClassicModel", "seasonal_naive;seasonal_naive_model;SeasonalNaiveModel", "moirai_moe;moirai;MoiraiModel", "toto;toto_model;TotoModel"]
   parameters:
+    timesfm:
+      per_core_batch_size: [2]
+      horizon_len: [40]
+      num_layers: [2]
+      context_len: [2]
+      use_positional_embedding: [False]
     tabpfn:
       allow_large_cpu_dataset: [True]
       max_sequence_length: [32]
