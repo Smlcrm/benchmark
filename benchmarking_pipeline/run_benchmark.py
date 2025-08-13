@@ -55,9 +55,6 @@ from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
-from benchmarking_pipeline.trainer.bayesian_hyperparameter_tuner import BayesianHyperparameterTuner
-from benchmarking_pipeline.trainer.successive_halving_tuner import SuccessiveHalvingTuner
-from benchmarking_pipeline.trainer.population_based_tuner import PopulationBasedTuner
 import numpy as np
 import pandas as pd
 import re
@@ -187,93 +184,18 @@ def log_preds_vs_true(writer, model_name, y_true, y_pred, step):
 
 def _create_hyperparameter_tuner(model_class, model_params, hp_tuning_method="grid"):
     """
-    Create appropriate hyperparameter tuner based on config format and method.
+    Create hyperparameter tuner - simplified to only use base grid search.
     
     Args:
         model_class: The model class instance
         model_params: Model parameters from config
-        hp_tuning_method: "grid", "bayesian", "successive_halving", or "pbt"
+        hp_tuning_method: Only "grid" is supported now
     
     Returns:
-        Appropriate hyperparameter tuner instance
+        HyperparameterTuner instance
     """
-    # Determine if we have range-based or list-based parameters
-    has_ranges = any(isinstance(v, dict) and 'min' in v and 'max' in v 
-                    for v in model_params.values())
-    
-    # Convert parameters to list format for all tuners
-    hyperparameter_ranges = {}
-    for param_name, param_value in model_params.items():
-        if isinstance(param_value, dict) and 'min' in param_value and 'max' in param_value:
-            # Range-based parameter
-            if param_value['type'] == 'int':
-                # Create list of integers in range
-                min_val, max_val = param_value['min'], param_value['max']
-                # Ensure Python integers
-                hyperparameter_ranges[param_name] = [int(x) for x in range(min_val, max_val + 1)]
-            elif param_value['type'] == 'float':
-                # For float ranges, create discrete choices
-                min_val, max_val = param_value['min'], param_value['max']
-                n_choices = min(15, int((max_val - min_val) * 10 + 1))  # Create reasonable number of choices
-                # Convert numpy floats to Python floats
-                hyperparameter_ranges[param_name] = [float(x) for x in np.linspace(min_val, max_val, n_choices)]
-        elif isinstance(param_value, list):
-            # List-based parameter (categorical or discrete)
-            # Convert to proper Python types
-            converted_list = []
-            for item in param_value:
-                if isinstance(item, (np.integer, np.floating)):
-                    if isinstance(item, np.integer):
-                        converted_list.append(int(item))
-                    else:
-                        converted_list.append(float(item))
-                elif isinstance(item, np.str_):
-                    converted_list.append(str(item))
-                else:
-                    converted_list.append(item)
-            hyperparameter_ranges[param_name] = converted_list
-        else:
-            # Single value parameter
-            hyperparameter_ranges[param_name] = [param_value]
-    
-    # Get search parameters from config
-    search_iterations = model_params.get('search_iterations', 15)
-    
-    if hp_tuning_method == "successive_halving":
-        print(f"Using Successive Halving hyperparameter tuning for {model_class.__class__.__name__}")
-        return SuccessiveHalvingTuner(
-            model_class=model_class,
-            hyperparameter_ranges=hyperparameter_ranges,
-            use_exog=False,
-            n_configurations=50,  # Start with many configurations
-            min_resources=1,      # Start with minimal resources
-            max_resources=10,     # End with full resources
-            reduction_factor=3    # Reduce by factor of 3 each round
-        )
-    
-    elif hp_tuning_method == "pbt" and "lstm" in model_class.__class__.__name__.lower():
-        print(f"Using Population-Based Training for {model_class.__class__.__name__}")
-        return PopulationBasedTuner(
-            model_class=model_class,
-            hyperparameter_ranges=hyperparameter_ranges,
-            use_exog=False,
-            population_size=8,
-            num_generations=10
-        )
-    
-    elif hp_tuning_method == "bayesian" or has_ranges:
-        print(f"Using Bayesian hyperparameter tuning for {model_class.__class__.__name__}")
-        return BayesianHyperparameterTuner(
-            model_class=model_class,
-            hyperparameter_ranges=hyperparameter_ranges,
-            use_exog=False,
-            n_iterations=search_iterations
-        )
-    
-    else:
-        # Use grid search for list-based parameters
-        print(f"Using grid search hyperparameter tuning for {model_class.__class__.__name__}")
-        return HyperparameterTuner(model_class, model_params, False)
+    print(f"Using grid search hyperparameter tuning for {model_class.__class__.__name__}")
+    return HyperparameterTuner(model_class, model_params, False)
 
 def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
     dataset_name = config['dataset']['name']
@@ -320,16 +242,9 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(arima_model, arima_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else arima_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(arima_params.keys())}
     # Cast p, d, q to int if present
     for k in ['p', 'd', 'q']:
         if k in best_hyperparameters_dict:
@@ -395,16 +310,9 @@ def run_theta(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(theta_model, theta_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else theta_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(theta_params.keys())}
     for k in ['sp', 'forecast_horizon']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -469,16 +377,9 @@ def run_deep_ar(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(deep_ar_model, deep_ar_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else deep_ar_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(deep_ar_params.keys())}
     for k in ['hidden_size', 'rnn_layers', 'batch_size', 'epochs', 'forecast_horizon', 'num_workers']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -542,16 +443,9 @@ def run_xgboost(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(xgb_model, xgb_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else xgb_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(xgb_params.keys())}
     for k in ['lookback_window', 'forecast_horizon', 'n_estimators', 'max_depth', 'random_state', 'n_jobs']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -611,16 +505,9 @@ def run_random_forest(all_dataset_chunks, writer=None, config=None, config_path=
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(rf_model, rf_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else rf_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(rf_params.keys())}
     for k in ['lookback_window', 'forecast_horizon', 'n_estimators', 'max_depth', 'random_state', 'n_jobs']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -698,16 +585,9 @@ def run_prophet(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(prophet_model, prophet_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: cast_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else prophet_params.keys())}
+    best_hyperparameters_dict = {k: cast_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(prophet_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
     print(f"Final Evaluation Prophet {dataset_name}: {results}")
     if writer is not None:
@@ -765,14 +645,7 @@ def run_croston_classic(all_dataset_chunks, writer=None, config=None, config_pat
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(croston_model, croston_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     results = tuner.final_evaluation({"alpha": 0.1}, all_dataset_chunks)
     print(f"Final Evaluation CrostonClassic {dataset_name}: {results}")
@@ -853,16 +726,9 @@ def run_lstm(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(lstm_model, lstm_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else lstm_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(lstm_params.keys())}
     for k in ['units', 'layers', 'batch_size', 'epochs', 'sequence_length', 'forecast_horizon']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -901,26 +767,20 @@ def run_svr(all_dataset_chunks, writer=None, config=None, config_path=None):
     dataset_name = config['dataset']['name']
     svr_params = config['model']['parameters']['SVR']
     
-    # Check if we have multivariate data
-    is_multivariate = False
+    # SVR uses MultiOutputRegressor internally, so no need for MultivariateWrapper
+    # Just set the target column appropriately
     if len(all_dataset_chunks) > 0:
         available_targets = list(all_dataset_chunks[0].train.targets.columns)
         print(f"[DEBUG] Available targets: {available_targets}")
-        is_multivariate = len(available_targets) > 1 or (len(available_targets) == 1 and available_targets[0] != 'y')
-        print(f"[DEBUG] Is multivariate: {is_multivariate}")
         
-        if is_multivariate:
-            print(f"[DEBUG] Using MultivariateWrapper for SVR")
+        if 'target_0' in available_targets:
+            svr_params['target_col'] = 'target_0'
+            print(f"[DEBUG] Using target_col: target_0")
+        elif 'y' not in available_targets and len(available_targets) > 0:
+            svr_params['target_col'] = available_targets[0]
+            print(f"[DEBUG] Using target_col: {available_targets[0]}")
         else:
-            # Univariate case - use original logic
-            if 'target_0' in available_targets:
-                svr_params['target_col'] = 'target_0'
-                print(f"[DEBUG] Using target_col: target_0")
-            elif 'y' not in available_targets and len(available_targets) > 0:
-                svr_params['target_col'] = available_targets[0]
-                print(f"[DEBUG] Using target_col: {available_targets[0]}")
-            else:
-                print(f"[DEBUG] No target column detection needed, using default")
+            print(f"[DEBUG] Using default target_col: y")
     def cast_svr_param(key, value):
         # Handle range-based parameters (dictionaries)
         if isinstance(value, dict):
@@ -948,30 +808,17 @@ def run_svr(all_dataset_chunks, writer=None, config=None, config_path=None):
             model_params[k] = cast_svr_param(k, v)
         else:
             model_params[k] = cast_svr_param(k, v)
-    if is_multivariate:
-        # Use multivariate wrapper
-        from benchmarking_pipeline.models.multivariate_wrapper import MultivariateWrapper
-        svr_model = MultivariateWrapper(SVRModel, model_params)
-        print(f"[DEBUG] Created MultivariateWrapper for SVR")
-    else:
-        # Use regular model
-        svr_model = SVRModel(model_params)
-        print(f"[DEBUG] SVR model target_col: {svr_model.target_col}")
+    # Use regular SVR model (it handles multivariate via MultiOutputRegressor)
+    svr_model = SVRModel(model_params)
+    print(f"[DEBUG] SVR model target_col: {svr_model.target_col}")
     
     # Create appropriate tuner
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(svr_model, svr_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: cast_svr_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else svr_params.keys())}
+    best_hyperparameters_dict = {k: cast_svr_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(svr_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
     print(f"Final Evaluation SVR {dataset_name}: {results}")
     if writer is not None:
@@ -980,26 +827,12 @@ def run_svr(all_dataset_chunks, writer=None, config=None, config_path=None):
         chunk = all_dataset_chunks[0]
         lookback_window = svr_model.lookback_window if hasattr(svr_model, 'lookback_window') else 10
         
-        if is_multivariate:
-            # Multivariate case - use all targets
-            all_targets_true = chunk.test.targets.values
-            y_context = chunk.train.targets
-            y_target = chunk.test.targets
-            full_preds = svr_model.predict(y_context=y_context, y_target=y_target)
-            log_preds_vs_true(writer, 'SVR', all_targets_true, full_preds, 9)
-        else:
-            # Univariate case - use original logic
-            all_targets_true = chunk.test.targets.values
-            y_context = chunk.train.targets.iloc[:, 0].values[-lookback_window:]
-            y_target = chunk.test.targets.iloc[:, 0].values
-            full_preds = svr_model.predict(y_context=y_context, y_target=y_target)
-            # Create predictions array that matches all targets shape
-            if all_targets_true.ndim == 2:
-                all_targets_pred = np.full_like(all_targets_true, np.nan)
-                all_targets_pred[:, 0] = full_preds  # Put predictions in first column
-            else:
-                all_targets_pred = full_preds
-            log_preds_vs_true(writer, 'SVR', all_targets_true, all_targets_pred, 9)
+        # SVR handles both univariate and multivariate data natively
+        all_targets_true = chunk.test.targets.values
+        y_context = chunk.train.targets
+        y_target = chunk.test.targets
+        full_preds = svr_model.predict(y_context=y_context, y_target=y_target)
+        log_preds_vs_true(writer, 'SVR', all_targets_true, full_preds, 9)
     os.makedirs('results', exist_ok=True)
     pd.DataFrame([results]).to_csv(f'results/SVR_{dataset_name}_{time.strftime("%Y%m%d-%H%M%S")}.csv', index=False)
     print("SVR WORKS!")
@@ -1094,16 +927,9 @@ def run_exponential_smoothing(all_dataset_chunks, writer=None, config=None, conf
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(es_model, es_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else es_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(es_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
     print(f"Final Evaluation ExponentialSmoothing {dataset_name}: {results}")
     if writer is not None:

@@ -3,6 +3,10 @@
 
 echo "🚀 Installing SMLCRM Benchmark Pipeline..."
 
+# Set PYTHONPATH to include current directory
+echo "🔧 Setting PYTHONPATH..."
+export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+
 # Install the package in development mode (includes requirements.txt)
 echo "📦 Installing package and dependencies..."
 pip install -e .
