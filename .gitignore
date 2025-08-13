@@ -24,6 +24,9 @@ wheels/
 venv/
 env/
 ENV/
+benchmark/
+.venv/
+.env/
 
 # IDE
 .idea/
@@ -43,3 +46,53 @@ runs/
 benchmarking_pipeline/trainer/bayesian_hyperparameter_tuner.py
 benchmarking_pipeline/trainer/population_based_tuner.py
 benchmarking_pipeline/trainer/successive_halving_tuner.py
+
+# ===== HIGH PRIORITY CLUTTER PREVENTION =====
+
+# Experiment logs and results (generated at runtime)
+runs/
+logs/
+results/
+outputs/
+checkpoints/
+
+# External libraries and embedded code
+benchmarking_pipeline/models/toto/
+benchmarking_pipeline/models/*/toto/
+benchmarking_pipeline/models/*/boom/
+
+# System files
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# Large data files
+*.csv
+*.json
+*.pkl
+*.h5
+*.hdf5
+*.parquet
+*.feather
+
+# Model checkpoints and weights
+*.ckpt
+*.pth
+*.pt
+*.h5
+*.hdf5
+*.onnx
+*.pb
+
+# Logs and monitoring
+tensorboard_logs/
+wandb/
+mlruns/
+mlflow/
+
+# Cache and temporary files
+.cache/
+.tmp/
+temp/
+tmp/
