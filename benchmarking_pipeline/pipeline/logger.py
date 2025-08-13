@@ -3,6 +3,12 @@ import os
 from datetime import datetime
 import pandas as pd
 import numpy as np
+
+# Configure TensorFlow threading before import
+os.environ.setdefault('TF_NUM_INTEROP_THREADS', '1')
+os.environ.setdefault('TF_NUM_INTRAOP_THREADS', '1')
+os.environ.setdefault('TF_CPP_MIN_LOG_LEVEL', '2')
+
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 
