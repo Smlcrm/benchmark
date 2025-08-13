@@ -30,43 +30,31 @@ class LagLlamaModel(FoundationModel):
             config: Configuration dictionary containing:
                 - checkpoint_path: str, path to checkpoint (default: "lag-llama.ckpt")
                 - context_length: int, context window size (default: 128)
-                - num_samples: int, number of probabilistic samples (default: 100)
+                - prediction_length: int, number of time series elements to predict (30)
+                - num_samples: int, number of probabilistic samples (default: 5)
                 - device: str, device to use (default: "auto")
-                - auto_setup: bool, whether to auto-setup if not found (default: True)
             config_file: Path to JSON config file
         """
-        # Set default config
-        default_config = {
-            'checkpoint_path': 'lag-llama.ckpt',
-            'context_length': 128,
-            'num_samples': 100,
-            'device': 'auto',
-            'auto_setup': True,
-            'forecast_horizon': 30,
-            'loss_functions': ['mae', 'mse', 'rmse', 'mape'],
-            'primary_loss': 'mae',
-            'target_col': 'y'
-        }
-        
-        if config:
-            default_config.update(config)
         
         # Initialize base model
-        super().__init__(default_config, config_file)
+        super().__init__(config, config_file)
         
         # Set up device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if self.config['device'] == "auto" else torch.device(self.config['device'])
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Model-specific attributes
-        self.checkpoint_path = self.config['checkpoint_path']
-        self.context_length = self.config['context_length']
-        self.num_samples = self.config['num_samples']
-        self._predictor = None
+        self.prediction_length = self.config.get('prediction_length', 30)
+        self.context_length = self.config.get('context_length', 4)
+        self.num_samples = self.config.get('num_samples', 5)
+        self.batch_size = self.config.get('batch_size', 4)
+        self.target_col = self.config.get('target_col', 'y')
         
         print(f"🦙 Lag-Llama initialized - Device: {self.device}, Context: {self.context_length}")
     
     def _create_predictor_for_horizon(self, prediction_length: int):
         """Create a predictor with specific prediction length"""
+
+        """
         try:
             # Load checkpoint
             ckpt = torch.load(self.checkpoint_path, map_location=self.device, weights_only=False)
@@ -103,31 +91,31 @@ class LagLlamaModel(FoundationModel):
             # Create predictor
             transformation = estimator.create_transformation()
             return estimator.create_predictor(transformation, lightning_module)
-            
+        
         except Exception as e:
-            print(f"⚠️  Error creating predictor: {e}")
-            # Fallback
-            estimator = LagLlamaEstimator(
-                ckpt_path=None,
-                prediction_length=prediction_length,
-                context_length=self.context_length,
-                rope_scaling={"type": "linear", "factor": 2.0},
-                batch_size=1,
-                num_parallel_samples=self.num_samples,
-                device=self.device,
-            )
-            
-            lightning_module = estimator.create_lightning_module()
-            transformation = estimator.create_transformation()
-            return estimator.create_predictor(transformation, lightning_module)
+            print(f"⚠️  Error creating predictor: {e}")"""
+        
+        # Fallback
+        estimator = LagLlamaEstimator(
+            ckpt_path=None,
+            prediction_length=self.prediction_length,
+            context_length=self.context_length,
+            rope_scaling={"type": "linear", "factor": 2.0},
+            batch_size=self.batch_size,
+            num_parallel_samples=self.num_samples,
+            device=self.device,
+        )
+        
+        lightning_module = estimator.create_lightning_module()
+        transformation = estimator.create_transformation()
+        return estimator.create_predictor(transformation, lightning_module)
     
-    def predict(
-        self,
+    def predict(self,
         y_context: Optional[Union[pd.Series, np.ndarray]] = None,
-        x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-        x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-        forecast_horizon: Optional[int] = None
-    ) -> np.ndarray:
+        y_target: Union[pd.Series, np.ndarray] = None,
+        y_context_timestamps = None,
+        y_target_timestamps = None,
+        **kwargs) -> np.ndarray:
         """
         Make predictions using Lag-Llama.
         
@@ -140,13 +128,11 @@ class LagLlamaModel(FoundationModel):
         Returns:
             np.ndarray: Predictions with shape (forecast_horizon,)
         """
-        if not self.is_fitted:
-            raise ValueError("Model must be trained before prediction")
         
         if y_context is None:
             raise ValueError("y_context is required for prediction")
         
-        horizon = forecast_horizon or self.forecast_horizon
+        horizon = self.prediction_length
         
         # Convert input to DataFrame format
         if isinstance(y_context, pd.Series):
@@ -164,6 +150,7 @@ class LagLlamaModel(FoundationModel):
             return np.array(results['series_0'])
         else:
             # Fallback
+            print("[DEBUG] We return an array of all zeros here for lag llama")
             return np.zeros(horizon)
     
     def _predict_internal(
