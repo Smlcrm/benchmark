@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, List, Any, Optional, Union
 from .base_model import BaseModel
-from .evaluator import Evaluator
+from ..pipeline.evaluator import Evaluator
 
 
 class MultivariateWrapper(BaseModel):
