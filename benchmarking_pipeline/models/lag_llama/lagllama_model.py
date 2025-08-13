@@ -11,19 +11,12 @@ from gluonts.dataset.pandas import PandasDataset
 from gluonts.evaluation import make_evaluation_predictions
 from benchmarking_pipeline.models.foundation_model import FoundationModel
 
-# Import base model (adjust path as needed)
-from .base_model import BaseModel
+from benchmarking_pipeline.models.lag_llama.lag_llama.gluon.estimator import LagLlamaEstimator
 
 # Try to import lag_llama, install if not available
-try:
-    from lag_llama.gluon.estimator import LagLlamaEstimator
-except ImportError:
-    print("Lag-Llama not found. Setting up automatically...")
-    LagLlamaModel._setup_lag_llama()
-    from lag_llama.gluon.estimator import LagLlamaEstimator
 
 
-class LagLlamaModel(BaseModel):
+class LagLlamaModel(FoundationModel):
     """
     Lag-Llama model implementation that inherits from BaseModel.
     Works seamlessly like TimesFM with automatic setup.
@@ -70,115 +63,7 @@ class LagLlamaModel(BaseModel):
         self.num_samples = self.config['num_samples']
         self._predictor = None
         
-        # Auto-setup if needed
-        if self.config['auto_setup']:
-            self._ensure_setup()
-        
         print(f"🦙 Lag-Llama initialized - Device: {self.device}, Context: {self.context_length}")
-    
-    @staticmethod
-    def _setup_lag_llama():
-        """Set up Lag-Llama from scratch - static method for early import"""
-        print("🔧 Setting up Lag-Llama environment...")
-        
-        try:
-            # Check if lag-llama directory exists
-            if not os.path.exists("lag-llama"):
-                print("📥 Cloning Lag-Llama repository (update-gluonts branch)...")
-                subprocess.run([
-                    "git", "clone", "-b", "update-gluonts", 
-                    "https://github.com/time-series-foundation-models/lag-llama/"
-                ], check=True)
-            
-            # Change to lag-llama directory and install requirements
-            original_dir = os.getcwd()
-            os.chdir("lag-llama")
-            
-            try:
-                print("📦 Installing requirements...")
-                subprocess.run([
-                    sys.executable, "-m", "pip", "install", "-r", "requirements.txt"
-                ], check=True)
-                
-                print("🔥 Updating PyTorch...")
-                subprocess.run([
-                    sys.executable, "-m", "pip", "install", "-U", "torch", "torchvision"
-                ], check=True)
-                
-                print("📥 Downloading checkpoint with Hugging Face CLI...")
-                subprocess.run([
-                    "huggingface-cli", "download", "time-series-foundation-models/Lag-Llama", 
-                    "lag-llama.ckpt", "--local-dir", "."
-                ], check=True)
-                
-            finally:
-                os.chdir(original_dir)
-            
-            print("✅ Lag-Llama setup complete!")
-            return True
-            
-        except subprocess.CalledProcessError as e:
-            print(f"❌ Setup failed: {e}")
-            print("💡 Manual setup instructions:")
-            print("git clone -b update-gluonts https://github.com/time-series-foundation-models/lag-llama/")
-            print("cd lag-llama")
-            print("pip install -r requirements.txt")
-            print("pip install -U torch torchvision")
-            print("huggingface-cli download time-series-foundation-models/Lag-Llama lag-llama.ckpt --local-dir .")
-            return False
-        except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            return False
-    
-    def _ensure_setup(self):
-        """Ensure Lag-Llama is properly set up"""
-        # Check if checkpoint exists, download if needed
-        if not os.path.exists(self.checkpoint_path):
-            print(f"📥 Downloading checkpoint to {self.checkpoint_path}...")
-            self._download_checkpoint()
-        
-        if not os.path.exists(self.checkpoint_path):
-            raise FileNotFoundError(
-                f"Checkpoint file not found at {self.checkpoint_path}. "
-                "Please download from: https://huggingface.co/time-series-foundation-models/Lag-Llama/resolve/main/lag-llama.ckpt"
-            )
-    
-    def _download_checkpoint(self):
-        """Download the Lag-Llama checkpoint file using Hugging Face CLI"""
-        try:
-            print("📥 Downloading checkpoint using Hugging Face CLI...")
-            result = subprocess.run([
-                "huggingface-cli", "download", "time-series-foundation-models/Lag-Llama", 
-                "lag-llama.ckpt", "--local-dir", "."
-            ], capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                print(f"✅ Checkpoint downloaded to {self.checkpoint_path}")
-            else:
-                raise Exception(f"Hugging Face CLI failed: {result.stderr}")
-                
-        except Exception as e:
-            print(f"❌ HF CLI download failed: {e}")
-            print("🔄 Trying alternative download methods...")
-            
-            try:
-                # Fallback to direct download
-                import wget
-                url = "https://huggingface.co/time-series-foundation-models/Lag-Llama/resolve/main/lag-llama.ckpt"
-                wget.download(url, self.checkpoint_path)
-                print(f"\n✅ Checkpoint downloaded to {self.checkpoint_path}")
-            except ImportError:
-                # Final fallback to curl
-                url = "https://huggingface.co/time-series-foundation-models/Lag-Llama/resolve/main/lag-llama.ckpt"
-                result = subprocess.run([
-                    "curl", "-L", url, "-o", self.checkpoint_path
-                ], capture_output=True, text=True)
-                if result.returncode == 0:
-                    print(f"✅ Checkpoint downloaded to {self.checkpoint_path}")
-                else:
-                    print(f"❌ All download methods failed")
-                    print("Please manually download from:")
-                    print("https://huggingface.co/time-series-foundation-models/Lag-Llama/resolve/main/lag-llama.ckpt")
     
     def _create_predictor_for_horizon(self, prediction_length: int):
         """Create a predictor with specific prediction length"""
@@ -235,44 +120,6 @@ class LagLlamaModel(BaseModel):
             lightning_module = estimator.create_lightning_module()
             transformation = estimator.create_transformation()
             return estimator.create_predictor(transformation, lightning_module)
-    
-    def train(self, 
-              y_context: Optional[Union[pd.Series, np.ndarray]], 
-              x_context: Optional[Union[pd.Series, np.ndarray]] = None, 
-              y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
-              x_target: Optional[Union[pd.Series, np.ndarray]] = None,
-              y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None
-    ) -> 'LagLlamaModel':
-        """
-        Lag-Llama is pre-trained, so this method just validates inputs and sets fitted status.
-        
-        Args:
-            y_context: Historical target values
-            x_context: Historical exogenous variables (ignored by Lag-Llama)
-            y_target: Future target values (for validation)
-            x_target: Future exogenous variables (ignored by Lag-Llama)
-            y_start_date: Start date for y data
-            x_start_date: Start date for x data
-            
-        Returns:
-            self: The model instance
-        """
-        if y_context is None:
-            raise ValueError("y_context is required for Lag-Llama")
-        
-        # Convert to appropriate format
-        if isinstance(y_context, pd.Series):
-            y_context = y_context.values
-        
-        if len(y_context) < 10:
-            warnings.warn("Very short time series may lead to poor predictions")
-        
-        # Lag-Llama is pre-trained, so we just mark as fitted
-        self.is_fitted = True
-        
-        print("✅ Model ready (pre-trained)")
-        return self
     
     def predict(
         self,
