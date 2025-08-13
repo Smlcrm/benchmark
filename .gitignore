@@ -35,6 +35,9 @@ ENV/
 outputs/
 *.log
 lightning_logs/
+logs/
+results/
+runs/
 
 # Hyperparameter tuners
 benchmarking_pipeline/trainer/bayesian_hyperparameter_tuner.py

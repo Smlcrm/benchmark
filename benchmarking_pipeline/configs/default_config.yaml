@@ -1,7 +1,7 @@
 test_type: deterministic
 dataset:
   name: taxi_30min
-  path: datasets/taxi_30min
+  path: benchmarking_pipeline/datasets/taxi_30min
   frequency: 30T
   forecast_horizon: 24
   split_ratio: [0.6, 0.2, 0.2]
