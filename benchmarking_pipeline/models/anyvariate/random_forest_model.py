@@ -37,7 +37,6 @@ class RandomForestModel(BaseModel):
             if key not in ['lookback_window', 'forecast_horizon', 'target_cols']:
                 model_params[key] = value
 
-        # Filter out keys that are not valid for RandomForestRegressor
         valid_keys = set(RandomForestRegressor().get_params().keys())
         filtered_params = {k: v for k, v in model_params.items() if k in valid_keys}
 
@@ -45,7 +44,7 @@ class RandomForestModel(BaseModel):
             filtered_params['random_state'] = 42
 
         if 'n_jobs' not in filtered_params:
-            filtered_params['n_jobs'] = -1
+            filtered_params['n_jobs'] = 1  # Default to single-threaded to prevent mutex conflicts
             
         # Create single RandomForestRegressor that handles both univariate and multivariate
         self.model = RandomForestRegressor(**filtered_params)
