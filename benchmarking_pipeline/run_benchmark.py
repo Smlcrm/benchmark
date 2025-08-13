@@ -2,6 +2,42 @@
 Main script for orchestrating the end-to-end benchmarking pipeline.
 """
 
+# Set threading environment variables BEFORE any imports
+import os
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
+
+# Configure TensorFlow threading BEFORE import
+os.environ['TF_NUM_INTEROP_THREADS'] = '1'
+os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TF logging
+
+# Disable TensorFlow GPU if not needed (prevents GPU mutex conflicts)
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+def configure_tensorflow():
+    """Configure TensorFlow to prevent threading conflicts."""
+    try:
+        import tensorflow as tf
+        # Configure TensorFlow threading
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+        tf.config.threading.set_intra_op_parallelism_threads(1)
+        
+        # Disable GPU if available to prevent GPU mutex conflicts
+        tf.config.set_visible_devices([], 'GPU')
+        
+        print("[INFO] TensorFlow configured for single-threaded operation")
+    except ImportError:
+        # TensorFlow not available, skip configuration
+        pass
+    except Exception as e:
+        print(f"[WARNING] TensorFlow configuration failed: {e}")
+
+# Configure TensorFlow early
+configure_tensorflow()
+
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from benchmarking_pipeline.pipeline.feature_extraction import FeatureExtractor
