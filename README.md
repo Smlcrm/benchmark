@@ -2,6 +2,30 @@
 
 A flexible and modular benchmarking pipeline for machine learning models with comprehensive support for both univariate and multivariate time series forecasting.
 
+## Quick Start
+
+### Installation
+
+1. **One-command setup** (installs package + dependencies):
+   ```bash
+   ./install.sh
+   ```
+
+2. **Manual setup**:
+   ```bash
+   pip install -e .
+   ```
+
+### Running Benchmarks
+
+```bash
+# Run Random Forest test
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/random_forest_test.yaml
+
+# Run multivariate benchmark (SVR, LSTM, Random Forest)
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/multivariate_forecast_horizon_config.yaml
+```
+
 ## Project Structure
 
 ```
