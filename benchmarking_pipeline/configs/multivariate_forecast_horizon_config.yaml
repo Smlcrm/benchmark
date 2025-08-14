@@ -1,4 +1,5 @@
 test_type: deterministic
+tensorboard: true
 dataset:
   name: BEIJING_SUBWAY_30MIN
   path: benchmarking_pipeline/datasets/BEIJING_SUBWAY_30MIN
@@ -10,13 +11,13 @@ dataset:
   chunks: 3
   num_targets: 2
 model:
-  name: ["lstm"]
+  name: ["arima", "lstm"]
   parameters:
     ARIMA:
-      p: [0, 1, 2]
+      p: [1, 2]
       d: [0, 1]
-      q: [0, 1, 2]
-      target_col: ["y"]
+      maxlags: [10]
+      target_cols: ["target_0", "target_1"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
       forecast_horizon: [50]
@@ -47,8 +48,11 @@ model:
       n_jobs: [-1]
     Theta:
       sp: [1, 2, 3]
-      forecast_horizon: [10]
+      forecast_horizon: [50]
       method: ["additive"]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
     XGBoost:
       lookback_window: [50, 100]
       forecast_horizon: [50]

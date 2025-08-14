@@ -1,4 +1,5 @@
 test_type: deterministic
+tensorboard: true
 dataset:
   name: australian_electricity_demand
   path: benchmarking_pipeline/datasets/australian_electricity_demand

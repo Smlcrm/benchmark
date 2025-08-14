@@ -55,6 +55,7 @@ from benchmarking_pipeline.pipeline.logger import Logger
 from torch.utils.tensorboard import SummaryWriter
 import time
 from benchmarking_pipeline.models.arima_model import ARIMAModel
+from benchmarking_pipeline.models.multivariate.arima_model import MultivariateARIMAModel
 from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.xgboost_model import XGBoostModel
@@ -313,7 +314,21 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
         else:
             model_params[k] = value
     print(f"[DEBUG] ARIMA model_params: {model_params}")
-    arima_model = ARIMAModel(model_params)
+    
+    # Check if this is a multivariate dataset
+    is_multivariate = False
+    if len(all_dataset_chunks) > 0:
+        available_targets = list(all_dataset_chunks[0].train.targets.columns)
+        is_multivariate = len(available_targets) > 1 or any('target_' in col for col in available_targets)
+    
+    if is_multivariate:
+        # Use multivariate ARIMA model
+        arima_model = MultivariateARIMAModel(model_params)
+        print(f"[DEBUG] Created MultivariateARIMAModel")
+    else:
+        # Use regular univariate ARIMA model
+        arima_model = ARIMAModel(model_params)
+        print(f"[DEBUG] Created univariate ARIMAModel")
     
     # Create appropriate tuner
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
@@ -331,18 +346,29 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
     if writer is not None:
         for metric, value in results.items():
             writer.add_scalar('ARIMA/' + metric, value, 1)
-        y_true, y_pred = arima_model.get_last_eval_true_pred()
-        # Get all targets from the dataset for comprehensive plotting
-        all_targets_true = all_dataset_chunks[0].test.targets.values
-        # For multivariate datasets, we need to handle the case where predictions are only for one target
-        if all_targets_true.ndim == 2 and y_pred.ndim == 1:
-            # Create a predictions array that matches the shape of all targets
-            # Fill with NaN for targets we don't have predictions for
-            all_targets_pred = np.full_like(all_targets_true, np.nan)
-            all_targets_pred[:, 0] = y_pred  # Put predictions in first column
+        
+        # Check if this is multivariate ARIMA by model type
+        if isinstance(arima_model, MultivariateARIMAModel):
+            # Multivariate case - use all targets
+            all_targets_true = all_dataset_chunks[0].test.targets.values
+            y_context = all_dataset_chunks[0].train.targets
+            y_target = all_dataset_chunks[0].test.targets
+            full_preds = arima_model.predict(y_context=y_context, y_target=y_target)
+            log_preds_vs_true(writer, 'ARIMA', all_targets_true, full_preds, 1)
         else:
-            all_targets_pred = y_pred
-        log_preds_vs_true(writer, 'ARIMA', all_targets_true, all_targets_pred, 1)
+            # Univariate case - use original logic
+            y_true, y_pred = arima_model.get_last_eval_true_pred()
+            # Get all targets from the dataset for comprehensive plotting
+            all_targets_true = all_dataset_chunks[0].test.targets.values
+            # For multivariate datasets, we need to handle the case where predictions are only for one target
+            if all_targets_true.ndim == 2 and y_pred.ndim == 1:
+                # Create a predictions array that matches the shape of all targets
+                # Fill with NaN for targets we don't have predictions for
+                all_targets_pred = np.full_like(all_targets_true, np.nan)
+                all_targets_pred[:, 0] = y_pred  # Put predictions in first column
+            else:
+                all_targets_pred = y_pred
+            log_preds_vs_true(writer, 'ARIMA', all_targets_true, all_targets_pred, 1)
     os.makedirs('results', exist_ok=True)
     pd.DataFrame([results]).to_csv(f'results/ARIMA_{dataset_name}_{time.strftime("%Y%m%d-%H%M%S")}.csv', index=False)
     print("ARIMA WORKS!")
