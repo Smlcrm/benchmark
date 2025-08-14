@@ -4,6 +4,14 @@ Main script for orchestrating the end-to-end benchmarking pipeline.
 
 # Set threading environment variables BEFORE any imports
 import os
+import sys
+
+# Add the parent directory to Python path to allow imports when running from root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
 os.environ['OMP_NUM_THREADS'] = '1'
 os.environ['OPENBLAS_NUM_THREADS'] = '1'
 os.environ['MKL_NUM_THREADS'] = '1'
@@ -67,6 +75,7 @@ from benchmarking_pipeline.models.SVR_model import SVRModel
 from benchmarking_pipeline.models.seasonal_naive_model import SeasonalNaiveModel
 from benchmarking_pipeline.models.exponential_smoothing_model import ExponentialSmoothingModel
 import argparse
+import sys
 
 class BenchmarkRunner:
     def __init__(self, config, config_path=None):
@@ -79,47 +88,115 @@ class BenchmarkRunner:
         self.config = config
         self.config_path = config_path
         self.logger = Logger(config)
+        self.verbose = config.get('verbose', False)
+        self.tensorboard = config.get('tensorboard', False)
         
     def run(self):
         """Execute the end-to-end benchmarking pipeline."""
         # Determine config file name for logging
         config_file_name = os.path.splitext(os.path.basename(self.config_path))[0] if self.config_path else 'unknown_config'
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        writer = SummaryWriter(log_dir=f"runs/benchmark_runner_{config_file_name}_{timestamp}")
+        
+        # Set up TensorBoard writer
+        if self.tensorboard:
+            writer = SummaryWriter(log_dir=f"runs/benchmark_runner_{config_file_name}_{timestamp}")
+            if self.verbose:
+                self.logger.log_info(f"TensorBoard writer initialized: runs/benchmark_runner_{config_file_name}_{timestamp}")
+        else:
+            writer = None
+            if self.verbose:
+                self.logger.log_info("TensorBoard logging disabled")
+        
         # Load dataset config
         dataset_cfg = self.config['dataset']
         dataset_path = dataset_cfg['path']
         dataset_name = dataset_cfg['name']
         split_ratio = dataset_cfg.get('split_ratio', [0.8, 0.1, 0.1])
-        # Use 'chunks' from config, default to 1 if not present
         num_chunks = dataset_cfg.get('chunks', 1)
+        
+        if self.verbose:
+            self.logger.log_info(f"Loading dataset: {dataset_name}")
+            self.logger.log_info(f"Dataset path: {dataset_path}")
+            self.logger.log_info(f"Number of chunks: {num_chunks}")
+            self.logger.log_info(f"Split ratio: {split_ratio}")
+        
         data_loader = DataLoader({"dataset": {
             "path": dataset_path,
             "name": dataset_name,
             "split_ratio": split_ratio
         }})
+        
         all_dataset_chunks = data_loader.load_several_chunks(num_chunks)
+        
+        if self.verbose:
+            self.logger.log_info(f"Loaded {len(all_dataset_chunks)} dataset chunks")
+        
         preprocessor = Preprocessor({"dataset": {"normalize": dataset_cfg.get('normalize', False)}})
         all_dataset_chunks = [preprocessor.preprocess(chunk).data for chunk in all_dataset_chunks]
-        print(f"[DEBUG] Number of chunks: {len(all_dataset_chunks)}")
-        if len(all_dataset_chunks) > 0:
-            print(f"[DEBUG] First chunk train targets shape: {all_dataset_chunks[0].train.targets.shape}")
-            if all_dataset_chunks[0].train.features is not None:
-                print(f"[DEBUG] First chunk train features shape: {all_dataset_chunks[0].train.features.shape}")
-            else:
-                print(f"[DEBUG] First chunk has no exogenous features")
+        
+        if self.verbose:
+            if len(all_dataset_chunks) > 0:
+                self.logger.log_info(f"First chunk train targets shape: {all_dataset_chunks[0].train.targets.shape}")
+                if all_dataset_chunks[0].train.features is not None:
+                    self.logger.log_info(f"First chunk train features shape: {all_dataset_chunks[0].train.features.shape}")
+                else:
+                    self.logger.log_info("First chunk has no exogenous features")
+        
         # Load config
         config_path = self.config_path
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
+        
         model_names = config['model']['name']
+        
+        if self.verbose:
+            self.logger.log_info(f"Testing models: {model_names}")
+        
+        # Track progress
+        total_models = len(model_names)
+        completed_models = 0
+        
         for model_name in model_names:
+            completed_models += 1
+            if self.verbose:
+                self.logger.log_info(f"Testing model {completed_models}/{total_models}: {model_name}")
+            else:
+                print(f"🔄 Testing {model_name} ({completed_models}/{total_models})")
+            
             func_name = f"run_{model_name.lower()}"
             if func_name in globals():
-                globals()[func_name](all_dataset_chunks, writer, self.config, self.config_path)
-        writer.close()
-        print(f"\nTensorBoard logs saved in 'runs/benchmark_runner_{config_file_name}_{timestamp}/'. To view, run: tensorboard --logdir runs/benchmark_runner\n")
+                try:
+                    globals()[func_name](all_dataset_chunks, writer, self.config, self.config_path)
+                    if self.verbose:
+                        self.logger.log_success(f"Model {model_name} completed successfully")
+                    else:
+                        print(f"✅ {model_name} completed")
+                except Exception as e:
+                    if self.verbose:
+                        self.logger.log_error(f"Model {model_name} failed: {str(e)}")
+                    else:
+                        print(f"❌ {model_name} failed: {str(e)}")
+            else:
+                if self.verbose:
+                    self.logger.log_warning(f"Function {func_name} not found for model {model_name}")
+                else:
+                    print(f"⚠️  {model_name}: function not found")
+        
+        if writer is not None:
+            writer.close()
+            if self.verbose:
+                self.logger.log_info(f"TensorBoard logs saved in 'runs/benchmark_runner_{config_file_name}_{timestamp}/'")
+                self.logger.log_info("To view logs, run: tensorboard --logdir runs/benchmark_runner")
+            else:
+                print(f"\n📈 TensorBoard logs saved in 'runs/benchmark_runner_{config_file_name}_{timestamp}/'")
+                print(f"🌐 To view logs, run: tensorboard --logdir runs/benchmark_runner")
+        
         self.logger.log_metrics({"status": "Pipeline completed"}, step=0)
+        
+        if self.verbose:
+            self.logger.log_success("Benchmark pipeline completed successfully")
+        else:
+            print(f"\n✅ Benchmark pipeline completed! Tested {total_models} models.")
 
 def _extract_number_before_capital(freq_str):
     match = re.match(r'(\d+)?[A-Z]', freq_str)
@@ -953,16 +1030,70 @@ def run_exponential_smoothing(all_dataset_chunks, writer=None, config=None, conf
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run benchmarking pipeline with specified config file.")
-    parser.add_argument('--config', type=str, default='benchmarking_pipeline/configs/univariate_config.yaml', help='Path to the config YAML file')
-    parser.add_argument('--hp_tuning', type=str, default='auto', choices=['grid', 'bayesian', 'successive_halving', 'pbt', 'auto'], help='Hyperparameter tuning method: grid, bayesian, successive_halving, pbt, or auto (detect from config)')
+    parser.add_argument('--config', type=str, default='benchmarking_pipeline/configs/univariate_config.yaml', 
+                        help='Path to the config YAML file')
+    parser.add_argument('--hp_tuning', type=str, default='auto', 
+                        choices=['grid', 'bayesian', 'successive_halving', 'pbt', 'auto'], 
+                        help='Hyperparameter tuning method: grid, bayesian, successive_halving, pbt, or auto (detect from config)')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Enable verbose logging and detailed output')
+    parser.add_argument('--tensorboard', action='store_true',
+                        help='Enable TensorBoard logging for real-time monitoring')
+    parser.add_argument('--log-dir', type=str, default='logs/tensorboard',
+                        help='Directory for TensorBoard logs')
+    parser.add_argument('--run-name', type=str, default='benchmark_run',
+                        help='Name for this experiment run')
     args = parser.parse_args()
+    
     config_path = args.config
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"❌ Configuration file not found: {config_path}")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"❌ Error parsing YAML configuration: {e}")
+        sys.exit(1)
     
     # Override search method if specified
     if args.hp_tuning != 'auto':
         config['model']['search_method'] = args.hp_tuning
     
-    runner = BenchmarkRunner(config=config, config_path=config_path)
-    runner.run() 
+    # Add CLI arguments to config for logger
+    config.update({
+        'verbose': args.verbose,
+        'tensorboard': args.tensorboard,
+        'log_dir': args.log_dir,
+        'run_name': args.run_name
+    })
+    
+    if args.verbose:
+        print(f"🚀 Starting benchmark pipeline with config: {config_path}")
+        print(f"📊 Models to test: {config['model']['name']}")
+        print(f"📁 Dataset: {config['dataset']['name']}")
+        if args.tensorboard:
+            print(f"📈 TensorBoard logging enabled - monitor progress in real-time")
+            print(f"📁 Logs will be saved to: {args.log_dir}")
+    
+    try:
+        runner = BenchmarkRunner(config=config, config_path=config_path)
+        runner.run()
+        
+        if args.verbose:
+            print(f"✅ Benchmark pipeline completed successfully!")
+            if args.tensorboard:
+                print(f"📈 TensorBoard logs saved to: {args.log_dir}")
+                print(f"🌐 To view logs, run: tensorboard --logdir {args.log_dir}")
+        else:
+            print(f"✅ Benchmark pipeline completed successfully!")
+            
+    except Exception as e:
+        if args.verbose:
+            print(f"❌ Benchmark pipeline failed with error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        else:
+            print(f"❌ Benchmark pipeline failed: {str(e)}")
+        sys.exit(1) 
