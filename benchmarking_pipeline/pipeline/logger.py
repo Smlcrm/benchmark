@@ -28,6 +28,7 @@ class Logger:
         """
         self.config = config
         self.base_log_dir = self.config.get('log_dir', 'logs/tensorboard')
+        self.verbose = self.config.get('verbose', False)
         
         # Create a unique directory for each run to keep experiments separate
         run_name = self.config.get('run_name', 'run')
@@ -40,27 +41,47 @@ class Logger:
         # Also set up a basic text logger for general status messages
         self._setup_text_logger()
         
+        if self.verbose:
+            self.log_info(f"Logger initialized with TensorBoard directory: {self.run_log_dir}")
+        
     def _setup_text_logger(self):
         """Sets up a basic Python logger for text messages to the console."""
+        # Set log level based on verbose setting
+        log_level = logging.DEBUG if self.verbose else logging.INFO
+        
         # Configures the root logger
         logging.basicConfig(
-            level=self.config.get('log_level', logging.INFO),
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+            level=log_level,
+            format='%(asctime)s - %(levelname)s - %(message)s',
             force=True # Allows re-configuration in interactive environments
         )
         self.text_logger = logging.getLogger(self.__class__.__name__)
         
     def log_info(self, message):
         """Logs an informational text message."""
-        self.text_logger.info(message)
+        if self.verbose:
+            self.text_logger.info(message)
+        else:
+            # For non-verbose mode, only show important messages
+            if any(keyword in message.lower() for keyword in ['error', 'warning', 'completed', 'failed', 'success']):
+                self.text_logger.info(message)
         
     def log_warning(self, message):
         """Logs a warning text message."""
-        self.text_logger.warning(message)
-
+        self.text_logger.warning(f"⚠️  {message}")
+        
     def log_error(self, message):
         """Logs an error text message."""
-        self.text_logger.error(message)
+        self.text_logger.error(f"❌ {message}")
+        
+    def log_success(self, message):
+        """Logs a success message."""
+        self.text_logger.info(f"✅ {message}")
+        
+    def log_progress(self, message):
+        """Logs progress information (only in verbose mode)."""
+        if self.verbose:
+            self.text_logger.info(f"🔄 {message}")
 
     def log_metrics(self, metrics, step, model_name=""):
         """
@@ -92,7 +113,38 @@ class Logger:
                 else:
                     self.log_warning(f"Skipping metric '{metric_name}' with unsupported type: {type(value)}")
         self.writer.flush()
+        
+        # Log key metrics to console in verbose mode
+        if self.verbose and metrics:
+            self.log_progress(f"Metrics logged to TensorBoard: {list(metrics.keys())}")
 
+    def log_training_progress(self, model_name, epoch, loss, val_loss=None, step=None):
+        """
+        Log training progress for real-time monitoring.
+        
+        Args:
+            model_name (str): Name of the model being trained
+            epoch (int): Current epoch number
+            loss (float): Training loss
+            val_loss (float, optional): Validation loss
+            step (int, optional): Global step for TensorBoard
+        """
+        if step is None:
+            step = epoch
+            
+        # Log to TensorBoard
+        with self.writer.as_default():
+            tf.summary.scalar(f"{model_name}/train_loss", loss, step=step)
+            if val_loss is not None:
+                tf.summary.scalar(f"{model_name}/val_loss", val_loss, step=step)
+        self.writer.flush()
+        
+        # Log to console
+        if self.verbose:
+            if val_loss is not None:
+                self.log_progress(f"{model_name} - Epoch {epoch}: Train Loss: {loss:.4f}, Val Loss: {val_loss:.4f}")
+            else:
+                self.log_progress(f"{model_name} - Epoch {epoch}: Train Loss: {loss:.4f}")
 
     def log_hparams(self, hparams, metrics):
         """
@@ -114,6 +166,13 @@ class Logger:
                     tf.summary.scalar(f"hparams/{metric_name}", value, step=1)
         self.writer.flush()
         
+        if self.verbose:
+            self.log_info(f"Hyperparameters logged: {list(sanitized_hparams.keys())}")
+            self.log_info(f"Final metrics logged: {list(metrics.keys())}")
+        
     def close(self):
         """Closes the TensorBoard writer to ensure all data is written to disk."""
         self.writer.close()
+        if self.verbose:
+            self.log_info(f"TensorBoard logs saved to: {self.run_log_dir}")
+            self.log_info("To view logs, run: tensorboard --logdir logs/tensorboard")
