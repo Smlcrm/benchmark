@@ -10,7 +10,7 @@ dataset:
   chunks: 3
   num_targets: 2
 model:
-  name: ["ARIMA"]
+  name: ["LSTM","ARIMA"]
   parameters:
     ARIMA:
       p: [1, 2]
