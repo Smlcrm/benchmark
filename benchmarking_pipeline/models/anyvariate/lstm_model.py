@@ -21,7 +21,7 @@ import pickle
 import os
 from benchmarking_pipeline.models.base_model import BaseModel
 import time
-from tensorflow.keras.callbacks import TensorBoard
+# TensorBoard logging is handled by the main benchmark runner
 
 
 class MultivariateLSTMModel(BaseModel):

@@ -1,4 +1,5 @@
 test_type: deterministic
+tensorboard: true
 dataset:
   name: covid_deaths
   path: benchmarking_pipeline/datasets/covid_deaths

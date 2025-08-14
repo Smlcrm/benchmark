@@ -149,11 +149,9 @@ class DeepARModel(BaseModel):
         #    train=False, batch_size=self.batch_size, batch_sampler="synchronized",
         #    num_workers=self.num_workers, persistent_workers=True
         #)
-        # Set up TensorBoard logger
-        log_dir = os.path.join("runs", "DeepAR")
-        tb_logger = TensorBoardLogger(save_dir=log_dir, name=time.strftime("%Y%m%d-%H%M%S"))
-        # Create the PyTorch Lightning trainer with logger
-        trainer = pl.Trainer(logger=tb_logger, accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
+        # TensorBoard logging is handled by the main benchmark runner
+        # Create the PyTorch Lightning trainer without separate logger
+        trainer = pl.Trainer(logger=False, accelerator="auto", gradient_clip_val=self.gradient_clip_val, max_epochs=self.epochs)
         print("Trainer initialized")
         #trainer.fit(self.model,train_dataloader,validation_dataloader)
         trainer.fit(self.model,train_dataloader)
