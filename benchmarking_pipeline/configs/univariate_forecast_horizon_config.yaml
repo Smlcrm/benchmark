@@ -1,4 +1,5 @@
 test_type: deterministic
+tensorboard: true
 dataset:
   name: bdg-2_bear
   path: benchmarking_pipeline/datasets/bdg-2_bear

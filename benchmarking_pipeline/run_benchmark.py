@@ -347,7 +347,8 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
         for metric, value in results.items():
             writer.add_scalar('ARIMA/' + metric, value, 1)
         
-        if is_multivariate:
+        # Check if this is multivariate ARIMA by model type
+        if isinstance(arima_model, MultivariateARIMAModel):
             # Multivariate case - use all targets
             all_targets_true = all_dataset_chunks[0].test.targets.values
             y_context = all_dataset_chunks[0].train.targets
