@@ -1,4 +1,5 @@
 test_type: deterministic
+tensorboard: true
 dataset:
   name: m5
   path: benchmarking_pipeline/datasets/m5
