@@ -2,9 +2,49 @@
 Main script for orchestrating the end-to-end benchmarking pipeline.
 """
 
+# Set threading environment variables BEFORE any imports
 import os
-# Suppress TensorFlow oneDNN custom operations message
-os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+import sys
+
+# Add the parent directory to Python path to allow imports when running from root
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
+os.environ['OMP_NUM_THREADS'] = '1'
+os.environ['OPENBLAS_NUM_THREADS'] = '1'
+os.environ['MKL_NUM_THREADS'] = '1'
+os.environ['NUMEXPR_NUM_THREADS'] = '1'
+
+# Configure TensorFlow threading BEFORE import
+os.environ['TF_NUM_INTEROP_THREADS'] = '1'
+os.environ['TF_NUM_INTRAOP_THREADS'] = '1'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Reduce TF logging
+
+# Disable TensorFlow GPU if not needed (prevents GPU mutex conflicts)
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+def configure_tensorflow():
+    """Configure TensorFlow to prevent threading conflicts."""
+    try:
+        import tensorflow as tf
+        # Configure TensorFlow threading
+        tf.config.threading.set_inter_op_parallelism_threads(1)
+        tf.config.threading.set_intra_op_parallelism_threads(1)
+        
+        # Disable GPU if available to prevent GPU mutex conflicts
+        tf.config.set_visible_devices([], 'GPU')
+        
+        print("[INFO] TensorFlow configured for single-threaded operation")
+    except ImportError:
+        # TensorFlow not available, skip configuration
+        pass
+    except Exception as e:
+        print(f"[WARNING] TensorFlow configuration failed: {e}")
+
+# Configure TensorFlow early
+configure_tensorflow()
 
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
@@ -24,9 +64,6 @@ from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
-# from benchmarking_pipeline.trainer.bayesian_hyperparameter_tuner import BayesianHyperparameterTuner
-# from benchmarking_pipeline.trainer.successive_halving_tuner import SuccessiveHalvingTuner
-# from benchmarking_pipeline.trainer.population_based_tuner import PopulationBasedTuner
 import numpy as np
 import pandas as pd
 import re
@@ -39,6 +76,7 @@ from benchmarking_pipeline.models.SVR_model import SVRModel
 from benchmarking_pipeline.models.seasonal_naive_model import SeasonalNaiveModel
 from benchmarking_pipeline.models.exponential_smoothing_model import ExponentialSmoothingModel
 import argparse
+import sys
 
 class BenchmarkRunner:
     def __init__(self, config, config_path=None):
@@ -51,47 +89,115 @@ class BenchmarkRunner:
         self.config = config
         self.config_path = config_path
         self.logger = Logger(config)
+        self.verbose = config.get('verbose', False)
+        self.tensorboard = config.get('tensorboard', False)
         
     def run(self):
         """Execute the end-to-end benchmarking pipeline."""
         # Determine config file name for logging
         config_file_name = os.path.splitext(os.path.basename(self.config_path))[0] if self.config_path else 'unknown_config'
         timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        writer = SummaryWriter(log_dir=f"runs/benchmark_runner_{config_file_name}_{timestamp}")
+        
+        # Set up TensorBoard writer
+        if self.tensorboard:
+            writer = SummaryWriter(log_dir=f"runs/benchmark_runner_{config_file_name}_{timestamp}")
+            if self.verbose:
+                self.logger.log_info(f"TensorBoard writer initialized: runs/benchmark_runner_{config_file_name}_{timestamp}")
+        else:
+            writer = None
+            if self.verbose:
+                self.logger.log_info("TensorBoard logging disabled")
+        
         # Load dataset config
         dataset_cfg = self.config['dataset']
         dataset_path = dataset_cfg['path']
         dataset_name = dataset_cfg['name']
         split_ratio = dataset_cfg.get('split_ratio', [0.8, 0.1, 0.1])
-        # Use 'chunks' from config, default to 1 if not present
         num_chunks = dataset_cfg.get('chunks', 1)
+        
+        if self.verbose:
+            self.logger.log_info(f"Loading dataset: {dataset_name}")
+            self.logger.log_info(f"Dataset path: {dataset_path}")
+            self.logger.log_info(f"Number of chunks: {num_chunks}")
+            self.logger.log_info(f"Split ratio: {split_ratio}")
+        
         data_loader = DataLoader({"dataset": {
             "path": dataset_path,
             "name": dataset_name,
             "split_ratio": split_ratio
         }})
+        
         all_dataset_chunks = data_loader.load_several_chunks(num_chunks)
+        
+        if self.verbose:
+            self.logger.log_info(f"Loaded {len(all_dataset_chunks)} dataset chunks")
+        
         preprocessor = Preprocessor({"dataset": {"normalize": dataset_cfg.get('normalize', False)}})
         all_dataset_chunks = [preprocessor.preprocess(chunk).data for chunk in all_dataset_chunks]
-        print(f"[DEBUG] Number of chunks: {len(all_dataset_chunks)}")
-        if len(all_dataset_chunks) > 0:
-            print(f"[DEBUG] First chunk train targets shape: {all_dataset_chunks[0].train.targets.shape}")
-            if all_dataset_chunks[0].train.features is not None:
-                print(f"[DEBUG] First chunk train features shape: {all_dataset_chunks[0].train.features.shape}")
-            else:
-                print(f"[DEBUG] First chunk has no exogenous features")
+        
+        if self.verbose:
+            if len(all_dataset_chunks) > 0:
+                self.logger.log_info(f"First chunk train targets shape: {all_dataset_chunks[0].train.targets.shape}")
+                if all_dataset_chunks[0].train.features is not None:
+                    self.logger.log_info(f"First chunk train features shape: {all_dataset_chunks[0].train.features.shape}")
+                else:
+                    self.logger.log_info("First chunk has no exogenous features")
+        
         # Load config
         config_path = self.config_path
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
+        
         model_names = config['model']['name']
+        
+        if self.verbose:
+            self.logger.log_info(f"Testing models: {model_names}")
+        
+        # Track progress
+        total_models = len(model_names)
+        completed_models = 0
+        
         for model_name in model_names:
+            completed_models += 1
+            if self.verbose:
+                self.logger.log_info(f"Testing model {completed_models}/{total_models}: {model_name}")
+            else:
+                print(f"🔄 Testing {model_name} ({completed_models}/{total_models})")
+            
             func_name = f"run_{model_name.lower()}"
             if func_name in globals():
-                globals()[func_name](all_dataset_chunks, writer, self.config, self.config_path)
-        writer.close()
-        print(f"\nTensorBoard logs saved in 'runs/benchmark_runner_{config_file_name}_{timestamp}/'. To view, run: tensorboard --logdir runs/benchmark_runner\n")
+                try:
+                    globals()[func_name](all_dataset_chunks, writer, self.config, self.config_path)
+                    if self.verbose:
+                        self.logger.log_success(f"Model {model_name} completed successfully")
+                    else:
+                        print(f"✅ {model_name} completed")
+                except Exception as e:
+                    if self.verbose:
+                        self.logger.log_error(f"Model {model_name} failed: {str(e)}")
+                    else:
+                        print(f"❌ {model_name} failed: {str(e)}")
+            else:
+                if self.verbose:
+                    self.logger.log_warning(f"Function {func_name} not found for model {model_name}")
+                else:
+                    print(f"⚠️  {model_name}: function not found")
+        
+        if writer is not None:
+            writer.close()
+            if self.verbose:
+                self.logger.log_info(f"TensorBoard logs saved in 'runs/benchmark_runner_{config_file_name}_{timestamp}/'")
+                self.logger.log_info("To view logs, run: tensorboard --logdir runs/benchmark_runner")
+            else:
+                print(f"\n📈 TensorBoard logs saved in 'runs/benchmark_runner_{config_file_name}_{timestamp}/'")
+                print(f"🌐 To view logs, run: tensorboard --logdir runs/benchmark_runner")
+        
         self.logger.log_metrics({"status": "Pipeline completed"}, step=0)
+        
+        if self.verbose:
+            self.logger.log_success("Benchmark pipeline completed successfully")
+        else:
+            print(f"\n✅ Benchmark pipeline completed! Tested {total_models} models.")
 
 def _extract_number_before_capital(freq_str):
     match = re.match(r'(\d+)?[A-Z]', freq_str)
@@ -156,118 +262,35 @@ def log_preds_vs_true(writer, model_name, y_true, y_pred, step):
 
 def _create_hyperparameter_tuner(model_class, model_params, hp_tuning_method="grid"):
     """
-    Create appropriate hyperparameter tuner based on config format and method.
+    Create hyperparameter tuner - simplified to only use base grid search.
     
     Args:
         model_class: The model class instance
         model_params: Model parameters from config
-        hp_tuning_method: "grid", "bayesian", "successive_halving", or "pbt"
+        hp_tuning_method: Only "grid" is supported now
     
     Returns:
-        Appropriate hyperparameter tuner instance
+        HyperparameterTuner instance
     """
-    # Determine if we have range-based or list-based parameters
-    has_ranges = any(isinstance(v, dict) and 'min' in v and 'max' in v 
-                    for v in model_params.values())
-    
-    # Convert parameters to list format for all tuners
-    hyperparameter_ranges = {}
-    for param_name, param_value in model_params.items():
-        if isinstance(param_value, dict) and 'min' in param_value and 'max' in param_value:
-            # Range-based parameter
-            if param_value['type'] == 'int':
-                # Create list of integers in range
-                min_val, max_val = param_value['min'], param_value['max']
-                # Ensure Python integers
-                hyperparameter_ranges[param_name] = [int(x) for x in range(min_val, max_val + 1)]
-            elif param_value['type'] == 'float':
-                # For float ranges, create discrete choices
-                min_val, max_val = param_value['min'], param_value['max']
-                n_choices = min(15, int((max_val - min_val) * 10 + 1))  # Create reasonable number of choices
-                # Convert numpy floats to Python floats
-                hyperparameter_ranges[param_name] = [float(x) for x in np.linspace(min_val, max_val, n_choices)]
-        elif isinstance(param_value, list):
-            # List-based parameter (categorical or discrete)
-            # Convert to proper Python types
-            converted_list = []
-            for item in param_value:
-                if isinstance(item, (np.integer, np.floating)):
-                    if isinstance(item, np.integer):
-                        converted_list.append(int(item))
-                    else:
-                        converted_list.append(float(item))
-                elif isinstance(item, np.str_):
-                    converted_list.append(str(item))
-                else:
-                    converted_list.append(item)
-            hyperparameter_ranges[param_name] = converted_list
-        else:
-            # Single value parameter
-            hyperparameter_ranges[param_name] = [param_value]
-    
-    # Get search parameters from config
-    search_iterations = model_params.get('search_iterations', 15)
-    
-    if hp_tuning_method == "successive_halving":
-        print(f"Using Successive Halving hyperparameter tuning for {model_class.__class__.__name__}")
-        return SuccessiveHalvingTuner(
-            model_class=model_class,
-            hyperparameter_ranges=hyperparameter_ranges,
-            use_exog=False,
-            n_configurations=50,  # Start with many configurations
-            min_resources=1,      # Start with minimal resources
-            max_resources=10,     # End with full resources
-            reduction_factor=3    # Reduce by factor of 3 each round
-        )
-    
-    elif hp_tuning_method == "pbt" and "lstm" in model_class.__class__.__name__.lower():
-        print(f"Using Population-Based Training for {model_class.__class__.__name__}")
-        return PopulationBasedTuner(
-            model_class=model_class,
-            hyperparameter_ranges=hyperparameter_ranges,
-            use_exog=False,
-            population_size=8,
-            num_generations=10
-        )
-    
-    elif hp_tuning_method == "bayesian" or has_ranges:
-        print(f"Using Bayesian hyperparameter tuning for {model_class.__class__.__name__}")
-        return BayesianHyperparameterTuner(
-            model_class=model_class,
-            hyperparameter_ranges=hyperparameter_ranges,
-            use_exog=False,
-            n_iterations=search_iterations
-        )
-    
-    else:
-        # Use grid search for list-based parameters
-        print(f"Using grid search hyperparameter tuning for {model_class.__class__.__name__}")
-        return HyperparameterTuner(model_class, model_params, False)
+    print(f"Using grid search hyperparameter tuning for {model_class.__class__.__name__}")
+    return HyperparameterTuner(model_class, model_params, False)
 
 def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
     dataset_name = config['dataset']['name']
     arima_params = config['model']['parameters']['ARIMA']
     
-    # Check if we have multivariate data
-    is_multivariate = False
+    # Auto-detect target column for multivariate datasets
     if len(all_dataset_chunks) > 0:
         available_targets = list(all_dataset_chunks[0].train.targets.columns)
-        print(f"[DEBUG] Available targets: {available_targets}")
-        is_multivariate = len(available_targets) > 1 or (len(available_targets) == 1 and available_targets[0] != 'y')
-        print(f"[DEBUG] Is multivariate: {is_multivariate}")
-        
-        if is_multivariate:
-            print(f"[DEBUG] Using MultivariateARIMAModel for multivariate data")
+        if 'target_0' in available_targets:
+            # Use first target for multivariate datasets
+            arima_params['target_col'] = 'target_0'
+        elif 'y' not in available_targets and len(available_targets) > 0:
+            # Use first available target if 'y' doesn't exist
+            arima_params['target_col'] = available_targets[0]
         else:
-            # Univariate case - use original logic
-            if 'target_0' in available_targets:
-                arima_params['target_col'] = 'target_0'
-                print(f"[DEBUG] Using target_col: target_0")
-            elif 'y' not in available_targets and len(available_targets) > 0:
-                arima_params['target_col'] = available_targets[0]
-                print(f"[DEBUG] Using target_col: {available_targets[0]}")
-            else:
-                print(f"[DEBUG] No target column detection needed, using default")
+            # Default to 'y' for univariate datasets
+            arima_params['target_col'] = 'y'
     # Create model_params with default values for initial model creation
     model_params = {}
     for k, v in arima_params.items():
@@ -292,6 +315,12 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
             model_params[k] = value
     print(f"[DEBUG] ARIMA model_params: {model_params}")
     
+    # Check if this is a multivariate dataset
+    is_multivariate = False
+    if len(all_dataset_chunks) > 0:
+        available_targets = list(all_dataset_chunks[0].train.targets.columns)
+        is_multivariate = len(available_targets) > 1 or any('target_' in col for col in available_targets)
+    
     if is_multivariate:
         # Use multivariate ARIMA model
         arima_model = MultivariateARIMAModel(model_params)
@@ -305,17 +334,9 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(arima_model, arima_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else arima_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(arima_params.keys())}
     # Cast p, d, q to int if present
     for k in ['p', 'd', 'q']:
         if k in best_hyperparameters_dict:
@@ -391,17 +412,9 @@ def run_theta(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(theta_model, theta_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else theta_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(theta_params.keys())}
     for k in ['sp', 'forecast_horizon']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -466,17 +479,9 @@ def run_deep_ar(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(deep_ar_model, deep_ar_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else deep_ar_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(deep_ar_params.keys())}
     for k in ['hidden_size', 'rnn_layers', 'batch_size', 'epochs', 'forecast_horizon', 'num_workers']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -540,17 +545,9 @@ def run_xgboost(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(xgb_model, xgb_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else xgb_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(xgb_params.keys())}
     for k in ['lookback_window', 'forecast_horizon', 'n_estimators', 'max_depth', 'random_state', 'n_jobs']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -610,17 +607,9 @@ def run_random_forest(all_dataset_chunks, writer=None, config=None, config_path=
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(rf_model, rf_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else rf_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(rf_params.keys())}
     for k in ['lookback_window', 'forecast_horizon', 'n_estimators', 'max_depth', 'random_state', 'n_jobs']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -698,17 +687,9 @@ def run_prophet(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(prophet_model, prophet_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: cast_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else prophet_params.keys())}
+    best_hyperparameters_dict = {k: cast_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(prophet_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
     print(f"Final Evaluation Prophet {dataset_name}: {results}")
     if writer is not None:
@@ -766,14 +747,6 @@ def run_croston_classic(all_dataset_chunks, writer=None, config=None, config_pat
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(croston_model, croston_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     results = tuner.final_evaluation({"alpha": 0.1}, all_dataset_chunks)
@@ -855,17 +828,9 @@ def run_lstm(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(lstm_model, lstm_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else lstm_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(lstm_params.keys())}
     for k in ['units', 'layers', 'batch_size', 'epochs', 'sequence_length', 'forecast_horizon']:
         if k in best_hyperparameters_dict:
             best_hyperparameters_dict[k] = int(best_hyperparameters_dict[k])
@@ -904,26 +869,20 @@ def run_svr(all_dataset_chunks, writer=None, config=None, config_path=None):
     dataset_name = config['dataset']['name']
     svr_params = config['model']['parameters']['SVR']
     
-    # Check if we have multivariate data
-    is_multivariate = False
+    # SVR uses MultiOutputRegressor internally, so no need for MultivariateWrapper
+    # Just set the target column appropriately
     if len(all_dataset_chunks) > 0:
         available_targets = list(all_dataset_chunks[0].train.targets.columns)
         print(f"[DEBUG] Available targets: {available_targets}")
-        is_multivariate = len(available_targets) > 1 or (len(available_targets) == 1 and available_targets[0] != 'y')
-        print(f"[DEBUG] Is multivariate: {is_multivariate}")
         
-        if is_multivariate:
-            print(f"[DEBUG] Using MultivariateWrapper for SVR")
+        if 'target_0' in available_targets:
+            svr_params['target_col'] = 'target_0'
+            print(f"[DEBUG] Using target_col: target_0")
+        elif 'y' not in available_targets and len(available_targets) > 0:
+            svr_params['target_col'] = available_targets[0]
+            print(f"[DEBUG] Using target_col: {available_targets[0]}")
         else:
-            # Univariate case - use original logic
-            if 'target_0' in available_targets:
-                svr_params['target_col'] = 'target_0'
-                print(f"[DEBUG] Using target_col: target_0")
-            elif 'y' not in available_targets and len(available_targets) > 0:
-                svr_params['target_col'] = available_targets[0]
-                print(f"[DEBUG] Using target_col: {available_targets[0]}")
-            else:
-                print(f"[DEBUG] No target column detection needed, using default")
+            print(f"[DEBUG] Using default target_col: y")
     def cast_svr_param(key, value):
         # Handle range-based parameters (dictionaries)
         if isinstance(value, dict):
@@ -951,31 +910,17 @@ def run_svr(all_dataset_chunks, writer=None, config=None, config_path=None):
             model_params[k] = cast_svr_param(k, v)
         else:
             model_params[k] = cast_svr_param(k, v)
-    if is_multivariate:
-        # Use multivariate wrapper
-        from benchmarking_pipeline.models.multivariate_wrapper import MultivariateWrapper
-        svr_model = MultivariateWrapper(SVRModel, model_params)
-        print(f"[DEBUG] Created MultivariateWrapper for SVR")
-    else:
-        # Use regular model
-        svr_model = SVRModel(model_params)
-        print(f"[DEBUG] SVR model target_col: {svr_model.target_col}")
+    # Use regular SVR model (it handles multivariate via MultiOutputRegressor)
+    svr_model = SVRModel(model_params)
+    print(f"[DEBUG] SVR model target_col: {svr_model.target_col}")
     
     # Create appropriate tuner
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(svr_model, svr_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: cast_svr_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else svr_params.keys())}
+    best_hyperparameters_dict = {k: cast_svr_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(svr_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
     print(f"Final Evaluation SVR {dataset_name}: {results}")
     if writer is not None:
@@ -984,26 +929,12 @@ def run_svr(all_dataset_chunks, writer=None, config=None, config_path=None):
         chunk = all_dataset_chunks[0]
         lookback_window = svr_model.lookback_window if hasattr(svr_model, 'lookback_window') else 10
         
-        if is_multivariate:
-            # Multivariate case - use all targets
-            all_targets_true = chunk.test.targets.values
-            y_context = chunk.train.targets
-            y_target = chunk.test.targets
-            full_preds = svr_model.predict(y_context=y_context, y_target=y_target)
-            log_preds_vs_true(writer, 'SVR', all_targets_true, full_preds, 9)
-        else:
-            # Univariate case - use original logic
-            all_targets_true = chunk.test.targets.values
-            y_context = chunk.train.targets.iloc[:, 0].values[-lookback_window:]
-            y_target = chunk.test.targets.iloc[:, 0].values
-            full_preds = svr_model.predict(y_context=y_context, y_target=y_target)
-            # Create predictions array that matches all targets shape
-            if all_targets_true.ndim == 2:
-                all_targets_pred = np.full_like(all_targets_true, np.nan)
-                all_targets_pred[:, 0] = full_preds  # Put predictions in first column
-            else:
-                all_targets_pred = full_preds
-            log_preds_vs_true(writer, 'SVR', all_targets_true, all_targets_pred, 9)
+        # SVR handles both univariate and multivariate data natively
+        all_targets_true = chunk.test.targets.values
+        y_context = chunk.train.targets
+        y_target = chunk.test.targets
+        full_preds = svr_model.predict(y_context=y_context, y_target=y_target)
+        log_preds_vs_true(writer, 'SVR', all_targets_true, full_preds, 9)
     os.makedirs('results', exist_ok=True)
     pd.DataFrame([results]).to_csv(f'results/SVR_{dataset_name}_{time.strftime("%Y%m%d-%H%M%S")}.csv', index=False)
     print("SVR WORKS!")
@@ -1098,17 +1029,9 @@ def run_exponential_smoothing(all_dataset_chunks, writer=None, config=None, conf
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(es_model, es_params, hp_tuning_method)
     
-    # if isinstance(tuner, BayesianHyperparameterTuner):
-    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    # elif isinstance(tuner, SuccessiveHalvingTuner):
-    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    # elif isinstance(tuner, PopulationBasedTuner):
-    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    # else:
-    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
-    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else es_params.keys())}
+    best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(es_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
     print(f"Final Evaluation ExponentialSmoothing {dataset_name}: {results}")
     if writer is not None:
@@ -1132,16 +1055,70 @@ def run_exponential_smoothing(all_dataset_chunks, writer=None, config=None, conf
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run benchmarking pipeline with specified config file.")
-    parser.add_argument('--config', type=str, default='benchmarking_pipeline/configs/univariate_config.yaml', help='Path to the config YAML file')
-    parser.add_argument('--hp_tuning', type=str, default='auto', choices=['grid', 'bayesian', 'successive_halving', 'pbt', 'auto'], help='Hyperparameter tuning method: grid, bayesian, successive_halving, pbt, or auto (detect from config)')
+    parser.add_argument('--config', type=str, default='benchmarking_pipeline/configs/univariate_config.yaml', 
+                        help='Path to the config YAML file')
+    parser.add_argument('--hp_tuning', type=str, default='auto', 
+                        choices=['grid', 'bayesian', 'successive_halving', 'pbt', 'auto'], 
+                        help='Hyperparameter tuning method: grid, bayesian, successive_halving, pbt, or auto (detect from config)')
+    parser.add_argument('--verbose', '-v', action='store_true',
+                        help='Enable verbose logging and detailed output')
+    parser.add_argument('--tensorboard', action='store_true',
+                        help='Enable TensorBoard logging for real-time monitoring')
+    parser.add_argument('--log-dir', type=str, default='logs/tensorboard',
+                        help='Directory for TensorBoard logs')
+    parser.add_argument('--run-name', type=str, default='benchmark_run',
+                        help='Name for this experiment run')
     args = parser.parse_args()
+    
     config_path = args.config
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
+    
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"❌ Configuration file not found: {config_path}")
+        sys.exit(1)
+    except yaml.YAMLError as e:
+        print(f"❌ Error parsing YAML configuration: {e}")
+        sys.exit(1)
     
     # Override search method if specified
     if args.hp_tuning != 'auto':
         config['model']['search_method'] = args.hp_tuning
     
-    runner = BenchmarkRunner(config=config, config_path=config_path)
-    runner.run() 
+    # Add CLI arguments to config for logger
+    config.update({
+        'verbose': args.verbose,
+        'tensorboard': args.tensorboard,
+        'log_dir': args.log_dir,
+        'run_name': args.run_name
+    })
+    
+    if args.verbose:
+        print(f"🚀 Starting benchmark pipeline with config: {config_path}")
+        print(f"📊 Models to test: {config['model']['name']}")
+        print(f"📁 Dataset: {config['dataset']['name']}")
+        if args.tensorboard:
+            print(f"📈 TensorBoard logging enabled - monitor progress in real-time")
+            print(f"📁 Logs will be saved to: {args.log_dir}")
+    
+    try:
+        runner = BenchmarkRunner(config=config, config_path=config_path)
+        runner.run()
+        
+        if args.verbose:
+            print(f"✅ Benchmark pipeline completed successfully!")
+            if args.tensorboard:
+                print(f"📈 TensorBoard logs saved to: {args.log_dir}")
+                print(f"🌐 To view logs, run: tensorboard --logdir {args.log_dir}")
+        else:
+            print(f"✅ Benchmark pipeline completed successfully!")
+            
+    except Exception as e:
+        if args.verbose:
+            print(f"❌ Benchmark pipeline failed with error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+        else:
+            print(f"❌ Benchmark pipeline failed: {str(e)}")
+        sys.exit(1) 
