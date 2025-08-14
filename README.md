@@ -24,7 +24,31 @@ python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/con
 
 # Run multivariate benchmark (SVR, LSTM, Random Forest)
 python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/multivariate_forecast_horizon_config.yaml
+
+# Enable TensorBoard logging for real-time monitoring
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/multivariate_forecast_horizon_config.yaml --tensorboard
+
+# Enable verbose logging and TensorBoard
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/multivariate_forecast_horizon_config.yaml --tensorboard --verbose
 ```
+
+### TensorBoard Monitoring
+
+The pipeline supports real-time monitoring and visualization of training metrics through TensorBoard:
+
+```bash
+# Run benchmark with TensorBoard logging
+python benchmarking_pipeline/run_benchmark.py --config your_config.yaml --tensorboard
+
+# View logs in TensorBoard (in a separate terminal)
+tensorboard --logdir=logs/
+```
+
+**Command Line Options:**
+- `--tensorboard`: Enable TensorBoard logging (required for visualization)
+- `--verbose`: Enable detailed console output
+- `--log-dir`: Specify custom directory for TensorBoard logs (default: `logs/tensorboard`)
+- `--run-name`: Custom name for the experiment run
 
 ## Project Structure
 
@@ -193,7 +217,11 @@ model:
 2. Run multivariate benchmarking:
 
 ```bash
+# Basic multivariate benchmark
 python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/multivariate_forecast_horizon_config.yaml
+
+# With TensorBoard monitoring
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/multivariate_forecast_horizon_config.yaml --tensorboard --verbose
 ```
 
 ## How to Run the Benchmarking Pipeline
@@ -201,12 +229,17 @@ python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/con
 To run the benchmarking pipeline with a specific configuration file:
 
 ```bash
+# Basic benchmark run
 python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/your_config.yaml
+
+# With TensorBoard logging
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/your_config.yaml --tensorboard
 ```
 
 - Replace `your_config.yaml` with the path to your desired YAML config file.
 - The config file controls which models are run, their hyperparameters, and the dataset used.
-- Results and TensorBoard logs will be saved in the `runs/` and `results/` directories.
+- Add `--tensorboard` flag to enable TensorBoard logging and visualization.
+- Results will be saved in the `results/` directory, TensorBoard logs in `runs/` (when `--tensorboard` is used).
 
 ### Multivariate-Specific Configuration
 
