@@ -2,6 +2,10 @@
 Main script for orchestrating the end-to-end benchmarking pipeline.
 """
 
+import os
+# Suppress TensorFlow oneDNN custom operations message
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from benchmarking_pipeline.pipeline.feature_extraction import FeatureExtractor
@@ -11,6 +15,7 @@ from benchmarking_pipeline.pipeline.logger import Logger
 from torch.utils.tensorboard import SummaryWriter
 import time
 from benchmarking_pipeline.models.arima_model import ARIMAModel
+from benchmarking_pipeline.models.multivariate.arima_model import MultivariateARIMAModel
 from benchmarking_pipeline.models.theta_model import ThetaModel
 from benchmarking_pipeline.models.deepAR_model import DeepARModel
 from benchmarking_pipeline.models.xgboost_model import XGBoostModel
@@ -19,9 +24,9 @@ from benchmarking_pipeline.models.prophet_model import ProphetModel
 from benchmarking_pipeline.models.lstm_model import LSTMModel
 from benchmarking_pipeline.models.croston_classic_model import CrostonClassicModel
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
-from benchmarking_pipeline.trainer.bayesian_hyperparameter_tuner import BayesianHyperparameterTuner
-from benchmarking_pipeline.trainer.successive_halving_tuner import SuccessiveHalvingTuner
-from benchmarking_pipeline.trainer.population_based_tuner import PopulationBasedTuner
+# from benchmarking_pipeline.trainer.bayesian_hyperparameter_tuner import BayesianHyperparameterTuner
+# from benchmarking_pipeline.trainer.successive_halving_tuner import SuccessiveHalvingTuner
+# from benchmarking_pipeline.trainer.population_based_tuner import PopulationBasedTuner
 import numpy as np
 import pandas as pd
 import re
@@ -243,18 +248,26 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
     dataset_name = config['dataset']['name']
     arima_params = config['model']['parameters']['ARIMA']
     
-    # Auto-detect target column for multivariate datasets
+    # Check if we have multivariate data
+    is_multivariate = False
     if len(all_dataset_chunks) > 0:
         available_targets = list(all_dataset_chunks[0].train.targets.columns)
-        if 'target_0' in available_targets:
-            # Use first target for multivariate datasets
-            arima_params['target_col'] = 'target_0'
-        elif 'y' not in available_targets and len(available_targets) > 0:
-            # Use first available target if 'y' doesn't exist
-            arima_params['target_col'] = available_targets[0]
+        print(f"[DEBUG] Available targets: {available_targets}")
+        is_multivariate = len(available_targets) > 1 or (len(available_targets) == 1 and available_targets[0] != 'y')
+        print(f"[DEBUG] Is multivariate: {is_multivariate}")
+        
+        if is_multivariate:
+            print(f"[DEBUG] Using MultivariateARIMAModel for multivariate data")
         else:
-            # Default to 'y' for univariate datasets
-            arima_params['target_col'] = 'y'
+            # Univariate case - use original logic
+            if 'target_0' in available_targets:
+                arima_params['target_col'] = 'target_0'
+                print(f"[DEBUG] Using target_col: target_0")
+            elif 'y' not in available_targets and len(available_targets) > 0:
+                arima_params['target_col'] = available_targets[0]
+                print(f"[DEBUG] Using target_col: {available_targets[0]}")
+            else:
+                print(f"[DEBUG] No target column detection needed, using default")
     # Create model_params with default values for initial model creation
     model_params = {}
     for k, v in arima_params.items():
@@ -278,20 +291,29 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
         else:
             model_params[k] = value
     print(f"[DEBUG] ARIMA model_params: {model_params}")
-    arima_model = ARIMAModel(model_params)
+    
+    if is_multivariate:
+        # Use multivariate ARIMA model
+        arima_model = MultivariateARIMAModel(model_params)
+        print(f"[DEBUG] Created MultivariateARIMAModel")
+    else:
+        # Use regular univariate ARIMA model
+        arima_model = ARIMAModel(model_params)
+        print(f"[DEBUG] Created univariate ARIMAModel")
     
     # Create appropriate tuner
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(arima_model, arima_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else arima_params.keys())}
     # Cast p, d, q to int if present
@@ -303,18 +325,28 @@ def run_arima(all_dataset_chunks, writer=None, config=None, config_path=None):
     if writer is not None:
         for metric, value in results.items():
             writer.add_scalar('ARIMA/' + metric, value, 1)
-        y_true, y_pred = arima_model.get_last_eval_true_pred()
-        # Get all targets from the dataset for comprehensive plotting
-        all_targets_true = all_dataset_chunks[0].test.targets.values
-        # For multivariate datasets, we need to handle the case where predictions are only for one target
-        if all_targets_true.ndim == 2 and y_pred.ndim == 1:
-            # Create a predictions array that matches the shape of all targets
-            # Fill with NaN for targets we don't have predictions for
-            all_targets_pred = np.full_like(all_targets_true, np.nan)
-            all_targets_pred[:, 0] = y_pred  # Put predictions in first column
+        
+        if is_multivariate:
+            # Multivariate case - use all targets
+            all_targets_true = all_dataset_chunks[0].test.targets.values
+            y_context = all_dataset_chunks[0].train.targets
+            y_target = all_dataset_chunks[0].test.targets
+            full_preds = arima_model.predict(y_context=y_context, y_target=y_target)
+            log_preds_vs_true(writer, 'ARIMA', all_targets_true, full_preds, 1)
         else:
-            all_targets_pred = y_pred
-        log_preds_vs_true(writer, 'ARIMA', all_targets_true, all_targets_pred, 1)
+            # Univariate case - use original logic
+            y_true, y_pred = arima_model.get_last_eval_true_pred()
+            # Get all targets from the dataset for comprehensive plotting
+            all_targets_true = all_dataset_chunks[0].test.targets.values
+            # For multivariate datasets, we need to handle the case where predictions are only for one target
+            if all_targets_true.ndim == 2 and y_pred.ndim == 1:
+                # Create a predictions array that matches the shape of all targets
+                # Fill with NaN for targets we don't have predictions for
+                all_targets_pred = np.full_like(all_targets_true, np.nan)
+                all_targets_pred[:, 0] = y_pred  # Put predictions in first column
+            else:
+                all_targets_pred = y_pred
+            log_preds_vs_true(writer, 'ARIMA', all_targets_true, all_targets_pred, 1)
     os.makedirs('results', exist_ok=True)
     pd.DataFrame([results]).to_csv(f'results/ARIMA_{dataset_name}_{time.strftime("%Y%m%d-%H%M%S")}.csv', index=False)
     print("ARIMA WORKS!")
@@ -359,14 +391,15 @@ def run_theta(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(theta_model, theta_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else theta_params.keys())}
     for k in ['sp', 'forecast_horizon']:
@@ -433,14 +466,15 @@ def run_deep_ar(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(deep_ar_model, deep_ar_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else deep_ar_params.keys())}
     for k in ['hidden_size', 'rnn_layers', 'batch_size', 'epochs', 'forecast_horizon', 'num_workers']:
@@ -506,14 +540,15 @@ def run_xgboost(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(xgb_model, xgb_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else xgb_params.keys())}
     for k in ['lookback_window', 'forecast_horizon', 'n_estimators', 'max_depth', 'random_state', 'n_jobs']:
@@ -575,14 +610,15 @@ def run_random_forest(all_dataset_chunks, writer=None, config=None, config_path=
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(rf_model, rf_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else rf_params.keys())}
     for k in ['lookback_window', 'forecast_horizon', 'n_estimators', 'max_depth', 'random_state', 'n_jobs']:
@@ -662,14 +698,15 @@ def run_prophet(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(prophet_model, prophet_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: cast_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else prophet_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
@@ -729,14 +766,15 @@ def run_croston_classic(all_dataset_chunks, writer=None, config=None, config_pat
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(croston_model, croston_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     results = tuner.final_evaluation({"alpha": 0.1}, all_dataset_chunks)
     print(f"Final Evaluation CrostonClassic {dataset_name}: {results}")
@@ -817,14 +855,15 @@ def run_lstm(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(lstm_model, lstm_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else lstm_params.keys())}
     for k in ['units', 'layers', 'batch_size', 'epochs', 'sequence_length', 'forecast_horizon']:
@@ -926,14 +965,15 @@ def run_svr(all_dataset_chunks, writer=None, config=None, config_path=None):
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(svr_model, svr_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: cast_svr_param(k, validation_score_hyperparameter_tuple[1][i]) for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else svr_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
@@ -1058,14 +1098,15 @@ def run_exponential_smoothing(all_dataset_chunks, writer=None, config=None, conf
     hp_tuning_method = config.get('model', {}).get('search_method', 'grid')
     tuner = _create_hyperparameter_tuner(es_model, es_params, hp_tuning_method)
     
-    if isinstance(tuner, BayesianHyperparameterTuner):
-        validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
-    elif isinstance(tuner, SuccessiveHalvingTuner):
-        validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
-    elif isinstance(tuner, PopulationBasedTuner):
-        validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
-    else:
-        validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    # if isinstance(tuner, BayesianHyperparameterTuner):
+    #     validation_score_hyperparameter_tuple = tuner.bayesian_optimization_several_time_series(all_dataset_chunks)
+    # elif isinstance(tuner, SuccessiveHalvingTuner):
+    #     validation_score_hyperparameter_tuple = tuner.successive_halving_search(all_dataset_chunks)
+    # elif isinstance(tuner, PopulationBasedTuner):
+    #     validation_score_hyperparameter_tuple = tuner.population_based_search(all_dataset_chunks)
+    # else:
+    #     validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
+    validation_score_hyperparameter_tuple = tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
     
     best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(tuner.param_names if hasattr(tuner, 'param_names') else es_params.keys())}
     results = tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
