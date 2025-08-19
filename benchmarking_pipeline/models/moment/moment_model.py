@@ -5,7 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 from typing import Dict, List, Optional, Union, Any
 import warnings
 from sklearn.preprocessing import StandardScaler
-from foundation_model import FoundationModel
+from benchmarking_pipeline.models.foundation_model import FoundationModel
 from momentfm import MOMENTPipeline
 from tqdm import tqdm
 
@@ -47,13 +47,15 @@ class MomentModel(FoundationModel):
         super().__init__(config, config_file)
         self.model_path = self.config.get('model_path', 'AutonLab/MOMENT-1-large')
         self.context_length = int(self.config.get('context_length', 512))
-        self.fine_tune_epochs = int(self.config.get('fine_tune_epochs', 3))
+        self.fine_tune_epochs = int(self.config.get('fine_tune_epochs', 0))
         self.batch_size = int(self.config.get('batch_size', 8))
         self.learning_rate = float(self.config.get('learning_rate', 1e-4))
+        self.prediction_length = self.config.get('prediction_length', 40)
         self.model = None
         self.scaler = None
         self.is_fitted = False
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        # self.pdt is also a 
         print(f"MOMENT Model initialized - Device: {self.device}")
         print(f"Context length: {self.context_length}, Fine-tune epochs: {self.fine_tune_epochs}")
 
@@ -143,7 +145,7 @@ class MomentModel(FoundationModel):
             else:
                 columns = list(range(y_context.shape[0]))
                 df = pd.DataFrame(y_context.T, columns=columns)
-        prediction_length = self.config.get('pdt', self.config.get('prediction_length', 8))
+        prediction_length = self.prediction_length
         prediction_length = int(prediction_length)
         results = self._sub_predict(df, prediction_length)
         if len(list(results.keys())) == 1:
@@ -210,7 +212,7 @@ class MomentModel(FoundationModel):
 
 
 # testing
-
+"""
 if __name__ == "__main__":
     # Create sample data similar to your TimesFM example
     dates = pd.date_range('2023-01-01', periods=1000, freq='D')
@@ -238,3 +240,4 @@ if __name__ == "__main__":
         print(f"\nModel info: {model.get_model_info()}")
     except Exception as e:
         print(f"Error: {e}")
+"""
