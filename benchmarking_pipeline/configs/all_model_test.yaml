@@ -9,10 +9,11 @@ dataset:
   handle_missing: interpolate
   chunks: 2
 model:
-  # [TODO] chronos, lagllama, moment, tabPFN, timesFM
-  # [DONE] arima, theta, moirai, croston, seasonal naive, moirai moe, toto, svr, exponential smoothing, lstm, prophet, random_forest, xgboost
+  # [TODO] chronos, lagllama, moment, tabPFN, timesFM, arima, theta, moirai, croston, seasonal naive, moirai moe, toto, svr, exponential smoothing, lstm, prophet, random_forest, xgboost
+  # [DONE] 
+  name: ["arima"]
   # name: ["moment;moment_model;MomentModel"]
-  name: ["lag_llama;lagllama_model;LagLlamaModel"]
+  # name: ["lag_llama;lagllama_model;LagLlamaModel"]
   #name: ["tabpfn;tabPFN;TabPFNForecaster", "chronos;chronos;ChronosForecaster"]
   #name: ["lstm;lstm_model;LSTMModel", "xgboost;xgboost_model;XGBoostModel", "prophet;prophet_model;ProphetModel", "random_forest;random_forest_model;RandomForestModel"]
   #name: ["exponential_smoothing;exponential_smoothing_model;ExponentialSmoothingModel", "svr_model;SVR_model;SVRModel"]

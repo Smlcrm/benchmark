@@ -10,7 +10,7 @@ import os
 from benchmarking_pipeline.models.base_model import BaseModel
 
 
-class ARIMAModel(BaseModel):
+class ArimaModel(BaseModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize ARIMA model with given configuration.
