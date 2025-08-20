@@ -73,10 +73,21 @@ class BenchmarkRunner:
         # Run each model we have individually
         for model_name in model_names:
 
+            """
             model_folder_name, model_file_name, model_class_name = model_name.split(";")
             print("WHUH", [model_folder_name, model_file_name, model_class_name])
             print(model_folder_name)
             print(config['model']['parameters'][model_folder_name])
+            """
+            model_folder_name = model_name
+            model_file_name = model_folder_name + "_model"
+            model_class_name_components = model_file_name.split("_")
+            model_class_name_components = [model_class_name_component.title() for model_class_name_component in model_class_name_components]
+            model_class_name = "".join(model_class_name_components)
+            print("WHUH", [model_folder_name, model_file_name, model_class_name])
+            print(model_folder_name)
+            print(config['model']['parameters'][model_folder_name])
+
             requirements_path = f"benchmarking_pipeline/models/{model_folder_name}/requirements.txt"
 
             # Something on my mind: uv could probably make this process a LOT quicker - definitely something to explore.
