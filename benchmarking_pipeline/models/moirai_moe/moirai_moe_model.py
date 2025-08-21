@@ -9,7 +9,7 @@ from benchmarking_pipeline.models.foundation_model import FoundationModel
 from typing import Optional, List, Union
 from einops import rearrange
 
-class MoiraiModel(FoundationModel):
+class MoiraiMoeModel(FoundationModel):
 
   def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
     """
