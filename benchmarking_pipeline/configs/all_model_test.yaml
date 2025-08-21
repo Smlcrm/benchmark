@@ -9,16 +9,16 @@ dataset:
   handle_missing: interpolate
   chunks: 2
 model:
-  # [TODO] chronos, lagllama, moment, tabPFN, timesFM, croston, seasonal naive, toto, svr, exponential smoothing, lstm, prophet, random_forest, xgboost
-  # [DONE] arima, theta, moirai, moirai_moe
-  name: ["arima", "theta", "moirai", "moirai_moe"]
-  # name: ["croston_classic", "seasonal_naive", "toto", "exponential_smoothing"]
+  # [TODO] chronos, lagllama, moment, tabPFN, timesFM, svr, lstm, prophet, random_forest, xgboost
+  # [DONE] arima, theta, moirai, moirai_moe, croston_classic, seasonal, toto, exponential_smoothing
+  # name: ["arima", "theta", "moirai", "moirai_moe"]
+  name: ["croston_classic", "seasonal_naive", "toto", "exponential_smoothing"]
 
   # name: ["moment;moment_model;MomentModel"]
   # name: ["lag_llama;lagllama_model;LagLlamaModel"]
   #name: ["tabpfn;tabPFN;TabPFNForecaster", "chronos;chronos;ChronosForecaster"]
   #name: ["lstm;lstm_model;LSTMModel", "xgboost;xgboost_model;XGBoostModel", "prophet;prophet_model;ProphetModel", "random_forest;random_forest_model;RandomForestModel"]
-  #name: ["exponential_smoothing;exponential_smoothing_model;ExponentialSmoothingModel", "svr_model;SVR_model;SVRModel"]
+  #name: ["svr_model;SVR_model;SVRModel"]
   parameters:
     moment:
       model_path: ['AutonLab/MOMENT-1-large']
