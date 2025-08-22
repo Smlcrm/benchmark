@@ -18,7 +18,7 @@ import time
 from tensorflow.keras.callbacks import TensorBoard
 
 
-class LSTMModel(BaseModel):
+class LstmModel(BaseModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize LSTM model with given configuration.

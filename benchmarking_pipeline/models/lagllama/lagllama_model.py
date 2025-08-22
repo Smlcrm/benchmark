@@ -11,12 +11,12 @@ from gluonts.dataset.pandas import PandasDataset
 from gluonts.evaluation import make_evaluation_predictions
 from benchmarking_pipeline.models.foundation_model import FoundationModel
 
-from benchmarking_pipeline.models.lag_llama.lag_llama.gluon.estimator import LagLlamaEstimator
+from benchmarking_pipeline.models.lagllama.lag_llama.gluon.estimator import LagLlamaEstimator
 
 # Try to import lag_llama, install if not available
 
 
-class LagLlamaModel(FoundationModel):
+class LagllamaModel(FoundationModel):
     """
     Lag-Llama model implementation that inherits from BaseModel.
     Works seamlessly like TimesFM with automatic setup.
