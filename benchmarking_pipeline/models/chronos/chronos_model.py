@@ -5,7 +5,7 @@ from chronos import BaseChronosPipeline
 from benchmarking_pipeline.models.foundation_model import FoundationModel
 from typing import Dict, List, Optional, Any, Union
 
-class ChronosForecaster(FoundationModel):
+class ChronosModel(FoundationModel):
 
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """

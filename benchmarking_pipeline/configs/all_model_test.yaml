@@ -16,9 +16,8 @@ model:
   # name: ["lstm", "xgboost", "prophet", "random_forest"]
 
 
-  name: ["lag_llama"]
+  # name: ["lagllama", "tabpfn", "svr", "chronos"] 
   # name: ["moment;moment_model;MomentModel"]
-  # name: ["lag_llama;lagllama_model;LagLlamaModel"]
   #name: ["tabpfn;tabPFN;TabPFNForecaster", "chronos;chronos;ChronosForecaster"]
   #name: ["svr_model;SVR_model;SVRModel"]
   parameters:
@@ -29,7 +28,7 @@ model:
       batch_size: [8]
       learning_rate: [1e-4]
       prediction_length: [40]
-    lag_llama:
+    lagllama:
       prediction_length: [100]
       context_length: [4]
       num_samples: [5]
@@ -90,7 +89,7 @@ model:
       seasonal_periods: [7]
       damped_trend: [false]
       forecast_horizon: [900]
-    svr_model:
+    svr:
       kernel: ["rbf"]
       C: [1.0]
       epsilon: [0.1]
