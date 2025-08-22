@@ -25,7 +25,7 @@ def make_time_features(n: int) -> pd.DataFrame:
     return pd.DataFrame(features)
 
 
-class TabPFNForecaster(FoundationModel):
+class TabpfnModel(FoundationModel):
 
     def __init__(
         self, config: Dict[str, Any] = None, config_file: str = None
