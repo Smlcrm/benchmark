@@ -13,7 +13,7 @@ from benchmarking_pipeline.models.base_model import BaseModel
 from sklearn.multioutput import MultiOutputRegressor
 
 
-class SVRModel(BaseModel):
+class SvrModel(BaseModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize Support Vector Regression (SVR) model with a given configuration.

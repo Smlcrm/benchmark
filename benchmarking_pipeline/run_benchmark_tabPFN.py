@@ -6,7 +6,7 @@ from benchmarking_pipeline.pipeline.data_loader import DataLoader
 from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
 from torch.utils.tensorboard import SummaryWriter
 import time
-from benchmarking_pipeline.models.tabpfn.tabPFN import TabPFNForecaster
+from benchmarking_pipeline.models.tabpfn.tabpfn_model import TabpfnModel
 import numpy as np
 import pandas as pd
 import os
@@ -66,7 +66,7 @@ def run_tabpfn(all_dataset_chunks, writer=None, config=None, config_path=None):
     prediction_length = tabpfn_params.get('forecast_horizon', 5)
     target_col = tabpfn_params.get('target_col', 'y')
 
-    tabpfn_model = TabPFNForecaster(
+    tabpfn_model = TabpfnModel(
         n_ensemble_configs=n_ensemble_configs,
         device=device
     )
