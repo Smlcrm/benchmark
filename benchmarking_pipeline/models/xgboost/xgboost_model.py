@@ -10,7 +10,7 @@ from xgboost import XGBRegressor
 from benchmarking_pipeline.models.base_model import BaseModel
 
 
-class XGBoostModel(BaseModel):
+class XgboostModel(BaseModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize XGBoost model with a given configuration.
