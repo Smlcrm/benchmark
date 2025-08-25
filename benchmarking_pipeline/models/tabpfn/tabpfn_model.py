@@ -67,7 +67,7 @@ class TabpfnModel(FoundationModel):
         y = y_history
         return X, y
     
-    def set_params(self, **params: Dict[str, Any]) -> 'TabPFNForecaster':
+    def set_params(self, **params: Dict[str, Any]) -> 'TabpfnModel':
         for key, value in params.items():
             if hasattr(self, key):
                 setattr(self, key, value)

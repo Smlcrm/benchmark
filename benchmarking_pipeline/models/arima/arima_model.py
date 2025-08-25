@@ -47,7 +47,7 @@ class ArimaModel(BaseModel):
               y_start_date: Optional[str] = None,
               x_start_date: Optional[str] = None,
               **kwargs
-    ) -> 'ARIMAModel':
+    ) -> 'ArimaModel':
         """
         Train the ARIMA model on given data.
         

@@ -35,7 +35,7 @@ class MoiraiMoeModel(FoundationModel):
     self.target_col = self.config.get('target_col', 'y')
     self.is_fitted = False
   
-  def set_params(self, **params: Dict[str, Any]) -> 'MoiraiModel':
+  def set_params(self, **params: Dict[str, Any]) -> 'MoiraiMoeModel':
     for key, value in params.items():
       if hasattr(self, key):
         setattr(self, key, value)
