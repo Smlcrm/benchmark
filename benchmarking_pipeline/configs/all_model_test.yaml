@@ -11,15 +11,16 @@ dataset:
 model:
   # [TODO] chronos, lagllama, moment, tabPFN, timesFM, svr,
   # [DONE] arima, theta, moirai, moirai_moe, croston_classic, seasonal, toto, exponential_smoothing, lstm, xgboost, prophet, random_forest
-  # name: ["arima", "theta", "moirai", "moirai_moe"]
+  name: ["arima", "theta", "moirai", "moirai_moe"]
   # name: ["moirai_moe"]
   # name: ["croston_classic", "seasonal_naive", "toto", "exponential_smoothing"]
   # name: ["lstm", "xgboost", "prophet", "random_forest"]
 
 
   # name: ["lagllama", "tabpfn", "svr", "chronos"] 
-  name: ["tiny_time_mixer"]
-  # name: ["moment;moment_model;MomentModel"]
+  # name: ["moment"]
+
+  # name: ["tiny_time_mixer"] - # Takes a long time to run
   parameters:
     tiny_time_mixer:
       prediction_length: [40]
@@ -28,7 +29,7 @@ model:
       context_length: [512]
       fine_tune_epochs: [0]
       batch_size: [8]
-      learning_rate: [1e-4]
+      learning_rate: [0.0001]
       prediction_length: [40]
     lagllama:
       prediction_length: [100]
