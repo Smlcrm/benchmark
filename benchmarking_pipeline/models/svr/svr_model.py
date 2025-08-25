@@ -46,7 +46,7 @@ class SvrModel(BaseModel):
             y.append(y_series[i+lookback_window:i+lookback_window+forecast_horizon])
         return np.array(X), np.array(y)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'SVRModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'SvrModel':
         """
         Train the SVR model for direct multi-output forecasting using MultiOutputRegressor.
         """
@@ -182,7 +182,7 @@ class SvrModel(BaseModel):
         # Return config params if model is not yet instantiated
         return self.config.get('model_params', {})
 
-    def set_params(self, **params: Dict[str, Any]) -> 'SVRModel':
+    def set_params(self, **params: Dict[str, Any]) -> 'SvrModel':
         """
         Set model parameters. This will rebuild the model instance with the new parameters.
         Handles MultiOutputRegressor by prefixing SVR params with 'estimator__'.
@@ -252,7 +252,7 @@ class SvrModel(BaseModel):
         with open(path, 'wb') as f:
             pickle.dump(model_and_scaler, f)
             
-    def load(self, path: str) -> 'SVRModel':
+    def load(self, path: str) -> 'SvrModel':
         """
         Load a trained SVR model and its scaler from disk.
         

@@ -58,7 +58,7 @@ class ChronosModel(FoundationModel):
         )
         print("Model loaded successfully :D")"""
     
-    def set_params(self, **params: Dict[str, Any]) -> 'ChronosForecaster':
+    def set_params(self, **params: Dict[str, Any]) -> 'ChronosModel':
         for key, value in params.items():
             if hasattr(self, key):
                 setattr(self, key, value)
