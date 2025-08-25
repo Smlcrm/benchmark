@@ -49,7 +49,7 @@ class MomentModel(FoundationModel):
         self.context_length = int(self.config.get('context_length', 512))
         self.fine_tune_epochs = int(self.config.get('fine_tune_epochs', 0))
         self.batch_size = int(self.config.get('batch_size', 8))
-        self.learning_rate = float(self.config.get('learning_rate', 1e-4))
+        self.learning_rate = float(self.config.get('learning_rate', 0.0001))
         self.prediction_length = self.config.get('prediction_length', 40)
         self.model = None
         self.scaler = None
@@ -97,7 +97,7 @@ class MomentModel(FoundationModel):
             raise ValueError("No valid training samples created. Check your data length and parameters.")
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
         criterion = torch.nn.MSELoss()
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=float(self.learning_rate))
         self.model.train()
         if verbose:
             print(f"Fine-tuning MOMENT on {len(dataset)} samples...")
@@ -120,7 +120,7 @@ class MomentModel(FoundationModel):
             if verbose:
                 print(f"Epoch {epoch+1}: Average loss = {avg_loss:.4f}")
         self.is_fitted = True
-        print("MOMENT fine-tuning completed!")
+        #print("MOMENT fine-tuning completed!")
 
     def predict(self,
             y_context: Optional[Union[pd.Series, np.ndarray]] = None,
@@ -159,13 +159,13 @@ class MomentModel(FoundationModel):
     def _sub_predict(self, df: pd.DataFrame, prediction_length: int) -> Dict[str, List[float]]:
         if not self.is_fitted:
             self.fit(df, prediction_length, verbose=True)
-        if self.model.model.forecast_horizon != prediction_length:
+        """if self.model.model.forecast_horizon != prediction_length:
             warnings.warn(
                 f"Model was fitted for prediction_length={self.model.model.forecast_horizon}, "
                 f"but predict() called with prediction_length={prediction_length}. "
                 "Re-fitting model..."
             )
-            self.fit(df, prediction_length, verbose=False)
+            self.fit(df, prediction_length, verbose=False)"""
         self.model.eval()
         results = {}
         with torch.no_grad():
@@ -207,7 +207,7 @@ class MomentModel(FoundationModel):
             'fine_tune_epochs': self.fine_tune_epochs,
             'batch_size': self.batch_size,
             'learning_rate': self.learning_rate,
-            'forecast_horizon': self.model.model.forecast_horizon if self.model else None,
+            'forecast_horizon': self.prediction_length,
         }
 
 
