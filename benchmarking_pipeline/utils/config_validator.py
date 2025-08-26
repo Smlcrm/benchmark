@@ -380,6 +380,12 @@ class ConfigValidator:
         """Validate parameters for a specific model."""
         schema = self.model_parameter_schemas[model_name]
         
+        # First check for missing required parameters
+        for param_name, param_schema in schema.items():
+            if param_schema.get('required', False) and param_name not in params:
+                raise ConfigValidationError(f"Required parameter '{param_name}' is missing", f"{path}.{param_name}")
+        
+        # Then validate existing parameters
         for param_name, param_value in params.items():
             if param_name not in schema:
                 logger.warning(f"Unknown parameter '{param_name}' for model '{model_name}' in {path}")
@@ -388,13 +394,8 @@ class ConfigValidator:
             param_schema = schema[param_name]
             param_path = f"{path}.{param_name}"
             
-            # Check if parameter is required
-            if param_schema.get('required', False) and param_name not in params:
-                raise ConfigValidationError(f"Required parameter '{param_name}' is missing", param_path)
-            
             # Validate parameter value
-            if param_name in params:
-                self._validate_field(param_value, param_schema, param_path)
+            self._validate_field(param_value, param_schema, param_path)
     
     def _validate_metrics(self, value: List[str], path: str):
         """Validate metrics against evaluation type."""
