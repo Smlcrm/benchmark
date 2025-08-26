@@ -164,7 +164,9 @@ class ConfigValidator:
                 'method': {'type': list, 'element_type': str, 'allowed_values': ['additive', 'multiplicative']},
                 'target_cols': {'type': list, 'element_type': str, 'required': True},
                 'loss_functions': {'type': list, 'element_type': str, 'required': True},
-                'primary_loss': {'type': list, 'element_type': str, 'required': True}
+                'primary_loss': {'type': list, 'element_type': str, 'required': True},
+                'use_reduced_rank': {'type': list, 'element_type': bool},
+                'theta_method': {'type': list, 'element_type': str, 'allowed_values': ['least_squares', 'correlation_optimal']}
             },
             'svr': {
                 'kernel': {'type': list, 'element_type': str, 'allowed_values': ['rbf', 'linear', 'poly', 'sigmoid']},
