@@ -38,7 +38,7 @@ model:
       context_length: [4]
       num_samples: [5]
       batch_size: [4]
-      target_col: ['y']
+      target_cols: ['y']  # Standardized to target_cols
     timesfm:
       per_core_batch_size: [2]
       horizon_len: [40]
@@ -79,6 +79,7 @@ model:
       seasonal_periods: [7]
       damped_trend: [false]
       forecast_horizon: [50]
+      target_cols: ['y']  # Standardized to target_cols
     svr:
       kernel: ["rbf", "linear"]
       C: [0.1, 1.0, 10.0]
@@ -114,6 +115,7 @@ model:
       psz: [32]
       bsz: [8]
       num_samples: [5]
+      target_cols: ['y']  # Standardized to target_cols
     moirai_moe:
       model_name: ["moirai_moe"]  # moirai and moirai_moe come from the same model file
       size: ["small"]
@@ -121,14 +123,16 @@ model:
       psz: [32]
       bsz: [8]
       num_samples: [5]
+      target_cols: ['y']  # Standardized to target_cols
     toto:
       model_name: ["toto"]
       prediction_length: [900]
       num_samples: [40]
       samples_per_batch: [40]
+      target_cols: ['y']  # Standardized to target_cols
     croston_classic:
       alpha: [0.1, 0.5, 1]
-      target_col: ["y"]
+      target_cols: ['y']  # Standardized to target_cols
       loss_functions: ["mae"]
       primary_loss: ["mae"]
       forecast_horizon: [50]
