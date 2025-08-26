@@ -39,6 +39,7 @@ lightning_logs/
 # Training runs and results
 runs/
 results/
+logs/
 *.tfevents.*
 
 # Testing
