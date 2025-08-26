@@ -8,7 +8,7 @@ from benchmarking_pipeline.models.foundation_model import FoundationModel
 class TimesFMModel(FoundationModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         super().__init__(config, config_file)
-        self.model_path = "google/timesfm-1.0-200m"
+        self.model_path = "google/timesfm-1.0-50m"  # Try smaller model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.per_core_batch_size = self.config.get("per_core_batch_size", 2)
         self.horizon_len = self.config.get("horizon_len", 40),
