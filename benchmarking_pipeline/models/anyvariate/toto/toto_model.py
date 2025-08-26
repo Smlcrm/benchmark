@@ -3,9 +3,9 @@ import torch
 import numpy as np
 import pandas as pd
 
-from benchmarking_pipeline.models.toto.toto.model.toto import Toto
-from benchmarking_pipeline.models.toto.toto.data.util.dataset import MaskedTimeseries
-from benchmarking_pipeline.models.toto.toto.inference.forecaster import TotoForecaster
+from .toto.model.toto import Toto
+from .toto.data.util.dataset import MaskedTimeseries
+from .toto.inference.forecaster import TotoForecaster
 from benchmarking_pipeline.models.foundation_model import FoundationModel
 from typing import Optional, Union, Dict, Any
 
