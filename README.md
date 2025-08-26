@@ -69,7 +69,7 @@ pip install -r requirements.txt
 
 2. Run the benchmark using the CLI:
 ```bash
-python benchmarking_pipeline/cli.py --config configs/default_config.yaml
+python benchmarking_pipeline/cli.py --config benchmarking_pipeline/configs/all_model_test.yaml
 ```
 
 ## How to Run the Benchmarking Pipeline
@@ -77,7 +77,7 @@ python benchmarking_pipeline/cli.py --config configs/default_config.yaml
 To run the benchmarking pipeline with a specific configuration file:
 
 ```bash
-python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/your_config.yaml
+python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/all_model_test.yaml
 ```
 
 - Replace `your_config.yaml` with the path to your desired YAML config file.
@@ -96,18 +96,18 @@ python test_plot.py --dataset_path benchmarking_pipeline/datasets/your_dataset_f
 - Optionally, you can pass a custom config for preprocessing:
 
 ```bash
-python test_plot.py --dataset_path benchmarking_pipeline/datasets/your_dataset_folder --config benchmarking_pipeline/configs/your_config.yaml
+python test_plot.py --dataset_path benchmarking_pipeline/datasets/your_dataset_folder --config benchmarking_pipeline/configs/all_model_test.yaml
 ```
 
 This will display a plot of the full time series after preprocessing.
 
 ---
 
-For more details on configuration options and model-specific settings, see the example YAML files in `benchmarking_pipeline/configs/`.
+For more details on configuration options and model-specific settings, see the consolidated configuration file in `benchmarking_pipeline/configs/all_model_test.yaml` and the `CONFIG_DOCUMENTATION.md` for detailed parameter explanations.
 
 ## Configuration
 
-The pipeline is configured using YAML files in the `configs/` directory. See `configs/default_config.yaml` for an example configuration.
+The pipeline is configured using a single consolidated YAML file in the `configs/` directory. See `benchmarking_pipeline/configs/all_model_test.yaml` for the complete configuration.
 
 ## Features
 
