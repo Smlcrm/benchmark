@@ -1,0 +1,163 @@
+test_type: deterministic
+dataset:
+  name: australian_electricity_demand
+  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  frequency: D
+  forecast_horizon: 5
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: false
+  handle_missing: interpolate
+  chunks: 2
+model:
+  # Running all models with automatic variant detection
+  # Format: "model_name" - system automatically detects optimal variant based on dataset
+  # Anyvariate models can handle both variants within the same implementation
+  # Non-anyvariate models route to separate univariate/multivariate folders based on dataset properties
+  name: [
+    "random_forest", "svr", "tabpfn", "chronos", "moment", "lagllama", "timesfm", "deepar",
+    "foundation_model", "base_model"
+  ]
+
+  parameters:
+    tiny_time_mixer:
+      prediction_length: [40]
+    moment:
+      model_path: ['AutonLab/MOMENT-1-large']
+      context_length: [512]
+      fine_tune_epochs: [0]
+      batch_size: [8]
+      learning_rate: [0.0001]
+      prediction_length: [40]
+    lagllama:
+      prediction_length: [100]
+      context_length: [4]
+      num_samples: [5]
+      batch_size: [4]
+      target_col: ['y']
+    timesfm:
+      per_core_batch_size: [2]
+      horizon_len: [40]
+      num_layers: [2]
+      context_len: [2]
+      use_positional_embedding: [False]
+    tabpfn:
+      allow_large_cpu_dataset: [True]
+      max_sequence_length: [32]
+      prediction_length: [40]
+    chronos:
+      model_size: ['small']
+      context_length: [8]
+      num_samples: [5]
+      prediction_length: [40]
+    xgboost:
+      lookback_window: [10]
+      forecast_horizon: [10]
+      n_estimators: [10]
+      max_depth: [5]
+      learning_rate: [0.1]
+      random_state: [42]
+      n_jobs: [-1]
+    prophet:
+      seasonality_mode: ["additive"]
+      changepoint_prior_scale: [0.05]
+      seasonality_prior_scale: [10.0]
+      yearly_seasonality: [false]
+      weekly_seasonality: [false]
+      daily_seasonality: [false]
+    lstm:
+      units: [2]
+      layers: [1]
+      dropout: [0.1]
+      learning_rate: [0.01]
+      batch_size: [8]
+      epochs: [1]
+      sequence_length: [20]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [10]
+    random_forest:
+      lookback_window: [10]
+      forecast_horizon: [10]
+      n_estimators: [10]
+      max_depth: [3]
+      random_state: [42]
+      n_jobs: [-1]
+    exponential_smoothing:
+      trend: ["add"]
+      seasonal: ["add"]
+      seasonal_periods: [7]
+      damped_trend: [false]
+      forecast_horizon: [900]
+    svr:
+      kernel: ["rbf"]
+      C: [1.0]
+      epsilon: [0.1]
+      lookback_window: [10]
+      forecast_horizon: [10]
+      random_state: [42]
+    arima:
+      p: [0, 1]
+      d: [0, 1]
+      q: [0, 1]
+      s: [2, 4]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [2]
+    theta:
+      sp: [1, 2]
+      forecast_horizon: [10]
+    moirai:
+      model_name: ["moirai"]
+      size: ["small"]
+      pdt: [900]
+      psz: [32]
+      bsz: [8]
+      num_samples: [5]
+    moirai_moe:
+      model_name: ["moirai_moe"] #, moirai_moe"] # moirai and moirai_moe come from the same model file
+      size: ["small"]
+      pdt: [900]
+      psz: [32]
+      bsz: [8]
+      num_samples: [5]
+    toto:
+      model_name: ["toto"]
+      self.prediction_length: [900]
+      self.num_samples: [40]
+      self.samples_per_batch: [40]
+    croston_classic:
+      alpha: [0.1]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [900]
+    seasonal_naive:
+      sp: [7, 14]
+      forecast_horizon: [2]
+    deepar:
+      prediction_length: [40]
+      context_length: [20]
+      num_samples: [5]
+      batch_size: [8]
+      epochs: [1]
+      learning_rate: [0.001]
+      target_col: ["y"]
+    foundation_model:
+      model_name: ["foundation"]
+      prediction_length: [40]
+      context_length: [20]
+      num_samples: [5]
+      batch_size: [8]
+      target_col: ["y"]
+    base_model:
+      model_name: ["base"]
+      prediction_length: [40]
+      context_length: [20]
+      num_samples: [5]
+      batch_size: [8]
+      target_col: ["y"]
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse] 
