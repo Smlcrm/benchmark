@@ -36,7 +36,22 @@ outputs/
 *.log
 lightning_logs/
 
-# Hyperparameter tuners
-benchmarking_pipeline/trainer/bayesian_hyperparameter_tuner.py
-benchmarking_pipeline/trainer/population_based_tuner.py
-benchmarking_pipeline/trainer/successive_halving_tuner.py
+# Training runs and results
+runs/
+results/
+*.tfevents.*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
