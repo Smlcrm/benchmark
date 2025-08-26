@@ -77,23 +77,34 @@ class Preprocessor:
         if not self.preprocessing_config.get('normalize', True):
             return df
 
+        # Handle empty DataFrames
+        if df.empty:
+            return df
+
         method = self.preprocessing_config.get('normalization_method', 'standard')
         df_normalized = df.copy()
 
         numerical_cols = df.select_dtypes(include=[np.number]).columns
 
         for col in numerical_cols:
+            # Skip columns with no valid data
+            if df[col].isna().all() or len(df[col].dropna()) == 0:
+                continue
+                
+            # Handle columns with some NaN values by filling them before scaling
+            col_data = df[col].fillna(df[col].mean())  # Fill NaN with mean for scaling
+            
             if is_training:
                 if method == 'standard':
                     scaler = StandardScaler()
                 else:
                     scaler = MinMaxScalerSafe()
-                df_normalized[col] = scaler.fit_transform(df[[col]]).flatten()
+                df_normalized[col] = scaler.fit_transform(col_data.values.reshape(-1, 1)).flatten()
                 self.scalers[col] = scaler
             else:
                 scaler = self.scalers.get(col)
                 if scaler:
-                    df_normalized[col] = scaler.transform(df[[col]]).flatten()
+                    df_normalized[col] = scaler.transform(col_data.values.reshape(-1, 1)).flatten()
 
         return df_normalized
 
@@ -108,8 +119,15 @@ class Preprocessor:
         df_clean = df.copy()
 
         for col in df.select_dtypes(include=[np.number]).columns:
-            z_scores = np.abs((df[col] - df[col].mean()) / df[col].std())
-            df_clean = df_clean[z_scores < threshold]
+            # Only calculate z-scores on non-null values
+            non_null_mask = df[col].notna()
+            if non_null_mask.sum() > 0:  # Only process if we have non-null values
+                non_null_data = df[col][non_null_mask]
+                z_scores = np.abs((non_null_data - non_null_data.mean()) / non_null_data.std())
+                outlier_mask = z_scores >= threshold
+                
+                # Replace outliers with NaN (they will be handled by interpolation later)
+                df_clean.loc[non_null_mask, col] = non_null_data.mask(outlier_mask)
 
         return df_clean
 
@@ -124,12 +142,28 @@ class Preprocessor:
             PreprocessedData: Transformed dataset and preprocessing metadata
         """
         def process_split(split: DatasetSplit, is_training: bool) -> DatasetSplit:
-            df = split.features.copy() if isinstance(split.features, pd.DataFrame) else pd.DataFrame(split.features)
-            df = self._handle_missing_values(df)
+            # Process targets
+            targets_df = split.targets.copy() if isinstance(split.targets, pd.DataFrame) else pd.DataFrame(split.targets)
+            targets_df = self._handle_missing_values(targets_df)
             if is_training:
-                df = self._remove_outliers(df)
-            df = self._normalize_features(df, is_training=is_training)
-            return DatasetSplit(features=df, labels=split.labels, metadata=split.metadata, timestamps=split.timestamps)
+                targets_df = self._remove_outliers(targets_df)
+            targets_df = self._normalize_features(targets_df, is_training=is_training)
+            
+            # Process features (exogenous variables) if present
+            features_df = None
+            if split.features is not None:
+                features_df = split.features.copy() if isinstance(split.features, pd.DataFrame) else pd.DataFrame(split.features)
+                features_df = self._handle_missing_values(features_df)
+                if is_training:
+                    features_df = self._remove_outliers(features_df)
+                features_df = self._normalize_features(features_df, is_training=is_training)
+            
+            return DatasetSplit(
+                targets=targets_df, 
+                features=features_df, 
+                metadata=split.metadata, 
+                timestamps=split.timestamps
+            )
 
         train_split = process_split(data.train, is_training=True)
         val_split = process_split(data.validation, is_training=False)
@@ -155,7 +189,9 @@ class Preprocessor:
                     'mean': getattr(scaler, 'mean_', None),
                     'scale': getattr(scaler, 'scale_', None)
                 } for col, scaler in self.scalers.items()
-            }
+            },
+            'target_columns': list(train_split.targets.columns) if hasattr(train_split.targets, 'columns') else None,
+            'feature_columns': list(train_split.features.columns) if train_split.features is not None and hasattr(train_split.features, 'columns') else None
         }
 
         return PreprocessedData(data=preprocessed_dataset, preprocessing_info=preprocessing_info)

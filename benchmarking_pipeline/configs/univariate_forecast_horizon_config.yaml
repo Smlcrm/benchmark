@@ -1,0 +1,86 @@
+test_type: deterministic
+tensorboard: true
+dataset:
+  name: bdg-2_bear
+  path: benchmarking_pipeline/datasets/bdg-2_bear
+  frequency: 30T
+  forecast_horizon: 50
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: true
+  handle_missing: interpolate
+  chunks: 3
+  num_targets: 1
+model:
+  name: ["lstm"]
+  parameters:
+    ARIMA:
+      p: [0, 1, 2]
+      d: [0, 1]
+      q: [0, 1, 2]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [50]
+    ExponentialSmoothing:
+      trend: ["none", "add"]
+      seasonal: ["none", "add", "mul"]
+      seasonal_periods: [7]
+      damped_trend: [false]
+      forecast_horizon: [50]
+    LSTM:
+      units: [32]
+      layers: [1]
+      dropout: [0.1]
+      learning_rate: [0.01, 1]
+      batch_size: [32]
+      epochs: [20]
+      sequence_length: [10]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [50]
+    RandomForest:
+      lookback_window: [50, 100]
+      forecast_horizon: [50]
+      n_estimators: [10, 50]
+      max_depth: [3, 7]
+      random_state: [42]
+      n_jobs: [-1]
+    Theta:
+      sp: [1, 2, 3]
+      forecast_horizon: [10]
+      method: ["additive"]
+    XGBoost:
+      lookback_window: [50, 100]
+      forecast_horizon: [50]
+      n_estimators: [50]
+      max_depth: [5, 10]
+      learning_rate: [0.1]
+      random_state: [42]
+      n_jobs: [-1]
+    Prophet:
+      seasonality_mode: ["additive"]
+      changepoint_prior_scale: [0.05]
+      seasonality_prior_scale: [10.0]
+      yearly_seasonality: [true]
+      weekly_seasonality: [true]
+      daily_seasonality: [false]
+    CrostonClassic:
+      alpha: [0.1, 0.5, 1]
+      target_col: ["y"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [50]
+    SVR:
+      kernel: ["rbf"]
+      C: [1.0]
+      epsilon: [0.1]
+      lookback_window: [100]
+      forecast_horizon: [50]
+      random_state: [42]
+    SeasonalNaive:
+      sp: [7, 14]
+      forecast_horizon: [50]
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse]
