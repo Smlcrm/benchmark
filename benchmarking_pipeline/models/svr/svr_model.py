@@ -99,7 +99,6 @@ class SvrModel(BaseModel):
         Autoregressive rolling prediction for MultiOutputRegressor SVR.
         Predicts the entire length of y_target by repeatedly using its own predictions as context.
         """
-        import numpy as np
         # Debug: Print initial context info
         print(f"[DEBUG][SVR] Initial y_context: {y_context}")
         print(f"[DEBUG][SVR] Initial y_context length: {len(y_context)}, lookback_window: {self.lookback_window}")
