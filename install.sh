@@ -15,4 +15,4 @@ pip install -r requirements.txt
 echo "✅ Installation complete!"
 echo ""
 echo "🎯 You can now run benchmarks with:"
-echo "   python benchmarking_pipeline/run_all_models.py --config benchmarking_pipeline/configs/all_model_test.yaml"
+echo "   python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/all_model_univariate.yaml"
