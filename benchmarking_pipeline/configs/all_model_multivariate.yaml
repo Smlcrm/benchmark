@@ -12,14 +12,15 @@ dataset:
   num_targets: 2
 
 model:
-  # Running all models with automatic variant detection
-  # Format: "model_name" - system automatically detects optimal variant based on dataset
-  # Anyvariate models can handle both variants within the same implementation
-  # Non-anyvariate models route to separate univariate/multivariate folders based on dataset properties
+  # Running only models that support multivariate forecasting
+  # Anyvariate models: can handle both univariate and multivariate within the same implementation
+  # Multivariate models: have separate multivariate implementations in the multivariate/ folder
   name: [
-    "arima", "theta", "moirai", "moirai_moe", "croston_classic", "seasonal_naive",
-    "toto", "exponential_smoothing", "lstm", "xgboost", "prophet", "random_forest",
-    "svr", "chronos", "moment", "lagllama", "multivariate_theta_model"
+    # Anyvariate models (can handle both variants)
+    "chronos", "moment", "lagllama", "toto", "moirai", "moirai_moe", 
+    "tiny_time_mixer", "timesfm", "croston_classic", "exponential_smoothing",
+    # Models with separate multivariate implementations
+    "arima", "lstm", "svr", "theta", "xgboost"
   ]
 
   parameters:
@@ -44,10 +45,6 @@ model:
       num_layers: [2]
       context_len: [2]
       use_positional_embedding: [False]
-    tabpfn:
-      allow_large_cpu_dataset: [True]
-      max_sequence_length: [32]
-      prediction_length: [40]
     chronos:
       model_size: ['small']
       context_length: [8]
@@ -63,13 +60,6 @@ model:
       colsample_bytree: [0.8, 1.0]
       random_state: [42]
       n_jobs: [-1]
-    prophet:
-      seasonality_mode: ["additive"]
-      changepoint_prior_scale: [0.05]
-      seasonality_prior_scale: [10.0]
-      yearly_seasonality: [true]
-      weekly_seasonality: [true]
-      daily_seasonality: [false]
     lstm:
       units: [32]
       layers: [1]
@@ -82,13 +72,6 @@ model:
       loss_functions: ["mae"]
       primary_loss: ["mae"]
       forecast_horizon: [50]
-    random_forest:
-      lookback_window: [50, 100]
-      forecast_horizon: [50]
-      n_estimators: [10, 50]
-      max_depth: [3, 7]
-      random_state: [42]
-      n_jobs: [-1]
     exponential_smoothing:
       trend: ["none", "add"]
       seasonal: ["none", "add", "mul"]
@@ -121,14 +104,6 @@ model:
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-    multivariate_theta_model:
-      sp: [1, 2, 3, 7, 48]  # 48 for daily seasonality in 30min data
-      target_cols: ["target_0", "target_1"]  # Will be auto-detected from data
-      use_reduced_rank: [false, true]
-      theta_method: ["least_squares", "correlation_optimal"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [50]
     moirai:
       model_name: ["moirai"]
       size: ["small"]
@@ -154,31 +129,6 @@ model:
       loss_functions: ["mae"]
       primary_loss: ["mae"]
       forecast_horizon: [50]
-    seasonal_naive:
-      sp: [7, 14]
-      forecast_horizon: [50]
-    deepar:
-      prediction_length: [40]
-      context_length: [20]
-      num_samples: [5]
-      batch_size: [8]
-      epochs: [1]
-      learning_rate: [0.001]
-      target_col: ["y"]
-    foundation_model:
-      model_name: ["foundation"]
-      prediction_length: [40]
-      context_length: [20]
-      num_samples: [5]
-      batch_size: [8]
-      target_col: ["y"]
-    base_model:
-      model_name: ["base"]
-      prediction_length: [40]
-      context_length: [20]
-      num_samples: [5]
-      batch_size: [8]
-      target_col: ["y"]
 
 evaluation:
   type: deterministic
