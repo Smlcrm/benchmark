@@ -30,7 +30,7 @@ def setup_logging():
 def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description='Benchmarking Pipeline CLI')
-    parser.add_argument('--config', type=str, default='configs/deterministic.yaml',
+    parser.add_argument('--config', type=str, default='benchmarking_pipeline/configs/all_model_test.yaml',
                         help='Path to configuration file')
     parser.add_argument('--output-dir', type=str, default='outputs',
                         help='Directory to save outputs (plots, metrics, etc.)')

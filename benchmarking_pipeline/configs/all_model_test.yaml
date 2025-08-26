@@ -9,18 +9,9 @@ dataset:
   handle_missing: interpolate
   chunks: 2
 model:
-  # [TODO] chronos, lagllama, moment, tabPFN, timesFM, svr,
-  # [DONE] arima, theta, moirai, moirai_moe, croston_classic, seasonal, toto, exponential_smoothing, lstm, xgboost, prophet, random_forest
-  name: ["arima", "theta", "moirai", "moirai_moe"]
-  # name: ["moirai_moe"]
-  # name: ["croston_classic", "seasonal_naive", "toto", "exponential_smoothing"]
-  # name: ["lstm", "xgboost", "prophet", "random_forest"]
+  # Running all models except tiny_time_mixer
+  name: ["arima", "theta", "moirai", "moirai_moe", "croston_classic", "seasonal_naive", "toto", "exponential_smoothing", "lstm", "xgboost", "prophet", "random_forest", "svr", "tabpfn", "chronos", "moment", "lagllama", "timesfm", "deepar", "foundation_model", "base_model"]
 
-
-  # name: ["lagllama", "tabpfn", "svr", "chronos"] 
-  # name: ["moment"]
-
-  # name: ["tiny_time_mixer"] - # Takes a long time to run
   parameters:
     tiny_time_mixer:
       prediction_length: [40]
@@ -139,6 +130,28 @@ model:
     seasonal_naive:
       sp: [7, 14]
       forecast_horizon: [2]
+    deepar:
+      prediction_length: [40]
+      context_length: [20]
+      num_samples: [5]
+      batch_size: [8]
+      epochs: [1]
+      learning_rate: [0.001]
+      target_col: ["y"]
+    foundation_model:
+      model_name: ["foundation"]
+      prediction_length: [40]
+      context_length: [20]
+      num_samples: [5]
+      batch_size: [8]
+      target_col: ["y"]
+    base_model:
+      model_name: ["base"]
+      prediction_length: [40]
+      context_length: [20]
+      num_samples: [5]
+      batch_size: [8]
+      target_col: ["y"]
 evaluation:
   type: deterministic
   metrics: [mae, rmse] 
