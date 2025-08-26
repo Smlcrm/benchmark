@@ -101,7 +101,7 @@ class BenchmarkRunner:
             print(f"[SUCCESS] Dependencies for {model_folder_name} have been installed in the proper conda environment!")
 
             subprocess.run([
-                "conda", "run", "-n", model_folder_name, "python3", "-m", "benchmarking_pipeline._all_models_pipeline",
+                "conda", "run", "-n", model_folder_name, "python3", "-m", "benchmarking_pipeline.model_executor",
                 "--config", args.config,
                 "--chunk_path", chunk_path,
                 "--model_folder_name", model_folder_name,
