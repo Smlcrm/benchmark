@@ -38,10 +38,10 @@ class ModelRouter:
     
     def parse_model_spec(self, model_spec: str) -> Tuple[str, str]:
         """
-        Parse model specification in format 'model_name:variant'.
+        Parse model specification in format 'model_name:variant' or just 'model_name'.
         
         Args:
-            model_spec: Model specification string (e.g., 'arima:multivariate', 'chronos:univariate')
+            model_spec: Model specification string (e.g., 'arima:multivariate', 'chronos:univariate', 'prophet')
             
         Returns:
             Tuple of (model_name, variant)
@@ -53,14 +53,14 @@ class ModelRouter:
             >>> router.parse_model_spec('chronos:univariate')
             ('chronos', 'univariate')
             >>> router.parse_model_spec('prophet')
-            ('prophet', 'univariate')
+            ('prophet', 'auto')  # Will be auto-detected
         """
         if ':' in model_spec:
             model_name, variant = model_spec.split(':', 1)
             return model_name.strip(), variant.strip()
         else:
-            # Legacy format: default to univariate
-            return model_spec.strip(), 'univariate'
+            # Smart defaults: will be auto-detected based on dataset
+            return model_spec.strip(), 'auto'
     
     def get_model_path(self, model_name: str, variant: str) -> Tuple[str, str, str]:
         """
@@ -243,6 +243,63 @@ class ModelRouter:
             }
         
         return info
+    
+    def auto_detect_variant(self, model_name: str, dataset_info: Dict[str, Any]) -> str:
+        """
+        Automatically detect the optimal variant based on dataset properties.
+        
+        Args:
+            model_name: Name of the model
+            dataset_info: Dictionary containing dataset information
+                - target_columns: int, number of target columns
+                - total_columns: int, total number of columns
+                - has_multiple_targets: bool, whether dataset has multiple targets
+            
+        Returns:
+            Optimal variant: 'univariate' or 'multivariate'
+            
+        Examples:
+            >>> router = ModelRouter()
+            >>> dataset_info = {'target_columns': 3, 'total_columns': 5, 'has_multiple_targets': True}
+            >>> router.auto_detect_variant('arima', dataset_info)
+            'multivariate'
+        """
+        # Strategy 1: Target Column Count (Simplest and most reliable)
+        target_columns = dataset_info.get('target_columns', 1)
+        
+        # If model only supports univariate, return that
+        if model_name in self.univariate_models:
+            return 'univariate'
+        
+        # If model only supports base functionality, return base
+        if model_name in ['foundation_model', 'base_model']:
+            return 'base'
+        
+        # For models that support both variants, use target count
+        if target_columns > 1:
+            return 'multivariate'
+        else:
+            return 'univariate'
+    
+    def get_model_path_with_auto_detection(self, model_name: str, variant: str, dataset_info: Dict[str, Any]) -> Tuple[str, str, str]:
+        """
+        Get model path with automatic variant detection if needed.
+        
+        Args:
+            model_name: Name of the model
+            variant: Variant type ('auto', 'univariate', 'multivariate', 'base')
+            dataset_info: Dataset information for auto-detection
+            
+        Returns:
+            Tuple of (folder_path, file_name, class_name)
+        """
+        # Handle auto-detection
+        if variant == 'auto':
+            detected_variant = self.auto_detect_variant(model_name, dataset_info)
+            print(f"[INFO] Auto-detected variant for {model_name}: {detected_variant}")
+            variant = detected_variant
+        
+        return self.get_model_path(model_name, variant)
 
 
 # Global router instance
