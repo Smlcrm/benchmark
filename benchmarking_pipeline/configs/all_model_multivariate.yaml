@@ -20,7 +20,7 @@ model:
     "chronos", "moment", "lagllama", "toto", "moirai", "moirai_moe", 
     "tiny_time_mixer", "timesfm", "croston_classic", "exponential_smoothing",
     # Models with separate multivariate implementations
-    "arima", "lstm", "svr", "theta", "xgboost"
+    "arima", "lstm", "svr", "theta", "xgboost", "multivariate_theta_model"
   ]
 
   parameters:
@@ -104,6 +104,14 @@ model:
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
+    multivariate_theta_model:
+      sp: [1, 2, 3, 7, 48]  # 48 for daily seasonality in 30min data
+      target_cols: ["target_0", "target_1"]  # Will be auto-detected from data
+      use_reduced_rank: [false, true]
+      theta_method: ["least_squares", "correlation_optimal"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [50]
     moirai:
       model_name: ["moirai"]
       size: ["small"]
