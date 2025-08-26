@@ -10,11 +10,13 @@ import os
 class TestSystemHealth:
     """Smoke tests to verify system health."""
     
+    @pytest.mark.smoke
     def test_python_version(self):
         """Test that Python version is compatible."""
         # Ensure we're using Python 3.7+
         assert sys.version_info >= (3, 7), f"Python 3.7+ required, got {sys.version_info}"
     
+    @pytest.mark.smoke
     def test_required_packages(self):
         """Test that required packages are available."""
         try:
@@ -25,6 +27,7 @@ class TestSystemHealth:
         except ImportError as e:
             pytest.fail(f"Required package not available: {e}")
     
+    @pytest.mark.smoke
     def test_test_structure(self):
         """Test that the test directory structure is correct."""
         # Check that test directories exist
@@ -34,6 +37,7 @@ class TestSystemHealth:
             assert os.path.exists(dir_path), f"Test directory {dir_name} not found"
             assert os.path.isdir(dir_path), f"{dir_name} is not a directory"
     
+    @pytest.mark.smoke
     def test_conftest_available(self):
         """Test that conftest.py is available and importable."""
         conftest_path = os.path.join(os.path.dirname(__file__), '..', 'conftest.py')
@@ -49,6 +53,7 @@ class TestSystemHealth:
         finally:
             sys.path.pop(0)
     
+    @pytest.mark.smoke
     def test_basic_imports(self):
         """Test that basic benchmarking pipeline modules can be imported."""
         try:
@@ -61,12 +66,14 @@ class TestSystemHealth:
             # We just want to ensure the test structure is correct
             pass
     
+    @pytest.mark.smoke
     def test_fixture_availability(self):
         """Test that basic fixtures are available."""
         # This test will be run with pytest fixtures available
         # We just need to ensure the test runs without errors
         assert True
     
+    @pytest.mark.smoke
     def test_marker_registration(self):
         """Test that pytest markers are properly registered."""
         # This test verifies that our custom markers work
