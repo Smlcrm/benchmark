@@ -148,7 +148,7 @@ class ModelRouter:
         elif model_name == 'croston_classic':
             return 'CrostonClassicModel'
         elif model_name == 'tabpfn':
-            return 'TabPFNModel'
+            return 'TabpfnModel'
         elif model_name == 'deepar':
             return 'DeepARModel'
         elif model_name == 'timesfm':
