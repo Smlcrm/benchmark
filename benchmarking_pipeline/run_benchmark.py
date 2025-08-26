@@ -36,39 +36,37 @@ class BenchmarkRunner:
         Returns:
             Dictionary with dataset analysis information
         """
-        try:
-            # Get training data
-            train_data = dataset_chunk.train.features
-            
-            # Basic shape information
-            total_columns = train_data.shape[1] if hasattr(train_data, 'shape') else 1
-            
-            # Try to determine target columns (this might need adjustment based on your data structure)
-            # For now, we'll use a simple heuristic: if more than 2 columns, assume multiple targets
-            target_columns = max(1, total_columns - 1)  # Assume first column is time, rest are targets
-            
-            # More sophisticated detection could be added here
-            has_multiple_targets = target_columns > 1
-            
-            dataset_info = {
-                'target_columns': target_columns,
-                'total_columns': total_columns,
-                'has_multiple_targets': has_multiple_targets,
-                'data_shape': train_data.shape if hasattr(train_data, 'shape') else 'unknown'
-            }
-            
-            print(f"[DEBUG] Dataset analysis: shape={dataset_info['data_shape']}, targets={target_columns}")
-            return dataset_info
-            
-        except Exception as e:
-            print(f"[WARNING] Error analyzing dataset: {e}")
-            # Return default univariate info if analysis fails
-            return {
-                'target_columns': 1,
-                'total_columns': 2,
-                'has_multiple_targets': False,
-                'data_shape': 'unknown'
-            }
+        # Prefer explicit config when available
+        num_targets_cfg = self.config.get('dataset', {}).get('num_targets')
+
+        # Use training targets to determine number of target columns
+        train_targets = dataset_chunk.train.targets
+        if train_targets is None:
+            raise ValueError("Dataset analysis failed: train.targets is None")
+        if not hasattr(train_targets, 'shape') or len(getattr(train_targets, 'shape')) < 2:
+            raise ValueError("Dataset analysis failed: train.targets has no valid 2D shape")
+
+        if isinstance(num_targets_cfg, int) and num_targets_cfg > 0:
+            target_columns = num_targets_cfg
+        else:
+            target_columns = train_targets.shape[1]
+
+        # Basic shape info of targets
+        data_shape = train_targets.shape
+        total_columns = data_shape[1]
+
+        # More sophisticated detection could be added here
+        has_multiple_targets = target_columns > 1
+        
+        dataset_info = {
+            'target_columns': target_columns,
+            'total_columns': total_columns,
+            'has_multiple_targets': has_multiple_targets,
+            'data_shape': data_shape
+        }
+        
+        print(f"[DEBUG] Dataset analysis: shape={dataset_info['data_shape']}, targets={target_columns}")
+        return dataset_info
     
     def run(self):
         """Execute the end-to-end benchmarking pipeline."""
@@ -106,7 +104,11 @@ class BenchmarkRunner:
           yuh = pickle.load(f)
         print(f"[DEBUG] Number of chunks: {len(all_dataset_chunks)}")
         if len(all_dataset_chunks) > 0:
-            print(f"[DEBUG] First chunk train shape: {all_dataset_chunks[0].train.features.shape}")
+            first = all_dataset_chunks[0]
+            targets_shape = getattr(first.train.targets, 'shape', None)
+            features_shape = getattr(first.train.features, 'shape', None) if first.train.features is not None else None
+            print(f"[DEBUG] First chunk train targets shape: {targets_shape}")
+            print(f"[DEBUG] First chunk train features shape: {features_shape}")
 
         # Load config
         config_path = self.config_path
