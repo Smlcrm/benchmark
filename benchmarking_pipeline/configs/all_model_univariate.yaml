@@ -73,7 +73,7 @@ model:
       units: [32]
       layers: [1]
       dropout: [0.1]
-      learning_rate: [0.01, 1]
+      learning_rate: [0.01, 1.0]
       batch_size: [32]
       epochs: [20]
       sequence_length: [10]
