@@ -136,7 +136,7 @@ class ModelRouter:
         elif model_name == 'base_model':
             return 'BaseModel'
         elif model_name == 'moirai_moe':
-            return 'MoiraiMoEModel'
+            return 'MoiraiMoeModel'
         elif model_name == 'tiny_time_mixer':
             return 'TinyTimeMixerModel'
         elif model_name == 'seasonal_naive':
