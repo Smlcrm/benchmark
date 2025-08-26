@@ -71,7 +71,12 @@ class ArimaModel(BaseModel):
             else:
                 exog = x_context
         
-        model = ARIMA(endog=endog, seasonal_order=(self.p, self.d, self.q, self.s), exog=exog)
+        # Use seasonal_order only if seasonal period is greater than 1
+        if self.s > 1:
+            model = ARIMA(endog=endog, order=(self.p, self.d, self.q), seasonal_order=(0, 0, 0, self.s), exog=exog)
+        else:
+            # Non-seasonal ARIMA
+            model = ARIMA(endog=endog, order=(self.p, self.d, self.q), exog=exog)
         self.model_ = model.fit()
         self.is_fitted = True
         return self

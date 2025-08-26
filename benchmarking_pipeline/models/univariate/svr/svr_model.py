@@ -104,7 +104,9 @@ class SvrModel(BaseModel):
         print(f"[DEBUG][SVR] Initial y_context length: {len(y_context)}, lookback_window: {self.lookback_window}")
         if len(y_context) < self.lookback_window:
             raise ValueError(f"y_context too short: {len(y_context)} < lookback_window {self.lookback_window}")
-        if np.isnan(y_context).any():
+        # Convert to numpy array for NaN checking
+        y_context_array = np.array(y_context) if not isinstance(y_context, np.ndarray) else y_context
+        if np.isnan(y_context_array).any():
             raise ValueError("NaNs in initial y_context!")
         
         preds = []
