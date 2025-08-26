@@ -48,7 +48,10 @@ class TinyTimeMixerModel(FoundationModel):
     if len(list(results.keys())) == 1:
       return np.array(results["1"])
     else:
-      raise Exception("Multivariate for tiny time mixer has not been done yet.")
+      multivariate_values = []
+      for key in results.keys():
+        multivariate_values.append(results[key])
+      return np.array(multivariate_values)
   
 
       
@@ -84,7 +87,19 @@ class TinyTimeMixerModel(FoundationModel):
       results_dict[all_time_series_names[0]].extend(forecast)
 
     else:
-      raise Exception("Multivariate for tiny time mixer has not been done yet.")
+      # The forecast is originally of shape [time series step, time series].
+      # I want to change it to shape [time series, time series step]
+      forecast = np.reshape(forecast, (forecast.shape[1], -1))
+
+      # This is just an index that tracks which forecast we want to add to which mapping in our results dict.
+      current_forecasted_timeseries_idx = 0
+      while current_forecasted_timeseries_idx < len(all_time_series_names):
+        current_time_series_name = all_time_series_names[current_forecasted_timeseries_idx]
+        current_forecast = forecast[current_forecasted_timeseries_idx]
+
+        results_dict[current_time_series_name].extend(current_forecast)
+        current_forecasted_timeseries_idx += 1
+    
     
     return results_dict
 
