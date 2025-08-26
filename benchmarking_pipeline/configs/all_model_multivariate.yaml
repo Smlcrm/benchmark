@@ -1,13 +1,16 @@
 test_type: deterministic
+tensorboard: true
 dataset:
   name: BEIJING_SUBWAY_30MIN
   path: benchmarking_pipeline/datasets/BEIJING_SUBWAY_30MIN
-  frequency: D
-  forecast_horizon: 5
+  frequency: 30T
+  forecast_horizon: 50
   split_ratio: [0.8, 0.1, 0.1]
-  normalize: false
+  normalize: true
   handle_missing: interpolate
-  chunks: 2
+  chunks: 3
+  num_targets: 2
+
 model:
   # Running all models with automatic variant detection
   # Format: "model_name" - system automatically detects optimal variant based on dataset
@@ -16,7 +19,7 @@ model:
   name: [
     "arima", "theta", "moirai", "moirai_moe", "croston_classic", "seasonal_naive",
     "toto", "exponential_smoothing", "lstm", "xgboost", "prophet", "random_forest",
-    "svr", "chronos", "moment", "lagllama"
+    "svr", "chronos", "moment", "lagllama", "multivariate_theta_model"
   ]
 
   parameters:
@@ -51,64 +54,81 @@ model:
       num_samples: [5]
       prediction_length: [40]
     xgboost:
-      lookback_window: [10]
-      forecast_horizon: [10]
-      n_estimators: [10]
-      max_depth: [5]
-      learning_rate: [0.1]
+      lookback_window: [50, 100]
+      forecast_horizon: [50]
+      n_estimators: [50, 100]
+      max_depth: [5, 6, 10]
+      learning_rate: [0.1, 0.3]
+      subsample: [0.8, 1.0]
+      colsample_bytree: [0.8, 1.0]
       random_state: [42]
       n_jobs: [-1]
     prophet:
       seasonality_mode: ["additive"]
       changepoint_prior_scale: [0.05]
       seasonality_prior_scale: [10.0]
-      yearly_seasonality: [false]
-      weekly_seasonality: [false]
+      yearly_seasonality: [true]
+      weekly_seasonality: [true]
       daily_seasonality: [false]
     lstm:
-      units: [2]
+      units: [32]
       layers: [1]
       dropout: [0.1]
-      learning_rate: [0.01]
-      batch_size: [8]
-      epochs: [1]
-      sequence_length: [20]
+      learning_rate: [0.01, 1]
+      batch_size: [32]
+      epochs: [20]
+      sequence_length: [10]
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [10]
+      forecast_horizon: [50]
     random_forest:
-      lookback_window: [10]
-      forecast_horizon: [10]
-      n_estimators: [10]
-      max_depth: [3]
+      lookback_window: [50, 100]
+      forecast_horizon: [50]
+      n_estimators: [10, 50]
+      max_depth: [3, 7]
       random_state: [42]
       n_jobs: [-1]
     exponential_smoothing:
-      trend: ["add"]
-      seasonal: ["add"]
+      trend: ["none", "add"]
+      seasonal: ["none", "add", "mul"]
       seasonal_periods: [7]
       damped_trend: [false]
-      forecast_horizon: [900]
+      forecast_horizon: [50]
     svr:
-      kernel: ["rbf"]
-      C: [1.0]
-      epsilon: [0.1]
-      lookback_window: [10]
-      forecast_horizon: [10]
+      kernel: ["rbf", "linear"]
+      C: [0.1, 1.0, 10.0]
+      epsilon: [0.01, 0.1, 0.2]
+      gamma: ["scale", "auto"]
+      lookback_window: [50, 100]
+      forecast_horizon: [50]
+      max_iter: [1000]
       random_state: [42]
     arima:
-      p: [0, 1]
+      p: [0, 1, 2]
       d: [0, 1]
-      q: [0, 1]
+      q: [0, 1, 2]
       s: [2, 4]
+      maxlags: [10]
+      target_cols: ["target_0", "target_1"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [50]
+    theta:
+      sp: [1, 2, 3]
+      forecast_horizon: [10]
+      method: ["additive"]
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [2]
-    theta:
-      sp: [1, 2]
-      forecast_horizon: [10]
+    multivariate_theta_model:
+      sp: [1, 2, 3, 7, 48]  # 48 for daily seasonality in 30min data
+      target_cols: ["target_0", "target_1"]  # Will be auto-detected from data
+      use_reduced_rank: [false, true]
+      theta_method: ["least_squares", "correlation_optimal"]
+      loss_functions: ["mae"]
+      primary_loss: ["mae"]
+      forecast_horizon: [50]
     moirai:
       model_name: ["moirai"]
       size: ["small"]
@@ -117,7 +137,7 @@ model:
       bsz: [8]
       num_samples: [5]
     moirai_moe:
-      model_name: ["moirai_moe"] #, moirai_moe"] # moirai and moirai_moe come from the same model file
+      model_name: ["moirai_moe"]  # moirai and moirai_moe come from the same model file
       size: ["small"]
       pdt: [900]
       psz: [32]
@@ -125,18 +145,18 @@ model:
       num_samples: [5]
     toto:
       model_name: ["toto"]
-      self.prediction_length: [900]
-      self.num_samples: [40]
-      self.samples_per_batch: [40]
+      prediction_length: [900]
+      num_samples: [40]
+      samples_per_batch: [40]
     croston_classic:
-      alpha: [0.1]
+      alpha: [0.1, 0.5, 1]
       target_col: ["y"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
-      forecast_horizon: [900]
+      forecast_horizon: [50]
     seasonal_naive:
       sp: [7, 14]
-      forecast_horizon: [2]
+      forecast_horizon: [50]
     deepar:
       prediction_length: [40]
       context_length: [20]
@@ -159,6 +179,7 @@ model:
       num_samples: [5]
       batch_size: [8]
       target_col: ["y"]
+
 evaluation:
   type: deterministic
   metrics: [mae, rmse] 
