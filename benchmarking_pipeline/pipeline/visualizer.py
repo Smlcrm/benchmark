@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import numpy as np
+from scipy import stats
 from typing import Optional, Dict, Any, Union
 from datetime import datetime
 
@@ -125,7 +126,6 @@ class Visualizer:
         ax1.set_ylabel("Count")
         
         # Q-Q plot
-        from scipy import stats
         stats.probplot(residuals, dist="norm", plot=ax2)
         ax2.set_title("Q-Q Plot")
         
