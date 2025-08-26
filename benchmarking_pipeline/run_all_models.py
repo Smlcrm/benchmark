@@ -180,7 +180,7 @@ class BenchmarkRunner:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run benchmarking pipeline with specified config file.")
-    parser.add_argument('--config', type=str, default='benchmarking_pipeline/configs/all_model_test.yaml', help='Path to the config YAML file')
+    parser.add_argument('--config', type=str, default='benchmarking_pipeline/configs/all_model_univariate.yaml', help='Path to the config YAML file')
     args = parser.parse_args()
     config_path = args.config
     with open(config_path, 'r') as f:
