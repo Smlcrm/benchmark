@@ -44,10 +44,10 @@ from gluonts.transform import (
     ValidationSplitSampler,
 )
 
-from benchmarking_pipeline.models.lagllama.gluon_utils.gluon_ts_distributions.implicit_quantile_network import (
+from ...gluon_utils.gluon_ts_distributions.implicit_quantile_network import (
     ImplicitQuantileNetworkOutput,
 )
-from benchmarking_pipeline.models.lagllama.lag_llama.gluon.lightning_module import LagLlamaLightningModule
+from .lightning_module import LagLlamaLightningModule
 
 PREDICTION_INPUT_NAMES = [
     "past_target",
