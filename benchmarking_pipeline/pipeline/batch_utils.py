@@ -69,17 +69,17 @@ def batch_dataset_split(
     Batch a DatasetSplit into pandas DataFrames.
     
     Args:
-        split: DatasetSplit containing features and labels
+        split: DatasetSplit containing targets and optional features
         batch_size: Number of samples per batch
         shuffle: Whether to shuffle the data before batching
         seed: Random seed for shuffling
         
     Yields:
-        Tuple[pd.DataFrame, np.ndarray]: Tuple of (features batch, labels batch)
+        Tuple[pd.DataFrame, np.ndarray]: Tuple of (features batch, targets batch)
     """
     return batch_arrow_data(
         features=split.features,
-        labels=split.labels,
+        labels=split.targets,  # Use targets as labels for batching
         batch_size=batch_size,
         shuffle=shuffle,
         seed=seed

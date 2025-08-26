@@ -9,9 +9,9 @@ import pandas as pd
 @dataclass
 class DatasetSplit:
     """Represents a dataset split (train/val/test)."""
-    features: Union[np.ndarray, pd.DataFrame]
-    labels: Union[np.ndarray, pd.Series]
+    targets: Union[np.ndarray, pd.DataFrame]  # Target variables (univariate or multivariate)
     timestamps: np.ndarray
+    features: Optional[Union[np.ndarray, pd.DataFrame]] = None  # Exogenous variables (optional)
     metadata: Optional[Dict[str, Any]] = None
 
 @dataclass
@@ -28,18 +28,6 @@ class PreprocessedData:
     """Container for preprocessed data."""
     data: Dataset
     preprocessing_info: Dict[str, Any]
-
-@dataclass
-class FeatureSet:
-    """Container for extracted features."""
-    features: Dataset
-    feature_info: Dict[str, Any]
-
-@dataclass
-class EvaluationMetrics:
-    """Container for evaluation metrics."""
-    metrics: Dict[str, float]
-    additional_info: Optional[Dict[str, Any]] = None
 
 @dataclass
 class ModelArtifacts:
