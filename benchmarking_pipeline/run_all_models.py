@@ -26,6 +26,50 @@ class BenchmarkRunner:
         self.config = config
         self.config_path = config_path
         
+    def _analyze_dataset(self, dataset_chunk):
+        """
+        Analyze dataset chunk to determine properties for auto-detection.
+        
+        Args:
+            dataset_chunk: Dataset chunk object with train/test data
+            
+        Returns:
+            Dictionary with dataset analysis information
+        """
+        try:
+            # Get training data
+            train_data = dataset_chunk.train.features
+            
+            # Basic shape information
+            total_columns = train_data.shape[1] if hasattr(train_data, 'shape') else 1
+            
+            # Try to determine target columns (this might need adjustment based on your data structure)
+            # For now, we'll use a simple heuristic: if more than 2 columns, assume multiple targets
+            target_columns = max(1, total_columns - 1)  # Assume first column is time, rest are targets
+            
+            # More sophisticated detection could be added here
+            has_multiple_targets = target_columns > 1
+            
+            dataset_info = {
+                'target_columns': target_columns,
+                'total_columns': total_columns,
+                'has_multiple_targets': has_multiple_targets,
+                'data_shape': train_data.shape if hasattr(train_data, 'shape') else 'unknown'
+            }
+            
+            print(f"[DEBUG] Dataset analysis: shape={dataset_info['data_shape']}, targets={target_columns}")
+            return dataset_info
+            
+        except Exception as e:
+            print(f"[WARNING] Error analyzing dataset: {e}")
+            # Return default univariate info if analysis fails
+            return {
+                'target_columns': 1,
+                'total_columns': 2,
+                'has_multiple_targets': False,
+                'data_shape': 'unknown'
+            }
+    
     def run(self):
         """Execute the end-to-end benchmarking pipeline."""
         # Determine config file name for logging
@@ -73,13 +117,20 @@ class BenchmarkRunner:
         # Import the model router
         from benchmarking_pipeline.models.model_router import model_router
         
+        # Analyze dataset to determine properties for auto-detection
+        print("[INFO] Analyzing dataset for auto-detection...")
+        dataset_info = self._analyze_dataset(all_dataset_chunks[0])
+        print(f"[INFO] Dataset analysis: {dataset_info}")
+        
         # Run each model we have individually
         for model_spec in model_names:
-            # Parse the model specification (e.g., 'arima:multivariate', 'chronos:univariate')
+            # Parse the model specification (e.g., 'arima', 'chronos')
             model_name, variant = model_router.parse_model_spec(model_spec)
             
-            # Get the appropriate model path, file name, and class name
-            folder_path, model_file_name, model_class_name = model_router.get_model_path(model_name, variant)
+            # Get the appropriate model path with auto-detection
+            folder_path, model_file_name, model_class_name = model_router.get_model_path_with_auto_detection(
+                model_name, variant, dataset_info
+            )
             
             print(f"[INFO] Processing model: {model_spec}")
             print(f"[INFO] Model name: {model_name}, Variant: {variant}")
@@ -95,6 +146,10 @@ class BenchmarkRunner:
                 model_params = {}
 
             requirements_path = f"{folder_path}/requirements.txt"
+
+            # Create conda environment name based on model name to avoid conflicts
+            # The variant is now auto-detected, so we use just the model name
+            conda_env_name = model_name
 
             # Something on my mind: uv could probably make this process a LOT quicker - definitely something to explore.
         
