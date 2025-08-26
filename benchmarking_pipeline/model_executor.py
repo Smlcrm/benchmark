@@ -36,6 +36,8 @@ class ModelExecutor:
         if self.model_folder_name.startswith('benchmarking_pipeline/models/'):
             # Remove the prefix and convert to module path
             relative_path = self.model_folder_name.replace('benchmarking_pipeline/models/', '')
+            # Replace forward slashes with dots for proper Python module path
+            relative_path = relative_path.replace('/', '.')
             module_path = f"benchmarking_pipeline.models.{relative_path}.{self.model_file_name}"
         else:
             # Fallback for backward compatibility
