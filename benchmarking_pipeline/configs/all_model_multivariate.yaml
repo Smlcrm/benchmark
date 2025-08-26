@@ -98,12 +98,13 @@ model:
       primary_loss: ["mae"]
       forecast_horizon: [50]
     theta:
-      sp: [1, 2, 3]
-      forecast_horizon: [10]
-      method: ["additive"]
-      target_col: ["y"]
+      sp: [1, 2, 3, 7, 48]  # 48 for daily seasonality in 30min data
+      target_cols: ["target_0", "target_1"]  # Will be auto-detected from data
+      use_reduced_rank: [false, true]
+      theta_method: ["least_squares", "correlation_optimal"]
       loss_functions: ["mae"]
       primary_loss: ["mae"]
+      forecast_horizon: [50]
     moirai:
       model_name: ["moirai"]
       size: ["small"]
