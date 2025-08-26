@@ -1,6 +1,7 @@
 """
 Trainer class for model training and evaluation.
 """
+import json
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Union, Tuple, Optional
@@ -22,7 +23,6 @@ class Trainer: #update the trainer class to a folder for each model type
         """
         self.config = config or {}
         if config_file:
-            import json
             with open(config_file, 'r') as f:
                 self.config.update(json.load(f))
         self.logger = Logger()

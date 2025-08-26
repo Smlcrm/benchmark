@@ -32,6 +32,7 @@ from toto.inference.gluonts_predictor import (
     TotoSampleForecast,
 )
 from toto.model.toto import Toto
+from toto.inference.forecaster import TotoForecaster
 
 DEVICE = torch.get_default_device()
 
@@ -137,8 +138,6 @@ def mock_inference_loader(mock_dataset):
 @pytest.fixture
 def toto_forecaster(real_model):
     """Fixture to create a TotoForecaster instance."""
-    from toto.inference.forecaster import TotoForecaster
-
     return TotoForecaster(model=real_model.model)
 
 
