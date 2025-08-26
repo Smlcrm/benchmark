@@ -25,7 +25,7 @@ model:
 
   parameters:
     tiny_time_mixer:
-      forecast_horizon: [50]
+      prediction_length: [40]
       target_cols: ["target_0", "target_1"]  # Multivariate targets
     moment:
       model_path: ['AutonLab/MOMENT-1-large']
@@ -33,17 +33,17 @@ model:
       fine_tune_epochs: [0]
       batch_size: [8]
       learning_rate: [0.0001]
-      forecast_horizon: [50]
+      prediction_length: [40]
       target_cols: ["target_0", "target_1"]  # Multivariate targets
     lagllama:
-      forecast_horizon: [50]
+      prediction_length: [100]
       context_length: [4]
       num_samples: [5]
       batch_size: [4]
       target_cols: ["target_0", "target_1"]  # Multivariate targets
     timesfm:
       per_core_batch_size: [2]
-      forecast_horizon: [50]
+      horizon_len: [40]
       num_layers: [2]
       context_len: [2]
       use_positional_embedding: [False]
@@ -52,7 +52,7 @@ model:
       model_size: ['small']
       context_length: [8]
       num_samples: [5]
-      forecast_horizon: [50]
+      prediction_length: [40]
       target_cols: ["target_0", "target_1"]  # Multivariate targets
     xgboost:
       lookback_window: [50, 100]
@@ -119,7 +119,6 @@ model:
       psz: [32]
       bsz: [8]
       num_samples: [5]
-      forecast_horizon: [50]
       target_cols: ["target_0", "target_1"]  # Multivariate targets
     moirai_moe:
       model_name: ["moirai_moe"]  # moirai and moirai_moe come from the same model file
@@ -128,11 +127,10 @@ model:
       psz: [32]
       bsz: [8]
       num_samples: [5]
-      forecast_horizon: [50]
       target_cols: ["target_0", "target_1"]  # Multivariate targets
     toto:
       model_name: ["toto"]
-      forecast_horizon: [50]
+      prediction_length: [900]
       num_samples: [40]
       samples_per_batch: [40]
       target_cols: ["target_0", "target_1"]  # Multivariate targets
