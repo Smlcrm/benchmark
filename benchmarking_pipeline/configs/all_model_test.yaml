@@ -9,8 +9,32 @@ dataset:
   handle_missing: interpolate
   chunks: 2
 model:
-  # Running all models except tiny_time_mixer
-  name: ["arima", "theta", "moirai", "moirai_moe", "croston_classic", "seasonal_naive", "toto", "exponential_smoothing", "lstm", "xgboost", "prophet", "random_forest", "svr", "tabpfn", "chronos", "moment", "lagllama", "timesfm", "deepar", "foundation_model", "base_model"]
+  # Running all models with variant specification
+  # Format: "model_name:variant" where variant is "univariate" or "multivariate"
+  # Anyvariate models can handle both variants within the same implementation
+  # Non-anyvariate models route to separate univariate/multivariate folders
+  name: [
+    "arima:univariate", "arima:multivariate",
+    "theta:univariate", "theta:multivariate", 
+    "moirai:univariate", "moirai:multivariate",
+    "moirai_moe:univariate", "moirai_moe:multivariate",
+    "croston_classic:univariate", "croston_classic:multivariate",
+    "seasonal_naive:univariate",
+    "toto:univariate", "toto:multivariate",
+    "exponential_smoothing:univariate", "exponential_smoothing:multivariate",
+    "lstm:univariate", "lstm:multivariate",
+    "xgboost:univariate", "xgboost:multivariate",
+    "prophet:univariate",
+    "random_forest:univariate",
+    "svr:univariate", "svr:multivariate",
+    "tabpfn:univariate",
+    "chronos:univariate", "chronos:multivariate",
+    "moment:univariate", "moment:multivariate",
+    "lagllama:univariate", "lagllama:multivariate",
+    "timesfm:univariate", "timesfm:multivariate",
+    "deepar:univariate",
+    "foundation_model", "base_model"
+  ]
 
   parameters:
     tiny_time_mixer:

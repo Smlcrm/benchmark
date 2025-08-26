@@ -70,48 +70,54 @@ class BenchmarkRunner:
             config = yaml.safe_load(f)
         model_names = config['model']['name']
 
+        # Import the model router
+        from benchmarking_pipeline.models.model_router import model_router
+        
         # Run each model we have individually
-        for model_name in model_names:
+        for model_spec in model_names:
+            # Parse the model specification (e.g., 'arima:multivariate', 'chronos:univariate')
+            model_name, variant = model_router.parse_model_spec(model_spec)
+            
+            # Get the appropriate model path, file name, and class name
+            folder_path, model_file_name, model_class_name = model_router.get_model_path(model_name, variant)
+            
+            print(f"[INFO] Processing model: {model_spec}")
+            print(f"[INFO] Model name: {model_name}, Variant: {variant}")
+            print(f"[INFO] Folder path: {folder_path}")
+            print(f"[INFO] File name: {model_file_name}")
+            print(f"[INFO] Class name: {model_class_name}")
+            
+            # Get parameters for the base model name (without variant)
+            if model_name in config['model']['parameters']:
+                model_params = config['model']['parameters'][model_name]
+            else:
+                print(f"[WARNING] No parameters found for {model_name}, using defaults")
+                model_params = {}
 
-            """
-            model_folder_name, model_file_name, model_class_name = model_name.split(";")
-            print("WHUH", [model_folder_name, model_file_name, model_class_name])
-            print(model_folder_name)
-            print(config['model']['parameters'][model_folder_name])
-            """
-            model_folder_name = model_name
-            model_file_name = model_folder_name + "_model"
-            model_class_name_components = model_file_name.split("_")
-            model_class_name_components = [model_class_name_component.title() for model_class_name_component in model_class_name_components]
-            model_class_name = "".join(model_class_name_components)
-            print("WHUH", [model_folder_name, model_file_name, model_class_name])
-            print(model_folder_name)
-            print(config['model']['parameters'][model_folder_name])
-
-            requirements_path = f"benchmarking_pipeline/models/{model_folder_name}/requirements.txt"
+            requirements_path = f"{folder_path}/requirements.txt"
 
             # Something on my mind: uv could probably make this process a LOT quicker - definitely something to explore.
         
             # Create the conda environment.
-            subprocess.run(["conda", "create", "-n", model_folder_name, "python=3.10", "-y"], check=True)
-            print(f"[SUCCESS] Conda environment for {model_folder_name} has been made!")
+            subprocess.run(["conda", "create", "-n", conda_env_name, "python=3.10", "-y"], check=True)
+            print(f"[SUCCESS] Conda environment for {conda_env_name} has been made!")
 
             # Install the dependencies of the corresponding model without activating the model.
-            subprocess.run(["conda", "run", "-n", model_folder_name, "pip", "install", "-r", requirements_path], check=True)
-            print(f"[SUCCESS] Dependencies for {model_folder_name} have been installed in the proper conda environment!")
+            subprocess.run(["conda", "run", "-n", conda_env_name, "pip", "install", "-r", requirements_path], check=True)
+            print(f"[SUCCESS] Dependencies for {conda_env_name} have been installed in the proper conda environment!")
 
             subprocess.run([
-                "conda", "run", "-n", model_folder_name, "python3", "-m", "benchmarking_pipeline.model_executor",
+                "conda", "run", "-n", conda_env_name, "python3", "-m", "benchmarking_pipeline.model_executor",
                 "--config", args.config,
                 "--chunk_path", chunk_path,
-                "--model_folder_name", model_folder_name,
+                "--model_folder_name", folder_path,
                 "--model_file_name", model_file_name,
                 "--model_class_name", model_class_name
             ], check=True)
 
             # Get rid of the environment when we're done with the current model.
-            subprocess.run(["conda", "remove", "-n", model_folder_name, "--all", "-y"], check=True)
-            print(f"[SUCCESS] Conda environment for {model_folder_name} has been deleted!")
+            subprocess.run(["conda", "remove", "-n", conda_env_name, "--all", "-y"], check=True)
+            print(f"[SUCCESS] Conda environment for {conda_env_name} has been deleted!")
 
             
         os.remove(chunk_path)
