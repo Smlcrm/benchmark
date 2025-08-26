@@ -13,145 +13,139 @@ from benchmarking_pipeline.models.model_router import ModelRouter
 class TestModelConfigs:
     """Test cases for model configuration functionality."""
     
-    def test_model_router_initialization(self, mock_config):
-        """Test ModelRouter initialization with valid config."""
-        router = ModelRouter(mock_config)
-        assert router.config == mock_config
-        assert router.model_name == "test_model"
-        assert router.model_type == "univariate"
+    @pytest.mark.unit
+    def test_model_router_initialization(self):
+        """Test ModelRouter initialization."""
+        router = ModelRouter()
+        assert router is not None
+        assert hasattr(router, 'anyvariate_models')
+        assert hasattr(router, 'multivariate_models')
+        assert hasattr(router, 'univariate_models')
     
-    def test_model_router_invalid_config(self):
-        """Test ModelRouter initialization with invalid config."""
-        invalid_config = {"invalid": "config"}
+    @pytest.mark.unit
+    def test_model_router_model_categories(self):
+        """Test that ModelRouter has the expected model categories."""
+        router = ModelRouter()
         
-        with pytest.raises(KeyError):
-            ModelRouter(invalid_config)
+        # Check that expected model categories exist
+        assert isinstance(router.anyvariate_models, set)
+        assert isinstance(router.multivariate_models, set)
+        assert isinstance(router.univariate_models, set)
+        
+        # Check that some expected models are present
+        assert 'chronos' in router.anyvariate_models
+        assert 'arima' in router.multivariate_models
+        assert 'prophet' in router.univariate_models
     
-    def test_model_router_missing_model_info(self):
-        """Test ModelRouter with missing model information."""
-        incomplete_config = {
-            "dataset": {"path": "/tmp/test", "name": "test"},
-            # Missing model section
-        }
+    @pytest.mark.unit
+    def test_parse_model_spec(self):
+        """Test parsing of model specifications."""
+        router = ModelRouter()
         
-        with pytest.raises(KeyError):
-            ModelRouter(incomplete_config)
+        # Test with explicit variant
+        model_name, variant = router.parse_model_spec('arima:multivariate')
+        assert model_name == 'arima'
+        assert variant == 'multivariate'
+        
+        # Test with just model name
+        model_name, variant = router.parse_model_spec('prophet')
+        assert model_name == 'prophet'
+        assert variant == 'auto'
+        
+        # Test with whitespace
+        model_name, variant = router.parse_model_spec(' arima : univariate ')
+        assert model_name == 'arima'
+        assert variant == 'univariate'
     
-    def test_config_validation(self):
-        """Test configuration validation logic."""
-        # This would test the actual config validation if it exists
-        # For now, creating a basic test structure
-        valid_config = {
-            "dataset": {
-                "path": "/tmp/test",
-                "name": "test_dataset",
-                "split_ratio": [0.8, 0.1, 0.1]
-            },
-            "model": {
-                "name": "test_model",
-                "type": "univariate"
-            }
-        }
+    @pytest.mark.unit
+    def test_get_model_path(self):
+        """Test getting model paths."""
+        router = ModelRouter()
         
-        # Basic validation checks
-        assert "dataset" in valid_config
-        assert "model" in valid_config
-        assert len(valid_config["dataset"]["split_ratio"]) == 3
-        assert sum(valid_config["dataset"]["split_ratio"]) == pytest.approx(1.0, abs=1e-6)
+        # Test univariate model
+        folder_path, file_name, class_name = router.get_model_path('arima', 'univariate')
+        assert 'univariate/arima' in folder_path
+        assert file_name == 'arima_model'
+        assert class_name == 'ArimaModel'
+        
+        # Test multivariate model
+        folder_path, file_name, class_name = router.get_model_path('arima', 'multivariate')
+        assert 'multivariate/arima' in folder_path
+        assert file_name == 'arima_model'
+        assert class_name == 'ArimaModel'
+        
+        # Test anyvariate model
+        folder_path, file_name, class_name = router.get_model_path('chronos', 'univariate')
+        assert 'anyvariate/chronos' in folder_path
+        assert file_name == 'chronos_model'
+        assert class_name == 'ChronosModel'
     
-    @pytest.mark.parametrize("model_type", ["univariate", "multivariate", "anyvariate"])
-    def test_model_type_validation(self, mock_config, model_type):
-        """Test different model type validations."""
-        config = mock_config.copy()
-        config["model"]["type"] = model_type
+    @pytest.mark.unit
+    def test_auto_detect_variant(self):
+        """Test automatic variant detection."""
+        router = ModelRouter()
         
-        router = ModelRouter(config)
-        assert router.model_type == model_type
+        # Test with anyvariate model
+        variant = router.auto_detect_variant('chronos', {'has_multiple_targets': True})
+        assert variant == 'multivariate'
+        
+        variant = router.auto_detect_variant('chronos', {'has_multiple_targets': False})
+        assert variant == 'univariate'
+        
+        # Test with non-anyvariate model
+        variant = router.auto_detect_variant('arima', {'has_multiple_targets': True})
+        assert variant == 'multivariate'
+        
+        variant = router.auto_detect_variant('arima', {'has_multiple_targets': False})
+        assert variant == 'univariate'
     
-    def test_invalid_model_type(self, mock_config):
-        """Test that invalid model types raise appropriate errors."""
-        config = mock_config.copy()
-        config["model"]["type"] = "invalid_type"
+    @pytest.mark.unit
+    def test_get_model_info(self):
+        """Test getting model information."""
+        router = ModelRouter()
         
+        # Test with valid model
+        model_info = router.get_model_info('arima')
+        assert model_info is not None
+        assert 'folder_path' in model_info
+        assert 'file_name' in model_info
+        assert 'class_name' in model_info
+        
+        # Test with anyvariate model
+        model_info = router.get_model_info('chronos')
+        assert model_info is not None
+        assert 'anyvariate/chronos' in model_info['folder_path']
+    
+    @pytest.mark.unit
+    def test_get_model_path_with_auto_detection(self):
+        """Test getting model path with automatic variant detection."""
+        router = ModelRouter()
+        
+        # Test auto-detection for anyvariate model
+        folder_path, file_name, class_name = router.get_model_path('chronos', 'auto')
+        assert 'anyvariate/chronos' in folder_path
+        assert file_name == 'chronos_model'
+        assert class_name == 'ChronosModel'
+    
+    @pytest.mark.unit
+    def test_invalid_model_names(self):
+        """Test handling of invalid model names."""
+        router = ModelRouter()
+        
+        # Test with non-existent model
         with pytest.raises(ValueError):
-            ModelRouter(config)
+            router.get_model_path('non_existent_model', 'univariate')
+        
+        # Test with invalid variant for model type
+        with pytest.raises(ValueError):
+            router.get_model_path('prophet', 'multivariate')  # Prophet doesn't support multivariate
     
-    def test_config_file_loading(self):
-        """Test loading configuration from YAML files."""
-        # Mock YAML file content
-        mock_yaml_content = """
-        dataset:
-          path: /tmp/test_dataset
-          name: test_dataset
-          split_ratio: [0.8, 0.1, 0.1]
-        model:
-          name: test_model
-          type: univariate
-        training:
-          epochs: 10
-          batch_size: 32
-        """
+    @pytest.mark.unit
+    def test_global_router_instance(self):
+        """Test that global router instance works correctly."""
+        # Test that we can create multiple instances
+        router1 = ModelRouter()
+        router2 = ModelRouter()
         
-        with patch("builtins.open", mock_open(read_data=mock_yaml_content)):
-            with patch("yaml.safe_load") as mock_yaml_load:
-                mock_yaml_load.return_value = yaml.safe_load(mock_yaml_content)
-                
-                # This would test actual file loading if implemented
-                config = yaml.safe_load(mock_yaml_content)
-                
-                assert config["dataset"]["name"] == "test_dataset"
-                assert config["model"]["type"] == "univariate"
-                assert config["training"]["epochs"] == 10
-    
-    def test_required_config_fields(self):
-        """Test that required configuration fields are present."""
-        required_fields = ["dataset", "model"]
-        required_dataset_fields = ["path", "name", "split_ratio"]
-        required_model_fields = ["name", "type"]
-        
-        # Test with minimal valid config
-        minimal_config = {
-            "dataset": {
-                "path": "/tmp/test",
-                "name": "test",
-                "split_ratio": [0.8, 0.1, 0.1]
-            },
-            "model": {
-                "name": "test_model",
-                "type": "univariate"
-            }
-        }
-        
-        for field in required_fields:
-            assert field in minimal_config
-        
-        for field in required_dataset_fields:
-            assert field in minimal_config["dataset"]
-        
-        for field in required_model_fields:
-            assert field in minimal_config["model"]
-    
-    def test_config_defaults(self):
-        """Test configuration default values if they exist."""
-        # This would test default values if the system supports them
-        # For now, creating a basic test structure
-        config_with_defaults = {
-            "dataset": {
-                "path": "/tmp/test",
-                "name": "test_dataset",
-                "split_ratio": [0.8, 0.1, 0.1]
-            },
-            "model": {
-                "name": "test_model",
-                "type": "univariate"
-            },
-            "training": {
-                "epochs": 100,  # Default value
-                "batch_size": 32  # Default value
-            }
-        }
-        
-        # Test that defaults are reasonable
-        assert config_with_defaults["training"]["epochs"] > 0
-        assert config_with_defaults["training"]["batch_size"] > 0
-        assert config_with_defaults["training"]["batch_size"] <= 1024  # Reasonable upper bound
+        assert router1 is not router2  # Should be different instances
+        assert router1.anyvariate_models == router2.anyvariate_models  # But same configuration
