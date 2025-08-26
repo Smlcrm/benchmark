@@ -1,5 +1,6 @@
 """
 Random Forest model implementation for time series forecasting.
+TODO-COULD work multivariate
 """
 
 import numpy as np
