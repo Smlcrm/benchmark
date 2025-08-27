@@ -109,16 +109,9 @@ class ModelRouter:
             class_name = self._generate_class_name(model_name)
             return folder_path, file_name, class_name
         
-        # Handle special cases
-        elif model_name in ['foundation_model', 'base_model']:
-            folder_path = "benchmarking_pipeline/models"
-            file_name = model_name
-            class_name = self._generate_class_name(model_name)
-            return folder_path, file_name, class_name
-        
         else:
             raise ValueError(f"Unknown model '{model_name}'. Available models: "
-                           f"{sorted(self.anyvariate_models | self.multivariate_models | self.univariate_models | {'foundation_model', 'base_model'})}")
+                           f"{sorted(self.anyvariate_models | self.multivariate_models | self.univariate_models)}")
     
     def _generate_class_name(self, model_name: str) -> str:
         """
@@ -131,11 +124,7 @@ class ModelRouter:
             Class name in PascalCase
         """
         # Handle special cases
-        if model_name == 'foundation_model':
-            return 'FoundationModel'
-        elif model_name == 'base_model':
-            return 'BaseModel'
-        elif model_name == 'moirai_moe':
+        if model_name == 'moirai_moe':
             return 'MoiraiMoeModel'
         elif model_name == 'tiny_time_mixer':
             return 'TinyTimeMixerModel'
@@ -171,7 +160,7 @@ class ModelRouter:
             model_name, variant = self.parse_model_spec(model_spec)
             
             # Check if variant is valid
-            if variant not in ['univariate', 'multivariate']:
+            if variant not in ['univariate', 'multivariate', 'auto']:
                 return False
             
             # Check if model supports the requested variant
@@ -195,8 +184,7 @@ class ModelRouter:
         return {
             'anyvariate': sorted(self.anyvariate_models),
             'multivariate': sorted(self.multivariate_models),
-            'univariate_only': sorted(self.univariate_models),
-            'base_models': ['foundation_model', 'base_model']
+            'univariate_only': sorted(self.univariate_models)
         }
     
     def get_model_info(self, model_name: str) -> Dict[str, Any]:
@@ -235,12 +223,7 @@ class ModelRouter:
             info['folder_paths'] = {
                 'univariate': f"benchmarking_pipeline/models/univariate/{model_name}"
             }
-        elif model_name in ['foundation_model', 'base_model']:
-            info['category'] = 'base_model'
-            info['supported_variants'] = ['base']
-            info['folder_paths'] = {
-                'base': f"benchmarking_pipeline/models/{model_name}"
-            }
+
         
         return info
     
@@ -271,10 +254,6 @@ class ModelRouter:
         if model_name in self.univariate_models:
             return 'univariate'
         
-        # If model only supports base functionality, return base
-        if model_name in ['foundation_model', 'base_model']:
-            return 'base'
-        
         # For models that support both variants, use target count
         if target_columns > 1:
             return 'multivariate'
@@ -287,7 +266,7 @@ class ModelRouter:
         
         Args:
             model_name: Name of the model
-            variant: Variant type ('auto', 'univariate', 'multivariate', 'base')
+            variant: Variant type ('auto', 'univariate', 'multivariate')
             dataset_info: Dataset information for auto-detection
             
         Returns:
