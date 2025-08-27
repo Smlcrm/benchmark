@@ -1,0 +1,14 @@
+dataset:
+  name: australian_electricity_demand
+  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  frequency: D
+  forecast_horizon: [10, 25, 50]  # Vector of forecast horizons to test
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: false
+  handle_missing: interpolate
+  chunks: 2
+  target_cols: ['australian_electricity_demand']
+
+model:
+  seasonal_naive:
+    # Simple model with minimal parameters
