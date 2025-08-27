@@ -347,7 +347,7 @@ class ConfigValidator:
             'arima', 'lstm', 'svr', 'theta', 'xgboost', 'prophet', 'random_forest',
             'seasonal_naive', 'tabpfn', 'deepar', 'chronos', 'moment', 'lagllama',
             'toto', 'moirai', 'moirai_moe', 'tiny_time_mixer', 'timesfm',
-            'croston_classic', 'exponential_smoothing', 'foundation_model', 'base_model'
+            'croston_classic', 'exponential_smoothing'
         }
         
         unknown_models = [model for model in value if model not in known_models]

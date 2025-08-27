@@ -55,21 +55,22 @@ class FoundationModelTuner:
                 # For multivariate targets, extract specific target column
                 if hasattr(dataset_split.targets, 'shape') and len(dataset_split.targets.shape) > 1:
                     if target_col == 'target_0':
-                        return dataset_split.targets[:, 0]
+                        return dataset_split.targets.iloc[:, 0].values
                     elif target_col == 'target_1':
-                        return dataset_split.targets[:, 1]
+                        return dataset_split.targets.iloc[:, 1].values
                     else:
                         # Default to first column if target_col not recognized
-                        return dataset_split.targets[:, 0]
+                        return dataset_split.targets.iloc[:, 0].values
                 else:
-                    # Univariate case
-                    return dataset_split.targets
+                    # Univariate case - convert to numpy array
+                    return dataset_split.targets.values if hasattr(dataset_split.targets, 'values') else dataset_split.targets
             else:
                 # Integer index for target column
                 if hasattr(dataset_split.targets, 'shape') and len(dataset_split.targets.shape) > 1:
-                    return dataset_split.targets[:, target_col]
+                    return dataset_split.targets.iloc[:, target_col].values
                 else:
-                    return dataset_split.targets
+                    # Convert to numpy array if it's a pandas object
+                    return dataset_split.targets.values if hasattr(dataset_split.targets, 'values') else dataset_split.targets
         else:
             raise ValueError("Both features and targets are None - no data available")
 

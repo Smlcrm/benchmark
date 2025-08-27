@@ -13,10 +13,9 @@ model:
   # Format: "model_name" - system automatically detects optimal variant based on dataset
   # Anyvariate models can handle both variants within the same implementation
   # Non-anyvariate models route to separate univariate/multivariate folders based on dataset properties
-  name: [
-    "random_forest", "svr", "tabpfn", "chronos", "moment", "lagllama", "timesfm", "deepar",
-    "foundation_model", "base_model"
-  ]
+  name: ["arima", "lstm", "svr", "theta", "xgboost", "prophet", "random_forest", "seasonal_naive", 
+         "tabpfn", "deepar", "chronos", "moment", "lagllama", "toto", "moirai", "moirai_moe", 
+         "timesfm", "croston_classic", "exponential_smoothing", "tiny_time_mixer"]
 
   parameters:
     tiny_time_mixer:
@@ -157,20 +156,7 @@ model:
       epochs: [1]
       learning_rate: [0.001]
       target_cols: ["y"]
-    foundation_model:
-      model_name: ["foundation"]
-      prediction_length: [40]
-      context_length: [20]
-      num_samples: [5]
-      batch_size: [8]
-      target_cols: ["y"]
-    base_model:
-      model_name: ["base"]
-      prediction_length: [40]
-      context_length: [20]
-      num_samples: [5]
-      batch_size: [8]
-      target_cols: ["y"]
+
 evaluation:
   type: deterministic
   metrics: [mae, rmse] 
