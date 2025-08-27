@@ -12,6 +12,7 @@ from gluonts.evaluation import make_evaluation_predictions
 from benchmarking_pipeline.models.foundation_model import FoundationModel
 
 from .lag_llama.gluon.estimator import LagLlamaEstimator
+from .lag_llama.gluon.predictor import LagLlamaPredictor
 
 # Try to import lag_llama, install if not available
 
@@ -43,117 +44,106 @@ class LagllamaModel(FoundationModel):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Model-specific attributes
-        self.prediction_length = self.config.get('prediction_length', 100)
         self.context_length = self.config.get('context_length', 4)
         self.num_samples = self.config.get('num_samples', 5)
         self.batch_size = self.config.get('batch_size', 4)
-        # Remove target_col - use target_cols from parent class instead
-        self.is_fitted = False
+        # forecast_horizon is inherited from parent class (FoundationModel)
+        self.model = None
+        self.predictor = None
         
         print(f"🦙 Lag-Llama initialized - Device: {self.device}, Context: {self.context_length}")
     
-    def _create_predictor_for_horizon(self, prediction_length: int):
-        """Create a predictor with specific prediction length"""
-
-        """
-        try:
-            # Load checkpoint
-            ckpt = torch.load(self.checkpoint_path, map_location=self.device, weights_only=False)
-            estimator_args = ckpt.get("hyper_parameters", {}).get("model_kwargs", {})
-            
-            # RoPE scaling
-            rope_scaling_arguments = {
-                "type": "linear",
-                "factor": max(1.0, (self.context_length + prediction_length) / 
-                             estimator_args.get("context_length", 32)),
-            }
-            
-            # Create estimator
-            estimator = LagLlamaEstimator(
-                ckpt_path=None,
-                prediction_length=prediction_length,
-                context_length=self.context_length,
-                input_size=estimator_args.get("input_size", 1),
-                n_layer=estimator_args.get("n_layer", 32),
-                n_embd_per_head=estimator_args.get("n_embd_per_head", 32),
-                n_head=estimator_args.get("n_head", 32),
-                scaling=estimator_args.get("scaling", "mean"),
-                time_feat=estimator_args.get("time_feat", True),
-                rope_scaling=rope_scaling_arguments,
-                batch_size=1,
-                num_parallel_samples=self.num_samples,
-                device=self.device,
-            )
-            
-            # Load weights
-            lightning_module = estimator.create_lightning_module()
-            lightning_module.load_state_dict(ckpt["state_dict"], strict=False)
-            
-            # Create predictor
-            transformation = estimator.create_transformation()
-            return estimator.create_predictor(transformation, lightning_module)
+    def _create_predictor_for_horizon(self, forecast_horizon: int):
+        """Create a predictor for a specific forecast horizon."""
+        # Calculate scaling factor based on context and forecast horizon
+        scaling_factor = max(1.0, (self.context_length + forecast_horizon) /
+                           self.context_length)
         
-        except Exception as e:
-            print(f"⚠️  Error creating predictor: {e}")"""
-        
-        # Fallback
-        estimator = LagLlamaEstimator(
-            ckpt_path=None,
-            prediction_length=self.prediction_length,
+        # Create the predictor with the specified horizon
+        predictor = LagLlamaPredictor.from_pretrained(
+            "time-series-foundation-models/Lag-Llama",
+            prediction_length=forecast_horizon,
             context_length=self.context_length,
-            rope_scaling={"type": "linear", "factor": 2.0},
+            num_samples=self.num_samples,
             batch_size=self.batch_size,
-            num_parallel_samples=self.num_samples,
-            device=self.device,
+            scaling_factor=scaling_factor,
         )
-        
-        lightning_module = estimator.create_lightning_module()
-        transformation = estimator.create_transformation()
-        return estimator.create_predictor(transformation, lightning_module)
-    
-    def predict(self,
-        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
-        y_target: Union[pd.Series, np.ndarray] = None,
-        y_context_timestamps = None,
-        y_target_timestamps = None,
-        **kwargs) -> np.ndarray:
+        return predictor
+
+    def fit(self, df: pd.DataFrame, forecast_horizon: int = None, verbose: bool = True):
         """
-        Make predictions using Lag-Llama.
+        Fit the Lag-Llama model to the data.
         
         Args:
-            y_context: Historical target values
-            x_context: Historical exogenous variables (ignored)
-            x_target: Future exogenous variables (ignored)
-            forecast_horizon: Number of steps to forecast
+            df: DataFrame with time series data
+            forecast_horizon: Forecast horizon (uses model config if not specified)
+            verbose: Whether to print progress information
+        """
+        if forecast_horizon is None:
+            forecast_horizon = self.forecast_horizon
+        
+        if verbose:
+            print(f"🦙 Fitting Lag-Llama with forecast_horizon={forecast_horizon}")
+        
+        # Create predictor for this horizon
+        self.predictor = self._create_predictor_for_horizon(forecast_horizon)
+        
+        # Fit the model
+        self.predictor.train(df)
+        self.is_fitted = True
+        
+        if verbose:
+            print("✅ Lag-Llama training completed!")
+        
+        return self
+    
+    def predict(self,
+            y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+            y_target: Union[pd.Series, np.ndarray] = None,
+            y_context_timestamps = None,
+            y_target_timestamps = None,
+            **kwargs) -> Union[np.ndarray, Dict[str, List[float]]]:
+        """
+        Generate predictions using the fitted Lag-Llama model.
+        
+        Args:
+            y_context: Historical time series data
+            y_target: Future target values (not used for prediction)
+            y_context_timestamps: Timestamps for context data
+            y_target_timestamps: Timestamps for target data (not used)
+            **kwargs: Additional arguments
             
         Returns:
-            np.ndarray: Predictions with shape (forecast_horizon,)
+            Predicted values as numpy array or dictionary
         """
-        
         if y_context is None:
             raise ValueError("y_context is required for prediction")
         
-        horizon = self.prediction_length
+        horizon = self.forecast_horizon
         
         # Convert input to DataFrame format
-        if isinstance(y_context, pd.Series):
-            df = pd.DataFrame({'series_0': y_context.values})
-        elif isinstance(y_context, np.ndarray):
-            df = pd.DataFrame({'series_0': y_context})
+        if isinstance(y_context, np.ndarray):
+            if y_context.ndim == 1:
+                df = pd.DataFrame({'series': y_context})
+            else:
+                df = pd.DataFrame(y_context.T)
         else:
-            df = pd.DataFrame({'series_0': y_context})
+            df = y_context
         
-        # Use the forecaster logic
-        results = self._predict_internal(df, horizon)
+        # Ensure we have a fitted predictor
+        if not self.is_fitted:
+            self.fit(df, verbose=False)
         
-        # Return as numpy array for single series
-        if 'series_0' in results:
-            return np.array(results['series_0'])
-        else:
-            # Fallback
-            print("[DEBUG] We return an array of all zeros here for lag llama")
-            return np.zeros(horizon)
-    
+        # Generate predictions
+        try:
+            predictions = self.predictor.predict(df)
+            return predictions
+        except Exception as e:
+            print(f"⚠️  Prediction error: {e}")
+            # Return zero predictions as fallback
+            series_names = df.columns if hasattr(df, 'columns') else [f'series_{i}' for i in range(df.shape[1])]
+            return {name: [0.0] * horizon for name in series_names}
+
     def _predict_internal(
         self,
         df: pd.DataFrame,
@@ -260,13 +250,11 @@ class LagllamaModel(FoundationModel):
         return results
     
     def get_params(self) -> Dict[str, Any]:
-        """Get model parameters"""
         return {
-            'checkpoint_path': self.checkpoint_path,
             'context_length': self.context_length,
             'num_samples': self.num_samples,
-            'device': str(self.device),
-            'forecast_horizon': self.forecast_horizon
+            'batch_size': self.batch_size,
+            'forecast_horizon': self.forecast_horizon,
         }
     
     def set_params(self, **params: Dict[str, Any]) -> 'LagllamaModel':
@@ -282,7 +270,7 @@ class LagllamaModel(FoundationModel):
     def predict_df(
         self,
         df: pd.DataFrame,
-        prediction_length: int,
+        forecast_horizon: int,
         return_samples: bool = False
     ) -> Union[Dict[str, List[float]], Dict[str, Dict[str, List[float]]]]:
         """
@@ -290,18 +278,18 @@ class LagllamaModel(FoundationModel):
         
         Args:
             df: DataFrame with time series columns
-            prediction_length: Number of steps to forecast
+            forecast_horizon: Number of steps to forecast
             return_samples: Whether to return probabilistic samples
             
         Returns:
             Dictionary with forecasts for each series
         """
-        return self._predict_internal(df, prediction_length, return_samples=return_samples)
+        return self._predict_internal(df, forecast_horizon, return_samples=return_samples)
     
     def predict_quantiles(
         self,
         df: pd.DataFrame,
-        prediction_length: int,
+        forecast_horizon: int,
         quantile_levels: List[float] = [0.1, 0.5, 0.9]
     ) -> Dict[str, Dict[str, List[float]]]:
         """
@@ -309,13 +297,13 @@ class LagllamaModel(FoundationModel):
         
         Args:
             df: Historical time series data
-            prediction_length: Number of future steps to predict
+            forecast_horizon: Number of future steps to predict
             quantile_levels: List of quantile levels to compute
             
         Returns:
             Nested dict with series names and quantile forecasts
         """
-        sample_results = self._predict_internal(df, prediction_length, return_samples=True)
+        sample_results = self._predict_internal(df, forecast_horizon, return_samples=True)
         
         quantile_results = {}
         for series_name, forecasts in sample_results.items():
@@ -329,7 +317,7 @@ class LagllamaModel(FoundationModel):
                 quantile_results[series_name] = quantiles
             else:
                 quantile_results[series_name] = {
-                    f'q{int(q*100)}': forecasts.get('mean', [0.0] * prediction_length) 
+                    f'q{int(q*100)}': forecasts.get('mean', [0.0] * forecast_horizon) 
                     for q in quantile_levels
                 }
         
@@ -348,10 +336,10 @@ class LagLlamaForecaster:
         config.update(kwargs)
         self.model = LagllamaModel(config)
     
-    def predict(self, df: pd.DataFrame, prediction_length: int, **kwargs):
+    def predict(self, df: pd.DataFrame, forecast_horizon: int, **kwargs):
         """TimesFM-style predict method"""
-        return self.model.predict_df(df, prediction_length, **kwargs)
+        return self.model.predict_df(df, forecast_horizon, **kwargs)
     
-    def predict_quantiles(self, df: pd.DataFrame, prediction_length: int, **kwargs):
+    def predict_quantiles(self, df: pd.DataFrame, forecast_horizon: int, **kwargs):
         """TimesFM-style quantile prediction"""
-        return self.model.predict_quantiles(df, prediction_length, **kwargs)
+        return self.model.predict_quantiles(df, forecast_horizon, **kwargs)

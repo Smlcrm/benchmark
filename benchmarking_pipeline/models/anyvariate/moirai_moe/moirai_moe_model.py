@@ -25,13 +25,12 @@ class MoiraiMoeModel(FoundationModel):
     """
     
     super().__init__(config, config_file)
-    self.model_name = self.config.get('model_name', 'moirai')
+    self.model_name = self.config.get('model_name', 'moirai_moe')
     self.size = self.config.get('size', 'small')
-    self.pdt = self.config.get('pdt', '4')
-    self.psz = self.config.get('psz', '8')
-    self.bsz = self.config.get('bsz', '8')
-    self.test = self.config.get('test', '8')
-    self.num_samples = self.config.get('num_samples', '5')
+    # forecast_horizon is inherited from parent class (FoundationModel)
+    self.psz = self.config.get('psz', 32)
+    self.bsz = self.config.get('bsz', 8)
+    self.num_samples = self.config.get('num_samples', 5)
     # Remove target_col - use target_cols from parent class instead
     self.is_fitted = False
   
@@ -95,7 +94,7 @@ class MoiraiMoeModel(FoundationModel):
     if self.model_name == "moirai":
       model = MoiraiForecast(
             module=MoiraiModule.from_pretrained(f"Salesforce/moirai-1.1-R-{self.size}"),
-            prediction_length=self.pdt,
+            prediction_length=self.forecast_horizon,
             context_length=self.ctx,
             patch_size=self.psz,
             num_samples=self.num_samples,
@@ -106,13 +105,11 @@ class MoiraiMoeModel(FoundationModel):
     elif self.model_name == "moirai_moe":
       model = MoiraiMoEForecast(
             module=MoiraiMoEModule.from_pretrained(f"Salesforce/moirai-moe-1.0-R-{self.size}"),
-            prediction_length=self.pdt,
+            prediction_length=self.forecast_horizon,
             context_length=self.ctx,
             patch_size=self.psz,
-            num_samples=self.num_samples,
-            target_dim=1,
-            feat_dynamic_real_dim=0,
-            past_feat_dynamic_real_dim=0,
+            batch_size=self.bsz,
+            num_parallel_samples=self.num_samples,
         )
     else:
       raise ValueError("self.model_name must have the value 'moirai' or 'moirai_moe'.")

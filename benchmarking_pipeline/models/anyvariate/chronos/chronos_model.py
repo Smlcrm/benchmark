@@ -32,8 +32,7 @@ class ChronosModel(FoundationModel):
         self.model_size = self.config.get('model_size', 'small')
         self.context_length = self.config.get('context_length', 8)
         self.num_samples = self.config.get('num_samples', 5)
-        # Remove target_col - use target_cols from parent class instead
-        self.prediction_length = self.config.get('prediction_length', 40)
+        # forecast_horizon is inherited from parent class (FoundationModel)
         self.is_fitted = False
 
     
@@ -97,7 +96,10 @@ class ChronosModel(FoundationModel):
            columns = list(range(y_context.shape[0])) 
         df = pd.DataFrame(y_context, index=y_context_timestamps, columns=columns)
         self.ctx = len(df)
-        results = self._sub_predict(df)
+        results = self.pipeline.predict(
+            df,
+            prediction_length=self.forecast_horizon,
+        )
         if len(list(results.keys())) == 1:
             return np.array(results["1"])
         else:
@@ -114,12 +116,11 @@ class ChronosModel(FoundationModel):
         Generates forecasts for future time steps based on the most recent data.
 
         This method uses the last `context_length` data points from each time series
-        in the DataFrame to predict the next `prediction_length` steps.
+        in the DataFrame to predict the next `forecast_horizon` steps.
 
         Args:
             df (pd.DataFrame): DataFrame with a datetime index and one column per time series.
                                The model will use the end of this data as context.
-            prediction_length (int): The number of future time steps to predict.
 
         Returns:
             Dict[str, List[float]]: A dictionary where keys are time series names (column headers)
