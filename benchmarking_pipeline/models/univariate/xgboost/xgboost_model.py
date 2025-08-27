@@ -22,7 +22,7 @@ class XgboostModel(BaseModel):
         """
         super().__init__(config, config_file)
         self.lookback_window = self.config.get('lookback_window', 10)
-        self.forecast_horizon = self.config.get('forecast_horizon', 1)
+        # forecast_horizon is inherited from parent class (BaseModel)
         self._build_model()
         
     def _build_model(self):

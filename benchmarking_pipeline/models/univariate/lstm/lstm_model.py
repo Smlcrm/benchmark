@@ -34,8 +34,7 @@ class LstmModel(BaseModel):
                 - sequence_length: int, length of input sequences
                 - target_col: str, name of target column
                 - feature_cols: list of str, names of feature columns
-                - loss_functions: List[str], list of loss function names to use
-                - primary_loss: str, primary loss function for training
+                - loss_function: str, loss function for training
                 - forecast_horizon: int, number of steps to forecast ahead
             config_file: Path to a JSON configuration file
         """
@@ -49,7 +48,8 @@ class LstmModel(BaseModel):
         self.sequence_length = self.config.get('sequence_length', 10)
         # Remove target_col - use target_cols from parent class instead
         self.feature_cols = self.config.get('feature_cols', None)
-        self.forecast_horizon = self.config.get('forecast_horizon', 1)
+        self.loss_function = self.config.get('loss_function', 'mae')
+        # forecast_horizon is inherited from parent class (BaseModel)
         self.model = None
         
     def _build_model(self, input_shape: Tuple[int, int]) -> None:
@@ -78,7 +78,7 @@ class LstmModel(BaseModel):
         # Compile model
         self.model.compile(
             optimizer=Adam(learning_rate=self.learning_rate),
-            loss=self.primary_loss
+            loss=self.loss_function
         )
         
     def _prepare_sequences(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -219,8 +219,7 @@ class LstmModel(BaseModel):
             'sequence_length': self.sequence_length,
             'target_cols': self.target_cols,
             'feature_cols': self.feature_cols,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss,
+            'loss_function': self.loss_function,
             'forecast_horizon': self.forecast_horizon
         }
         

@@ -21,9 +21,9 @@ class SvrModel(BaseModel):
         """
         super().__init__(config, config_file)
         self.scaler = StandardScaler() # SVR is sensitive to feature scaling
-        # Extract lookback_window and forecast_horizon from config
+        # Extract lookback_window from config
         self.lookback_window = self.config.get('lookback_window', 10)
-        self.forecast_horizon = self.config.get('forecast_horizon', 1)
+        # forecast_horizon is inherited from parent class (BaseModel)
         self._build_model()
 
     def _build_model(self):
