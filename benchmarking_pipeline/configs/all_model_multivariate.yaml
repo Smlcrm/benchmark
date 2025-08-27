@@ -1,130 +1,99 @@
 test_type: deterministic
 tensorboard: true
 dataset:
-  name: china_air_quality
-  path: benchmarking_pipeline/datasets/china_air_quality
+  name: azure_vm_traces_2017
+  path: benchmarking_pipeline/datasets/azure_vm_traces_2017
   frequency: H
-  forecast_horizon: 50
+  forecast_horizon: [10, 25, 50]  # Vector of forecast horizons to test
   split_ratio: [0.8, 0.1, 0.1]
-  normalize: true
+  normalize: false
   handle_missing: interpolate
-  chunks: 3
-  target_cols: ["PM2.5", "PM10", "O3", "NO2", "CO", "SO2"]  # Air quality metrics (6 columns)
+  chunks: 2
+  target_cols: ['cpu_util', 'mem_util']
 
 model:
-  # Running only models that support multivariate forecasting
-  # Anyvariate models: can handle both univariate and multivariate within the same implementation
-  # Multivariate models: have separate multivariate implementations in the multivariate/ folder
-  name: [
-    # Anyvariate models (can handle both variants)
-    "chronos", "moment", "lagllama", "toto", "moirai", "moirai_moe", 
-    "tiny_time_mixer", "timesfm", "croston_classic", "exponential_smoothing",
-    # Models with separate multivariate implementations
-    "arima", "lstm", "svr", "theta", "xgboost"
-  ]
-
-  parameters:
-    tiny_time_mixer:
-      prediction_length: [40]
-    moment:
-      model_path: ['AutonLab/MOMENT-1-large']
-      context_length: [512]
-      fine_tune_epochs: [0]
-      batch_size: [8]
-      learning_rate: [0.0001]
-      prediction_length: [40]
-    lagllama:
-      prediction_length: [100]
-      context_length: [4]
-      num_samples: [5]
-      batch_size: [4]
-    timesfm:
-      per_core_batch_size: [2]
-      horizon_len: [40]
-      num_layers: [2]
-      context_len: [2]
-      use_positional_embedding: [False]
-    chronos:
-      model_size: ['small']
-      context_length: [8]
-      num_samples: [5]
-      prediction_length: [40]
-    xgboost:
-      lookback_window: [50, 100]
-      forecast_horizon: [50]
-      n_estimators: [50, 100]
-      max_depth: [5, 6, 10]
-      learning_rate: [0.1, 0.3]
-      subsample: [0.8, 1.0]
-      colsample_bytree: [0.8, 1.0]
-      random_state: [42]
-      n_jobs: [-1]
-    lstm:
-      units: [32]
-      layers: [1]
-      dropout: [0.1]
-      learning_rate: [0.01, 1.0]
-      batch_size: [32]
-      epochs: [20]
-      sequence_length: [10]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [50]
-    exponential_smoothing:
-      trend: ["none", "add"]
-      seasonal: ["none", "add", "mul"]
-      seasonal_periods: [7]
-      damped_trend: [false]
-      forecast_horizon: [50]
-    svr:
-      kernel: ["rbf", "linear"]
-      C: [0.1, 1.0, 10.0]
-      epsilon: [0.01, 0.1, 0.2]
-      gamma: ["scale", "auto"]
-      lookback_window: [50, 100]
-      forecast_horizon: [50]
-      max_iter: [1000]
-      random_state: [42]
-    arima:
-      p: [0, 1, 2]
-      d: [0, 1]
-      q: [0, 1, 2]
-      s: [2, 4]
-      maxlags: [10]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [50]
-    theta:
-      sp: [1, 2, 3, 7, 48]  # 48 for daily seasonality in 30min data
-      use_reduced_rank: [false, true]
-      theta_method: ["least_squares", "correlation_optimal"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [50]
-    moirai:
-      model_name: ["moirai"]
-      size: ["small"]
-      pdt: [900]
-      psz: [32]
-      bsz: [8]
-      num_samples: [5]
-    moirai_moe:
-      model_name: ["moirai_moe"]  # moirai and moirai_moe come from the same model file
-      size: ["small"]
-      pdt: [900]
-      psz: [32]
-      bsz: [8]
-      num_samples: [5]
-    toto:
-      model_name: ["toto"]
-      prediction_length: [900]
-      num_samples: [40]
-      samples_per_batch: [40]
-    croston_classic:
-      alpha: [0.1, 0.5, 1]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [50]
+  tiny_time_mixer:
+  moment:
+    model_path: ['AutonLab/MOMENT-1-large']
+    context_length: [512]
+    fine_tune_epochs: [0]
+    batch_size: [8]
+    learning_rate: [0.0001]
+  lagllama:
+    context_length: [4]
+    num_samples: [5]
+    batch_size: [4]
+  timesfm:
+    per_core_batch_size: [2]
+    horizon_len: [40]
+    num_layers: [2]
+    context_len: [2]
+    use_positional_embedding: [False]
+  chronos:
+    model_size: ['small']
+    context_length: [8]
+    num_samples: [5]
+  xgboost:
+    lookback_window: [50, 100]
+    n_estimators: [50, 100]
+    max_depth: [5, 6, 10]
+    learning_rate: [0.1, 0.3]
+    subsample: [0.8, 1.0]
+    colsample_bytree: [0.8, 1.0]
+    random_state: [42]
+    n_jobs: [-1]
+  lstm:
+    units: [32]
+    layers: [1]
+    dropout: [0.1]
+    learning_rate: [0.01, 1.0]
+    batch_size: [32]
+    epochs: [20]
+    sequence_length: [10]
+    loss_functions: ["mae"]
+    primary_loss: ["mae"]
+  exponential_smoothing:
+    trend: ["none", "add"]
+    seasonal: ["none", "add", "mul"]
+    seasonal_periods: [7]
+    damped_trend: [false]
+  svr:
+    kernel: ["rbf", "linear"]
+    C: [0.1, 1.0, 10.0]
+    epsilon: [0.01, 0.1, 0.2]
+    gamma: ["scale", "auto"]
+    lookback_window: [50, 100]
+    max_iter: [1000]
+    random_state: [42]
+  arima:
+    p: [0, 1, 2]
+    d: [0, 1]
+    q: [0, 1, 2]
+    s: [2, 4]
+    maxlags: [10]
+    loss_functions: ["mae"]
+    primary_loss: ["mae"]
+  theta:
+    sp: [1, 2, 3, 7, 48]  # 48 for daily seasonality in 30min data
+    use_reduced_rank: [false, true]
+    theta_method: ["least_squares", "correlation_optimal"]
+  moirai:
+    size: ["small"]
+    psz: [32]
+    bsz: [8]
+    num_samples: [5]
+  moirai_moe:
+    size: ["small"]
+    psz: [32]
+    bsz: [8]
+    num_samples: [5]
+  toto:
+    num_samples: [40]
+    samples_per_batch: [40]
+  croston_classic:
+    alpha: [0.1, 0.5, 1]
+    loss_functions: ["mae"]
+    primary_loss: ["mae"]
 
 evaluation:
   type: deterministic
