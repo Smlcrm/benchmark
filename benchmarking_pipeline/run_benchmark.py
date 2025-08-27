@@ -93,7 +93,12 @@ class BenchmarkRunner:
             "dataset": {
                 "path": dataset_path,
                 "name": dataset_name,
-                "split_ratio": split_ratio
+                "split_ratio": split_ratio,
+                "target_cols": dataset_cfg.get('target_cols'),
+                "forecast_horizon": dataset_cfg.get('forecast_horizon'),
+                "frequency": dataset_cfg.get('frequency'),
+                "normalize": dataset_cfg.get('normalize', False),
+                "handle_missing": dataset_cfg.get('handle_missing', 'interpolate')
             },
             "model": config.get('model', {})  # Include model parameters with target_cols
         }
@@ -126,7 +131,8 @@ class BenchmarkRunner:
         # config_path = self.config_path
         # with open(config_path, 'r') as f:
         #     config = yaml.safe_load(f)
-        model_names = config['model']['name']
+        # Get model names directly from the model section (no more parameters level)
+        model_names = list(config['model'].keys())
 
         # Import the model router
         from benchmarking_pipeline.models.model_router import ModelRouter
@@ -140,8 +146,8 @@ class BenchmarkRunner:
             model_name = model_router.parse_model_spec(model_spec)
             
             # Get parameters for the base model name (without variant)
-            if model_name in config['model']['parameters']:
-                model_params = config['model']['parameters'][model_name]
+            if model_name in config['model']:
+                model_params = config['model'][model_name]
             else:
                 print(f"[WARNING] No parameters found for {model_name}, using defaults")
                 model_params = {}
