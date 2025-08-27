@@ -42,7 +42,7 @@ class MultivariateARIMAModel(BaseModel):
         self.p = int(self.config.get('p', 1))
         self.d = int(self.config.get('d', 1))
         self.maxlags = int(self.config.get('maxlags', 10))
-        self.target_cols = self.config.get('target_cols', ['target_0', 'target_1'])  # Default for multivariate
+        self.target_cols = self.config.get('target_cols')
         self.forecast_horizon = int(self.config.get('forecast_horizon', 1))
         self.model = None
         self.fitted_model = None
@@ -150,9 +150,12 @@ class MultivariateARIMAModel(BaseModel):
             # Multivariate case - use all columns
             data = y_context.copy()
             # Update target_cols if not already set
-            if self.target_cols == ['target_0', 'target_1'] and len(y_context.columns) > 0:
-                self.target_cols = list(y_context.columns)
-                self.n_targets = len(self.target_cols)
+            # target_cols should already be set from config, validate consistency
+            if self.target_cols and len(y_context.columns) > 0:
+                expected_cols = set(self.target_cols)
+                actual_cols = set(y_context.columns)
+                if expected_cols != actual_cols:
+                    raise ValueError(f"Data columns {actual_cols} don't match configured target_cols {expected_cols}")
         elif isinstance(y_context, pd.Series):
             # Convert Series to DataFrame
             data = pd.DataFrame({y_context.name if y_context.name else 'target_0': y_context.values})

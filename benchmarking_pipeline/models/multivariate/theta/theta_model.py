@@ -42,7 +42,7 @@ class MultivariateTheta(BaseModel):
         """
         super().__init__(config, config_file)
         self.sp = self.config.get('sp', 1)
-        self.target_cols = self.config.get('target_cols', ['target_0', 'target_1'])
+        self.target_cols = self.config.get('target_cols')
         self.use_reduced_rank = self.config.get('use_reduced_rank', False)
         self.theta_method = self.config.get('theta_method', 'least_squares')
         
@@ -192,14 +192,18 @@ class MultivariateTheta(BaseModel):
         if isinstance(y_context, pd.DataFrame):
             # Multivariate case - use all columns
             target_data = y_context.values  # (T, n_targets)
-            # Update target_cols if not already set properly
-            if self.target_cols == ['target_0', 'target_1'] and len(y_context.columns) > 0:
-                self.target_cols = list(y_context.columns)
-                self.n_targets = len(self.target_cols)
+            # target_cols should already be set from config, validate consistency
+            if self.target_cols and len(y_context.columns) > 0:
+                expected_cols = set(self.target_cols)
+                actual_cols = set(y_context.columns)
+                if expected_cols != actual_cols:
+                    raise ValueError(f"Data columns {actual_cols} don't match configured target_cols {expected_cols}")
         elif isinstance(y_context, pd.Series):
             # Univariate case - reshape to 2D
             target_data = y_context.values.reshape(-1, 1)
-            self.target_cols = [y_context.name if y_context.name else 'target_0']
+                            # For univariate case, validate against config
+                if len(self.target_cols) != 1:
+                    raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
             self.n_targets = 1
         else:
             # Numpy array case
