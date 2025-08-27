@@ -79,7 +79,7 @@ class ConfigValidator:
                         ]
                     },
                     'chunks': {'type': int, 'required': False, 'min': 1, 'default': 1},
-                    'num_targets': {'type': int, 'required': False, 'min': 1, 'default': 1}
+                    'target_cols': {'type': list, 'element_type': str, 'required': True, 'min_length': 1}
                 }
             },
             'model': {
@@ -128,7 +128,6 @@ class ConfigValidator:
                 'q': {'type': list, 'element_type': int, 'min': 0},
                 's': {'type': list, 'element_type': int, 'min': 1},
                 'maxlags': {'type': list, 'element_type': int, 'min': 1},
-                'target_cols': {'type': list, 'element_type': str, 'required': True},
                 'loss_functions': {'type': list, 'element_type': str, 'required': True},
                 'primary_loss': {'type': list, 'element_type': str, 'required': True},
                 'forecast_horizon': {'type': list, 'element_type': int, 'min': 1}
@@ -141,7 +140,6 @@ class ConfigValidator:
                 'batch_size': {'type': list, 'element_type': int, 'min': 1},
                 'epochs': {'type': list, 'element_type': int, 'min': 1},
                 'sequence_length': {'type': list, 'element_type': int, 'min': 1},
-                'target_cols': {'type': list, 'element_type': str, 'required': True},
                 'loss_functions': {'type': list, 'element_type': str, 'required': True},
                 'primary_loss': {'type': list, 'element_type': str, 'required': True},
                 'forecast_horizon': {'type': list, 'element_type': int, 'min': 1}
@@ -155,14 +153,12 @@ class ConfigValidator:
                 'subsample': {'type': list, 'element_type': float, 'min': 0.0, 'max': 1.0},
                 'colsample_bytree': {'type': list, 'element_type': float, 'min': 0.0, 'max': 1.0},
                 'random_state': {'type': list, 'element_type': int},
-                'n_jobs': {'type': list, 'element_type': int},
-                'target_cols': {'type': list, 'element_type': str, 'required': True}
+                'n_jobs': {'type': list, 'element_type': int}
             },
             'theta': {
                 'sp': {'type': list, 'element_type': int, 'min': 1},
                 'forecast_horizon': {'type': list, 'element_type': int, 'min': 1},
                 'method': {'type': list, 'element_type': str, 'allowed_values': ['additive', 'multiplicative']},
-                'target_cols': {'type': list, 'element_type': str, 'required': True},
                 'loss_functions': {'type': list, 'element_type': str, 'required': True},
                 'primary_loss': {'type': list, 'element_type': str, 'required': True},
                 'use_reduced_rank': {'type': list, 'element_type': bool},
@@ -176,8 +172,7 @@ class ConfigValidator:
                 'lookback_window': {'type': list, 'element_type': int, 'min': 1},
                 'forecast_horizon': {'type': list, 'element_type': int, 'min': 1},
                 'max_iter': {'type': list, 'element_type': int, 'min': 1},
-                'random_state': {'type': list, 'element_type': int},
-                'target_cols': {'type': list, 'element_type': str, 'required': True}
+                'random_state': {'type': list, 'element_type': int}
             }
         }
         
