@@ -1,25 +1,38 @@
 import pandas as pd
 import numpy as np
 import torch
-from chronos import BaseChronosPipeline
+from typing import Dict, Any, Union, Tuple, List, Optional
 from benchmarking_pipeline.models.foundation_model import FoundationModel
-from typing import Dict, List, Optional, Any, Union
+from chronos import ChronosPipeline as BaseChronosPipeline
+from einops import rearrange
 
 class ChronosModel(FoundationModel):
-
+    """
+    Chronos model wrapper for time series forecasting.
+    
+    Args:
+        model_size: The size of the Chronos model to use.
+                   Options: 'tiny', 'mini', 'small', 'base', 'large'.
+        context_length: The number of past time steps the model uses as context.
+        num_samples: number of samples to generate during prediction time - any positive integer
+    """
+    
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
+        Initializes the Chronos model wrapper.
+
         Args:
-        model_size: the model size - choose from {'tiny', 'mini', 'small', 'base', 'large'}
-        context_length: context length - any positive integer
-        num_samples: number of samples to generate during prediction time - any positive integer
+            model_size (str): The size of the Chronos model to use.
+                              Options: 'tiny', 'mini', 'small', 'base', 'large'.
+            context_length (int): The number of past time steps the model uses as context.
+            num_samples (int): The number of predictive samples to generate for each forecast.
         """
         
         super().__init__(config, config_file)
         self.model_size = self.config.get('model_size', 'small')
         self.context_length = self.config.get('context_length', 8)
         self.num_samples = self.config.get('num_samples', 5)
-        self.target_col = self.config.get('target_col', 'y')
+        # Remove target_col - use target_cols from parent class instead
         self.prediction_length = self.config.get('prediction_length', 40)
         self.is_fitted = False
 

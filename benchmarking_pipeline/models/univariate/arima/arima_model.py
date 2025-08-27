@@ -32,7 +32,7 @@ class ArimaModel(BaseModel):
         self.d = self.config.get('d', 1)
         self.q = self.config.get('q', 1)
         self.s = self.config.get('s', 1)
-        self.target_col = self.config.get('target_col', 'y')
+        # Remove target_col - use target_cols from parent class instead
         self.model_ = None  # Use model_ consistently
         self.is_fitted = False  # Explicitly initialize
         self.loss_functions = self.config.get('loss_functions', ['mae'])
@@ -178,7 +178,7 @@ class ArimaModel(BaseModel):
             'p': self.p,
             'd': self.d,
             'q': self.q,
-            'target_col': self.target_col,
+            'target_cols': self.target_cols,
             'loss_functions': self.loss_functions,
             'primary_loss': self.primary_loss,
             'forecast_horizon': self.forecast_horizon,
@@ -278,7 +278,7 @@ class ArimaModel(BaseModel):
             'order': (self.p, self.d, self.q),
             'is_fitted': self.is_fitted,
             'forecast_horizon': self.forecast_horizon,
-            'target_col': self.target_col,
+            'target_cols': self.target_cols,
             'loss_functions': self.loss_functions,
             'primary_loss': self.primary_loss
         }
