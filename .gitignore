@@ -46,6 +46,7 @@ logs/
 .pytest_cache/
 .coverage
 htmlcov/
+coverage.xml
 
 # System files
 .DS_Store

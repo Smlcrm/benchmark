@@ -19,143 +19,143 @@ model:
 
   parameters:
     tiny_time_mixer:
-      prediction_length: [40]
+      prediction_length: [40]  # necessary - used in model initialization
     moment:
-      model_path: ['AutonLab/MOMENT-1-large']
-      context_length: [512]
-      fine_tune_epochs: [0]
-      batch_size: [8]
-      learning_rate: [0.0001]
-      prediction_length: [40]
+      model_path: ['AutonLab/MOMENT-1-large']  # necessary - used in model initialization
+      context_length: [512]  # necessary - used in model initialization
+      fine_tune_epochs: [0]  # necessary - used in model initialization
+      batch_size: [8]  # necessary - used in model initialization
+      learning_rate: [0.0001]  # necessary - used in model initialization
+      prediction_length: [40]  # necessary - used in model initialization
     lagllama:
-      prediction_length: [100]
-      context_length: [4]
-      num_samples: [5]
-      batch_size: [4]
-      target_cols: ['y']
+      prediction_length: [100]  # necessary - used in model initialization
+      context_length: [4]  # necessary - used in model initialization
+      num_samples: [5]  # necessary - used in model initialization
+      batch_size: [4]  # necessary - used in model initialization
+      target_cols: ['y']  # necessary - used in model initialization
     timesfm:
-      per_core_batch_size: [2]
-      horizon_len: [40]
-      num_layers: [2]
-      context_len: [2]
-      use_positional_embedding: [False]
-      target_cols: ['y']
+      per_core_batch_size: [2]  # necessary - used in model initialization
+      horizon_len: [40]  # necessary - used in model initialization
+      num_layers: [2]  # necessary - used in model initialization
+      context_len: [2]  # necessary - used in model initialization
+      use_positional_embedding: [False]  # necessary - used in model initialization
+      target_cols: ['y']  # necessary - used in model initialization
     tabpfn:
-      allow_large_cpu_dataset: [True]
-      max_sequence_length: [32]
-      prediction_length: [40]
-      target_cols: ['y']
+      allow_large_cpu_dataset: [True]  # necessary - used in model initialization
+      max_sequence_length: [32]  # necessary - used in model initialization
+      prediction_length: [40]  # necessary - used in model initialization
+      target_cols: ['y']  # unnecessary - removed default values, not used in tabpfn model
     chronos:
-      model_size: ['small']
-      context_length: [8]
-      num_samples: [5]
-      prediction_length: [40]
-      target_cols: ['y']
+      model_size: ['small']  # necessary - used in model initialization
+      context_length: [8]  # necessary - used in model initialization
+      num_samples: [5]  # necessary - used in model initialization
+      prediction_length: [40]  # necessary - used in model initialization
+      target_cols: ['y']  # unnecessary - removed default values, not used in chronos model
     xgboost:
-      lookback_window: [10]
-      forecast_horizon: [10]
-      n_estimators: [10]
-      max_depth: [5]
-      learning_rate: [0.1]
-      random_state: [42]
-      n_jobs: [-1]
-      target_cols: ['y']
+      lookback_window: [10]  # necessary - used in model initialization
+      forecast_horizon: [10]  # necessary - used in model initialization
+      n_estimators: [10]  # necessary - used in model initialization
+      max_depth: [5]  # necessary - used in model initialization
+      learning_rate: [0.1]  # necessary - used in model initialization
+      random_state: [42]  # necessary - used in model initialization
+      n_jobs: [-1]  # necessary - used in model initialization
+      target_cols: ['y']  # necessary - used in model initialization
     prophet:
-      seasonality_mode: ["additive"]
-      changepoint_prior_scale: [0.05]
-      seasonality_prior_scale: [10.0]
-      yearly_seasonality: [false]
-      weekly_seasonality: [false]
-      daily_seasonality: [false]
-      target_cols: ['y']
+      seasonality_mode: ["additive"]  # necessary - used in model initialization
+      changepoint_prior_scale: [0.05]  # necessary - used in model initialization
+      seasonality_prior_scale: [10.0]  # necessary - used in model initialization
+      yearly_seasonality: [false]  # necessary - used in model initialization
+      weekly_seasonality: [false]  # necessary - used in model initialization
+      daily_seasonality: [false]  # necessary - used in model initialization
+      target_cols: ['y']  # unnecessary - removed default values, not used in prophet model
     lstm:
-      units: [32]
-      layers: [1]
-      dropout: [0.1]
-      learning_rate: [0.01, 1.0]
-      batch_size: [32]
-      epochs: [20]
-      sequence_length: [10]
-      target_cols: ["y"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [50]
+      units: [32]  # necessary - used in model initialization
+      layers: [1]  # necessary - used in model initialization
+      dropout: [0.1]  # necessary - used in model initialization
+      learning_rate: [0.01, 1.0]  # necessary - used in model initialization
+      batch_size: [32]  # necessary - used in model initialization
+      epochs: [20]  # necessary - used in model initialization
+      sequence_length: [10]  # necessary - used in model initialization
+      target_cols: ["y"]  # unnecessary - removed default values, not used in lstm model
+      loss_functions: ["mae"]  # necessary - used in base model
+      primary_loss: ["mae"]  # necessary - used in base model
+      forecast_horizon: [50]  # necessary - used in base model
     random_forest:
-      lookback_window: [50, 100]
-      forecast_horizon: [50]
-      n_estimators: [10, 50]
-      max_depth: [3, 7]
-      random_state: [42]
-      n_jobs: [-1]
-      target_cols: ["y"]
+      lookback_window: [50, 100]  # necessary - used in model initialization
+      forecast_horizon: [50]  # necessary - used in base model
+      n_estimators: [10, 50]  # necessary - used in model initialization
+      max_depth: [3, 7]  # necessary - used in model initialization
+      random_state: [42]  # necessary - used in model initialization
+      n_jobs: [-1]  # necessary - used in model initialization
+      target_cols: ["y"]  # unnecessary - removed default values, not used in random_forest model
     exponential_smoothing:
-      trend: ["none", "add"]
-      seasonal: ["none", "add", "mul"]
-      seasonal_periods: [7]
-      damped_trend: [false]
-      forecast_horizon: [50]
-      target_cols: ["y"]
+      trend: ["none", "add"]  # necessary - used in model initialization
+      seasonal: ["none", "add", "mul"]  # necessary - used in model initialization
+      seasonal_periods: [7]  # necessary - used in model initialization
+      damped_trend: [false]  # necessary - used in model initialization
+      forecast_horizon: [50]  # necessary - used in base model
+      target_cols: ["y"]  # unnecessary - removed default values, not used in exponential_smoothing model
     svr:
-      kernel: ["rbf", "linear"]
-      C: [0.1, 1.0, 10.0]
-      epsilon: [0.01, 0.1, 0.2]
-      gamma: ["scale", "auto"]
-      lookback_window: [50, 100]
-      forecast_horizon: [50]
-      max_iter: [1000]
-      random_state: [42]
-      target_cols: ["y"]
+      kernel: ["rbf", "linear"]  # necessary - used in model initialization
+      C: [0.1, 1.0, 10.0]  # necessary - used in model initialization
+      epsilon: [0.01, 0.1, 0.2]  # necessary - used in model initialization
+      gamma: ["scale", "auto"]  # necessary - used in model initialization
+      lookback_window: [50, 100]  # necessary - used in model initialization
+      forecast_horizon: [50]  # necessary - used in base model
+      max_iter: [1000]  # necessary - used in model initialization
+      random_state: [42]  # necessary - used in model initialization
+      target_cols: ["y"]  # unnecessary - removed default values, not used in svr model
     arima:
-      p: [0, 1, 2]
-      d: [0, 1]
-      q: [0, 1, 2]
-      s: [2, 4]
-      maxlags: [10]
-      target_cols: ["y"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [50]
+      p: [0, 1, 2]  # necessary - used in model initialization
+      d: [0, 1]  # necessary - used in model initialization
+      q: [0, 1, 2]  # necessary - used in model initialization
+      s: [2, 4]  # necessary - used in model initialization
+      maxlags: [10]  # unnecessary - not used in arima model
+      target_cols: ["y"]  # unnecessary - removed default values, not used in arima model
+      loss_functions: ["mae"]  # necessary - used in base model
+      primary_loss: ["mae"]  # necessary - used in base model
+      forecast_horizon: [50]  # necessary - used in base model
     theta:
-      sp: [1, 2, 3]
-      forecast_horizon: [10]
-      method: ["additive"]
-      target_cols: ["y"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
+      sp: [1, 2, 3]  # necessary - used in model initialization
+      forecast_horizon: [10]  # necessary - used in base model
+      method: ["additive"]  # unnecessary - not used in theta model
+      target_cols: ["y"]  # unnecessary - removed default values, not used in theta model
+      loss_functions: ["mae"]  # necessary - used in base model
+      primary_loss: ["mae"]  # necessary - used in base model
     moirai:
-      model_name: ["moirai"]
-      size: ["small"]
-      pdt: [900]
-      psz: [32]
-      bsz: [8]
-      num_samples: [5]
-      target_cols: ['y']
+      model_name: ["moirai"]  # necessary - used in model initialization
+      size: ["small"]  # necessary - used in model initialization
+      pdt: [900]  # necessary - used in model initialization
+      psz: [32]  # necessary - used in model initialization
+      bsz: [8]  # necessary - used in model initialization
+      num_samples: [5]  # necessary - used in model initialization
+      target_cols: ['y']  # unnecessary - removed default values, not used in moirai model
     moirai_moe:
-      model_name: ["moirai_moe"] #, moirai_moe"] # moirai and moirai_moe come from the same model file
-      size: ["small"]
-      pdt: [900]
-      psz: [32]
-      bsz: [8]
-      num_samples: [5]
-      target_cols: ['y']
+      model_name: ["moirai_moe"]  # necessary - used in model initialization
+      size: ["small"]  # necessary - used in model initialization
+      pdt: [900]  # necessary - used in model initialization
+      psz: [32]  # necessary - used in model initialization
+      bsz: [8]  # necessary - used in model initialization
+      num_samples: [5]  # necessary - used in model initialization
+      target_cols: ['y']  # unnecessary - removed default values, not used in moirai_moe model
     toto:
-      model_name: ["toto"]
-      prediction_length: [900]
-      num_samples: [40]
-      samples_per_batch: [40]
-      target_cols: ["y"]
+      model_name: ["toto"]  # necessary - used in model initialization
+      prediction_length: [900]  # necessary - used in model initialization
+      num_samples: [40]  # necessary - used in model initialization
+      samples_per_batch: [40]  # necessary - used in model initialization
+      target_cols: ["y"]  # unnecessary - removed default values, not used in toto model
     seasonal_naive:
-      sp: [7, 14]
-      forecast_horizon: [50]
-      target_cols: ["y"]
+      sp: [7, 14]  # necessary - used in model initialization
+      forecast_horizon: [50]  # necessary - used in base model
+      target_cols: ["y"]  # unnecessary - removed default values, not used in seasonal_naive model
     deepar:
-      prediction_length: [40]
-      context_length: [20]
-      num_samples: [5]
-      batch_size: [8]
-      epochs: [1]
-      learning_rate: [0.001]
-      target_cols: ["y"]
+      prediction_length: [40]  # necessary - used in model initialization
+      context_length: [20]  # necessary - used in model initialization
+      num_samples: [5]  # necessary - used in model initialization
+      batch_size: [8]  # necessary - used in model initialization
+      epochs: [1]  # necessary - used in model initialization
+      learning_rate: [0.001]  # necessary - used in model initialization
+      target_cols: ['y']  # unnecessary - removed default values, not used in deepar model
 
 evaluation:
   type: deterministic
