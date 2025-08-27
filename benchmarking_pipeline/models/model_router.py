@@ -135,22 +135,23 @@ class ModelRouter:
         
         Args:
             model_name: Name of the model (e.g., 'arima', 'chronos')
-            config: Configuration dictionary containing target_cols
+            config: Configuration dictionary containing dataset.target_cols
             
         Returns:
             Tuple of (folder_path, file_name, class_name)
             
         Examples:
             >>> router = ModelRouter()
-            >>> router.get_model_path('arima', {'target_cols': ['y']})
+            >>> router.get_model_path('arima', {'dataset': {'target_cols': ['y']}})
             ('benchmarking_pipeline/models/univariate/arima', 'arima_model', 'ArimaModel')
-            >>> router.get_model_path('arima', {'target_cols': ['y', 'z']})
+            >>> router.get_model_path('arima', {'dataset': {'target_cols': ['y', 'z']}})
             ('benchmarking_pipeline/models/multivariate/arima', 'arima_model', 'ArimaModel')
         """
-        # Validate target_cols is present in config
-        target_cols = config.get('target_cols')
+        # Validate target_cols is present in dataset config
+        dataset_cfg = config.get('dataset', {})
+        target_cols = dataset_cfg.get('target_cols')
         if not target_cols:
-            raise ValueError(f"target_cols must be defined in config for model '{model_name}'")
+            raise ValueError(f"target_cols must be defined in dataset configuration for model '{model_name}'")
         
         # Auto-detect variant based on target_cols
         variant = 'multivariate' if len(target_cols) > 1 else 'univariate'
@@ -261,7 +262,7 @@ class ModelRouter:
                 return False
             
             # Check if folder exists
-            folder_path, _, _ = self.get_model_path(model_name, {'target_cols': ['y']})
+            folder_path, _, _ = self.get_model_path(model_name, {'dataset': {'target_cols': ['y']}})
             return os.path.exists(folder_path)
             
         except (ValueError, Exception):
@@ -322,11 +323,11 @@ class ModelRouter:
     
     def get_model_path_with_auto_detection(self, model_name: str, config: Dict[str, Any]) -> Tuple[str, str, str]:
         """
-        Get model path with automatic variant detection based on target_cols in config.
+        Get model path with automatic variant detection based on target_cols in dataset config.
         
         Args:
             model_name: Name of the model
-            config: Configuration dictionary containing target_cols
+            config: Configuration dictionary containing dataset.target_cols
             
         Returns:
             Tuple of (folder_path, file_name, class_name)

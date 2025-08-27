@@ -22,6 +22,7 @@ class BaseModel(ABC):
                 - loss_functions: List[str], list of loss function names to use
                 - primary_loss: str, primary loss function for training (defaults to first in loss_functions)
                 - forecast_horizon: int, number of steps to forecast ahead
+                - dataset: dict containing dataset configuration including target_cols
             config_file: Path to a JSON configuration file
         """
         if config_file is not None:
@@ -34,9 +35,13 @@ class BaseModel(ABC):
         self.loss_functions = self.config.get('loss_functions', ['mae'])
         self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        self.target_cols = self.config.get('target_cols')
+        
+        # Extract target_cols from dataset configuration
+        dataset_cfg = self.config.get('dataset', {})
+        self.target_cols = dataset_cfg.get('target_cols')
         if not self.target_cols:
-            raise ValueError("target_cols must be defined in config")
+            raise ValueError("target_cols must be defined in dataset configuration")
+        
         self.is_fitted = False
         self.evaluator = Evaluator(config=self.config)
         # For logging last eval
