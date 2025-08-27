@@ -34,7 +34,9 @@ class BaseModel(ABC):
         self.loss_functions = self.config.get('loss_functions', ['mae'])
         self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        self.target_col = self.config.get('target_col', 'y')
+        self.target_cols = self.config.get('target_cols')
+        if not self.target_cols:
+            raise ValueError("target_cols must be defined in config")
         self.is_fitted = False
         self.evaluator = Evaluator(config=self.config)
         # For logging last eval
