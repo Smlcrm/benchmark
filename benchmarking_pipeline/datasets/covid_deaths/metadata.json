@@ -1,0 +1,9 @@
+{
+  "variables": [
+    {
+      "var_name": "daily_covid_deaths",
+      "units": "deaths",
+      "target_index": 0
+    }
+  ]
+}

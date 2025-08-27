@@ -1,0 +1,9 @@
+{
+  "variables": [
+    {
+      "var_name": "bitcoin_price",
+      "units": "USD",
+      "target_index": 0
+    }
+  ]
+}

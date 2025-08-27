@@ -1,0 +1,9 @@
+{
+  "variables": [
+    {
+      "var_name": "bdg2_bear_metric",
+      "units": "metric_units",
+      "target_index": 0
+    }
+  ]
+}

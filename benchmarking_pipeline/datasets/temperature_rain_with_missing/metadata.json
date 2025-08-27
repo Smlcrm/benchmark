@@ -1,0 +1,9 @@
+{
+  "variables": [
+    {
+      "var_name": "temperature",
+      "units": "°C",
+      "target_index": 0
+    }
+  ]
+}
