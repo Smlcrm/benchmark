@@ -55,12 +55,12 @@ class DeepARModel(BaseModel):
         self.dropout = self.config.get('dropout', 0.1)
         self.learning_rate = self.config.get('learning_rate', 0.001)
         self.batch_size = self.config.get('batch_size', 16)
-        self.target_col = self.config.get('target_col', 'y')
+        # Remove target_col - use target_cols from parent class instead
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.max_encoder_length = self.config.get('max_encoder_length', 6)
         self.max_prediction_length = self.config.get('max_prediction_length', 6)
-        self.epochs = self.config.get('epochs', 100)
+        self.epochs = self.config.get('epochs', 1)
         self.gradient_clip_val = self.config.get('gradient_clip_val', 0.1)
         self.num_workers = self.config.get('num_workers', 7)
         self.model = None
@@ -272,7 +272,7 @@ class DeepARModel(BaseModel):
         "dropout" : self.dropout,
         "learning_rate" : self.learning_rate,
         "batch_size" : self.batch_size,
-        "target_col" : self.target_col,
+        "target_cols" : self.target_cols,
         "feature_cols" : self.feature_cols,
         "forecast_horizon" : self.forecast_horizon,
         "max_encoder_length" : self.max_encoder_length,

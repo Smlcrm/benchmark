@@ -26,12 +26,15 @@ class CrostonClassicModel(BaseModel):
         """
         super().__init__(config, config_file)
         # Smoothing parameter, with a common default of 0.1
-        self.alpha = self.config.get('alpha', 0.1)
-        self.target_col = self.config.get('target_col', 'y')
+        self.alpha = self.config.get('alpha', 0.4)
+        self.beta = self.config.get('beta', 0.1)
+        self.gamma = self.config.get('gamma', 0.1)
+        self.phi = self.config.get('phi', 0.9)
+        self.forecast_horizon = self.config.get('forecast_horizon', 1)
+        # Remove target_col - use target_cols from parent class instead
         self.is_fitted = False
         self.loss_functions = self.config.get('loss_functions', ['mae'])
         self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
-        self.forecast_horizon = self.config.get('forecast_horizon', 1)
         
         # Fitted parameters, initialized to None
         self.demand_level_ = None
@@ -136,7 +139,7 @@ class CrostonClassicModel(BaseModel):
         """
         return {
             'alpha': self.alpha,
-            'target_col': self.target_col,
+            'target_cols': self.target_cols,
             'loss_functions': self.loss_functions,
             'primary_loss': self.primary_loss,
             'forecast_horizon': self.forecast_horizon,
@@ -230,7 +233,7 @@ class CrostonClassicModel(BaseModel):
             'model_type': 'CrostonClassic',
             'alpha': self.alpha,
             'is_fitted': self.is_fitted,
-            'target_col': self.target_col,
+            'target_cols': self.target_cols,
             'forecast_horizon': self.forecast_horizon,
         }
         

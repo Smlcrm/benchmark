@@ -32,7 +32,7 @@ class MoiraiMoeModel(FoundationModel):
     self.bsz = self.config.get('bsz', '8')
     self.test = self.config.get('test', '8')
     self.num_samples = self.config.get('num_samples', '5')
-    self.target_col = self.config.get('target_col', 'y')
+    # Remove target_col - use target_cols from parent class instead
     self.is_fitted = False
   
   def set_params(self, **params: Dict[str, Any]) -> 'MoiraiMoeModel':

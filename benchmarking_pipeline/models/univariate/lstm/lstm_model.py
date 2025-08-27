@@ -47,7 +47,7 @@ class LstmModel(BaseModel):
         self.batch_size = self.config.get('batch_size', 32)
         self.epochs = self.config.get('epochs', 100)
         self.sequence_length = self.config.get('sequence_length', 10)
-        self.target_col = self.config.get('target_col', 'y')
+        # Remove target_col - use target_cols from parent class instead
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.model = None
@@ -217,7 +217,7 @@ class LstmModel(BaseModel):
             'batch_size': self.batch_size,
             'epochs': self.epochs,
             'sequence_length': self.sequence_length,
-            'target_col': self.target_col,
+            'target_cols': self.target_cols,
             'feature_cols': self.feature_cols,
             'loss_functions': self.loss_functions,
             'primary_loss': self.primary_loss,

@@ -43,11 +43,12 @@ class LagllamaModel(FoundationModel):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
         # Model-specific attributes
-        self.prediction_length = self.config.get('prediction_length', 30)
+        self.prediction_length = self.config.get('prediction_length', 100)
         self.context_length = self.config.get('context_length', 4)
         self.num_samples = self.config.get('num_samples', 5)
         self.batch_size = self.config.get('batch_size', 4)
-        self.target_col = self.config.get('target_col', 'y')
+        # Remove target_col - use target_cols from parent class instead
+        self.is_fitted = False
         
         print(f"🦙 Lag-Llama initialized - Device: {self.device}, Context: {self.context_length}")
     
