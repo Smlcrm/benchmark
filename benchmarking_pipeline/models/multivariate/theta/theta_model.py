@@ -42,11 +42,11 @@ class MultivariateTheta(BaseModel):
         """
         super().__init__(config, config_file)
         self.sp = self.config.get('sp', 1)
-        self.target_cols = self.config.get('target_cols')
+        # target_cols is inherited from parent class (BaseModel/FoundationModel)
         self.use_reduced_rank = self.config.get('use_reduced_rank', False)
         self.theta_method = self.config.get('theta_method', 'least_squares')
         
-        self.n_targets = len(self.target_cols)
+        # n_targets will be calculated when needed: len(self.target_cols)
         self.theta_matrix = None  # The Θ parameter matrix
         self.drift_vector = None  # μ drift parameters
         self.univariate_models = {}  # Individual Theta models for each target
@@ -201,18 +201,17 @@ class MultivariateTheta(BaseModel):
         elif isinstance(y_context, pd.Series):
             # Univariate case - reshape to 2D
             target_data = y_context.values.reshape(-1, 1)
-                            # For univariate case, validate against config
-                if len(self.target_cols) != 1:
-                    raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
-            self.n_targets = 1
+            # For univariate case, validate against config
+            if len(self.target_cols) != 1:
+                raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
         else:
             # Numpy array case
             target_data = y_context
             if target_data.ndim == 1:
                 target_data = target_data.reshape(-1, 1)
-                self.n_targets = 1
-            else:
-                self.n_targets = target_data.shape[1]
+        
+        # Calculate n_targets from inherited target_cols
+        self.n_targets = len(self.target_cols)
         
         print(f"Training Multivariate Theta with {self.n_targets} targets...")
         
@@ -334,17 +333,14 @@ class MultivariateTheta(BaseModel):
         for key, value in params.items():
             if hasattr(self, key):
                 # Check if this is a model parameter that requires refitting
-                if key in ['sp', 'target_cols', 'use_reduced_rank', 'theta_method'] and getattr(self, key) != value:
+                if key in ['sp', 'use_reduced_rank', 'theta_method'] and getattr(self, key) != value:
                     model_params_changed = True
                 setattr(self, key, value)
             else:
                 # Update config if parameter not found in instance attributes
                 self.config[key] = value
         
-        # Update n_targets if target_cols changed
-        if 'target_cols' in params:
-            self.n_targets = len(self.target_cols)
-            model_params_changed = True
+        # Note: target_cols is inherited from parent class and shouldn't be modified
         
         # If model parameters changed, reset the fitted model
         if model_params_changed and self.is_fitted:

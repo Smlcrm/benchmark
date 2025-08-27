@@ -35,8 +35,8 @@ class MultivariateXGBoostModel(BaseModel):
         # Extract model parameters from config
         self.lookback_window = self.config.get('lookback_window', 10)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        self.target_cols = self.config.get('target_cols')
-        self.n_targets = len(self.target_cols)  # Number of target variables
+        # target_cols is inherited from parent class (BaseModel/FoundationModel)
+        # n_targets will be calculated when needed: len(self.target_cols)
         
         self._build_model()
         
@@ -194,19 +194,18 @@ class MultivariateXGBoostModel(BaseModel):
         elif isinstance(y_context, pd.Series):
             # Univariate case - reshape to 2D
             y_data = y_context.values.reshape(-1, 1)
-                            # For univariate case, validate against config
-                if len(self.target_cols) != 1:
-                    raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
-            self.n_targets = 1
+            # For univariate case, validate against config
+            if len(self.target_cols) != 1:
+                raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
         else:
             # Numpy array case
             y_data = y_context
             if y_data.ndim == 1:
                 y_data = y_data.reshape(-1, 1)
-                self.n_targets = 1
-            else:
-                self.n_targets = y_data.shape[1]
 
+        # Calculate n_targets from inherited target_cols
+        self.n_targets = len(self.target_cols)
+        
         # Handle exogenous variables
         if isinstance(x_context, (pd.Series, pd.DataFrame)):
             x_data = x_context.values
@@ -549,14 +548,12 @@ class MultivariateXGBoostModel(BaseModel):
             self: The model instance with updated parameters
         """
         # Handle model-level params
-        model_level_keys = ['lookback_window', 'forecast_horizon', 'target_cols']
+        model_level_keys = ['lookback_window', 'forecast_horizon']
         for k in model_level_keys:
             if k in params:
                 setattr(self, k, params[k])
         
-        # Update n_targets if target_cols changed
-        if 'target_cols' in params:
-            self.n_targets = len(self.target_cols)
+        # Note: target_cols is inherited from parent class and shouldn't be modified
         
         # Prepare params for underlying XGBRegressor
         xgb_param_names = XGBRegressor().get_params().keys()

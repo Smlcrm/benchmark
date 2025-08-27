@@ -53,11 +53,11 @@ class MultivariateLSTMModel(BaseModel):
         self.batch_size = self.config.get('batch_size', 32)
         self.epochs = self.config.get('epochs', 100)
         self.sequence_length = self.config.get('sequence_length', 10)
-        self.target_cols = self.config.get('target_cols')  # Default for multivariate
+        # target_cols is inherited from parent class (BaseModel/FoundationModel)
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.model = None
-        self.n_targets = len(self.target_cols)  # Number of target variables
+        # n_targets will be calculated when needed: len(self.target_cols)
         
     def _build_model(self, input_shape: Tuple[int, int]) -> None:
         """
@@ -66,6 +66,9 @@ class MultivariateLSTMModel(BaseModel):
         Args:
             input_shape: Shape of input data (sequence_length, n_targets)
         """
+        # Calculate n_targets from inherited target_cols
+        self.n_targets = len(self.target_cols)
+        
         self.model = Sequential()
         
         # Add LSTM layers
@@ -278,9 +281,7 @@ class MultivariateLSTMModel(BaseModel):
         for key, value in params.items():
             if hasattr(self, key):
                 setattr(self, key, value)
-        # Update n_targets if target_cols changed
-        if 'target_cols' in params:
-            self.n_targets = len(self.target_cols)
+        # Note: target_cols is inherited from parent class and shouldn't be modified
         return self
         
     def save(self, path: str) -> None:
