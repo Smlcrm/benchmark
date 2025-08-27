@@ -1,7 +1,7 @@
 import os
 import ast
 import pandas as pd
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from .data_types import Dataset, DatasetSplit  # assumes these are in data_types.py
 import numpy as np
 
@@ -16,12 +16,43 @@ class DataLoader:
                 - dataset.name: name of the dataset
                 - dataset.chunk_index: which chunk to load (default=1)
                 - dataset.split_ratio: list of [train, val, test] ratios
+                - model.parameters.{model_name}.target_cols: list of target column names to load
         """
         self.config = config
         self.dataset_cfg = config.get('dataset', {})
         self.path = self.dataset_cfg.get('path')
         self.name = self.dataset_cfg.get('name')
         self.split_ratio = self.dataset_cfg.get('split_ratio', [0.6, 0.2, 0.2])
+        
+        # Extract target_cols from model configuration
+        self.target_cols = self._extract_target_cols()
+    
+    def _extract_target_cols(self) -> List[str]:
+        """
+        Extract target_cols from model configuration.
+        
+        Returns:
+            List of target column names
+            
+        Raises:
+            ValueError: If target_cols is not defined in any model's parameters or is None
+        """
+        model_cfg = self.config.get('model', {})
+        parameters = model_cfg.get('parameters', {})
+        
+        # Look for target_cols in any model's parameters
+        for model_params in parameters.values():
+            if isinstance(model_params, dict) and 'target_cols' in model_params:
+                target_cols = model_params['target_cols']
+                if target_cols is None:
+                    raise ValueError("target_cols cannot be None. Please provide a list of column names.")
+                if not isinstance(target_cols, list) or len(target_cols) == 0:
+                    raise ValueError("target_cols must be a non-empty list of column names.")
+                return target_cols
+        
+        # target_cols is mandatory - no backward compatibility
+        raise ValueError("target_cols must be defined in model parameters. "
+                        "Please add target_cols to at least one model's configuration.")
     
     def _generate_timestamp_list(self, start, freq, horizon) -> List[Any]:
         """
@@ -52,7 +83,6 @@ class DataLoader:
 
         return timestamps
     
-    #doesn't work with exogenous variables for now
     def load_single_chunk(self, chunk_index) -> Dataset:
         """
         Load a single chunk and return it as a Dataset object.
@@ -72,27 +102,29 @@ class DataLoader:
         freq = row['freq']
         target = ast.literal_eval(row['target'])
         
-        # Handle multivariate targets
+        # Handle targets based on target_cols configuration
+        # target_cols is now mandatory, so this will always be defined
         if isinstance(target, list) and len(target) > 0:
-            # Check if this is a 2D structure (list of lists) or 1D structure (single list)
             if isinstance(target[0], list):
                 # 2D structure: [[val1, val2], [val3, val4], ...] - Multiple target series
-                target_series = []
-                for i, series in enumerate(target):
-                    if series is not None:  # Skip None series
-                        target_series.append(pd.Series(series, name=f'target_{i}'))
-                
-                if target_series:
-                    targets_df = pd.concat(target_series, axis=1)
+                if len(target[0]) == len(self.target_cols):
+                    # Create DataFrame with user-specified column names
+                    targets_df = pd.DataFrame(target, columns=self.target_cols)
                 else:
-                    # Fallback to univariate if all series are None
-                    targets_df = pd.DataFrame({'y': [0] * 1000})  # Default length
+                    # Mismatch between data structure and target_cols
+                    raise ValueError(f"Data has {len(target[0])} series but target_cols specifies {len(self.target_cols)} columns")
             else:
                 # 1D structure: [val1, val2, val3, ...] - Single univariate time series
-                targets_df = pd.DataFrame({'y': target})
+                if len(self.target_cols) == 1:
+                    targets_df = pd.DataFrame({self.target_cols[0]: target})
+                else:
+                    raise ValueError(f"Data is univariate but target_cols specifies {len(self.target_cols)} columns")
         else:
             # Single target series (univariate)
-            targets_df = pd.DataFrame({'y': target})
+            if len(self.target_cols) == 1:
+                targets_df = pd.DataFrame({self.target_cols[0]: target})
+            else:
+                raise ValueError(f"Data is univariate but target_cols specifies {len(self.target_cols)} columns")
         
         # Handle exogenous features if present
         exogenous_df = None
