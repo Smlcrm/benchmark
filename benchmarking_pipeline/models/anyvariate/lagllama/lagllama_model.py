@@ -268,7 +268,7 @@ class LagllamaModel(FoundationModel):
             'forecast_horizon': self.forecast_horizon
         }
     
-    def set_params(self, **params: Dict[str, Any]) -> 'LagLlamaModel':
+    def set_params(self, **params: Dict[str, Any]) -> 'LagllamaModel':
         """Set model parameters"""
         for key, value in params.items():
             if hasattr(self, key):
@@ -345,7 +345,7 @@ class LagLlamaForecaster:
         """Initialize with TimesFM-like interface"""
         config = {'checkpoint_path': checkpoint_path}
         config.update(kwargs)
-        self.model = LagLlamaModel(config)
+        self.model = LagllamaModel(config)
     
     def predict(self, df: pd.DataFrame, prediction_length: int, **kwargs):
         """TimesFM-style predict method"""
