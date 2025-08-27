@@ -22,22 +22,20 @@ class ArimaModel(BaseModel):
                 - q: int, MA order
                 - s: int, seasonality
                 - target_col: str, name of target column
-                - loss_functions: List[str], list of loss function names to use
-                - primary_loss: str, primary loss function for training
+                - loss_function: str, loss function for training
                 - forecast_horizon: int, number of steps to forecast ahead
             config_file: Path to a JSON configuration file
         """
         super().__init__(config, config_file)
-        self.p = self.config.get('p', 1)
-        self.d = self.config.get('d', 1)
-        self.q = self.config.get('q', 1)
-        self.s = self.config.get('s', 1)
+        self.p = int(self.config.get('p', 1))
+        self.d = int(self.config.get('d', 1))
+        self.q = int(self.config.get('q', 1))
+        self.s = int(self.config.get('s', 1))
         # Remove target_col - use target_cols from parent class instead
         self.model_ = None  # Use model_ consistently
         self.is_fitted = False  # Explicitly initialize
-        self.loss_functions = self.config.get('loss_functions', ['mae'])
-        self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
-        self.forecast_horizon = self.config.get('forecast_horizon', 1)
+        self.loss_function = self.config.get('loss_function', 'mae')
+        # forecast_horizon is inherited from parent class (BaseModel)
         
     def train(self, 
               y_context: Union[pd.Series, np.ndarray], 
@@ -179,8 +177,7 @@ class ArimaModel(BaseModel):
             'd': self.d,
             'q': self.q,
             'target_cols': self.target_cols,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss,
+            'loss_function': self.loss_function,
             'forecast_horizon': self.forecast_horizon,
             'is_fitted': self.is_fitted
         }
@@ -279,8 +276,7 @@ class ArimaModel(BaseModel):
             'is_fitted': self.is_fitted,
             'forecast_horizon': self.forecast_horizon,
             'target_cols': self.target_cols,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss
+            'loss_function': self.loss_function
         }
         
         if self.is_fitted and self.model_ is not None:

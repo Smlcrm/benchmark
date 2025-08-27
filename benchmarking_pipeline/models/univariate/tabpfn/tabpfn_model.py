@@ -43,7 +43,7 @@ class TabpfnModel(FoundationModel):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.allow_large_cpu_dataset = self.config.get('allow_large_cpu_dataset', True)
         self.max_sequence_length = self.config.get('max_sequence_length', 32)
-        self.prediction_length = self.config.get('prediction_length', 40)
+        # forecast_horizon is inherited from parent class (BaseModel)
 
         if self.device == "cpu" and self.allow_large_cpu_dataset:
             # optional convenience: set env var to mirror behavior
@@ -90,14 +90,14 @@ class TabpfnModel(FoundationModel):
         columns = ['1']
         df = pd.DataFrame(y_context, index=y_context_timestamps, columns=columns)
         self.ctx = len(df)
-        results = self._sub_predict(df, '1', self.prediction_length)
+        results = self._sub_predict(df, '1', self.forecast_horizon)
         return np.array(results)
 
     def _sub_predict(
         self,
         df: pd.DataFrame,
         target_col: str,
-        prediction_length: int
+        forecast_horizon: int
     ) -> List[float]:
         """
         Multi-step forecast for the target column.
@@ -105,7 +105,7 @@ class TabpfnModel(FoundationModel):
         Args:
             df (pd.DataFrame): Historical time series with target and optional features.
             target_col (str): Column to forecast.
-            prediction_length (int): Horizon length.
+            forecast_horizon (int): Horizon length.
 
         Returns:
             List[float]: Forecasted values.
@@ -127,7 +127,7 @@ class TabpfnModel(FoundationModel):
 
         forecasts = []
 
-        for _ in range(prediction_length):
+        for _ in range(forecast_horizon):
             # Build training data from current history
             X_train, y_train = self._build_tabular(y_history, X_full)
 

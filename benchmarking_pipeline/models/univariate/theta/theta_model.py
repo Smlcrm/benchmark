@@ -22,11 +22,13 @@ class ThetaModel(BaseModel):
         Args:
             config: Configuration dictionary for model parameters.
                     Example Format:
-                    {'sp': 12} - for monthly data with yearly seasonality.   
+                    {'sp': 12, 'loss_function': 'mae', 'forecast_horizon': 10} - for monthly data with yearly seasonality.   
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
         self.sp = self.config.get('sp', 1)
+        self.loss_function = self.config.get('loss_function', 'mae')
+        # forecast_horizon is inherited from parent class (BaseModel)
         self.model = None
         
     def _build_model(self):
@@ -112,11 +114,14 @@ class ThetaModel(BaseModel):
 
     def get_params(self) -> Dict[str, Any]:
         """
-        Get the current model parameters from the underlying sktime model.
+        Get the current model parameters from the configuration.
         """
-        if self.model:
-            return self.model.get_params()
-        return {"sp", self.sp}
+        return {
+            'sp': self.sp,
+            'loss_function': self.loss_function,
+            'forecast_horizon': self.forecast_horizon,
+            'target_cols': self.target_cols
+        }
 
     def set_params(self, **params: Dict[str, Any]) -> 'ThetaModel':
         """
@@ -154,8 +159,19 @@ class ThetaModel(BaseModel):
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
             
+        # Save both the model and the configuration
+        model_state = {
+            'model': self.model,
+            'config': self.config,
+            'sp': self.sp,
+            'loss_function': self.loss_function,
+            'forecast_horizon': self.forecast_horizon,
+            'target_cols': self.target_cols,
+            'is_fitted': self.is_fitted
+        }
+            
         with open(path, 'wb') as f:
-            pickle.dump(self.model, f)
+            pickle.dump(model_state, f)
             
     def load(self, path: str) -> 'ThetaModel':
         """
@@ -168,6 +184,15 @@ class ThetaModel(BaseModel):
             raise FileNotFoundError(f"No model found at {path}")
             
         with open(path, 'rb') as f:
-            self.model = pickle.load(f)
-        self.is_fitted = True
+            model_state = pickle.load(f)
+        
+        # Restore model state
+        self.model = model_state['model']
+        self.config = model_state.get('config', self.config)
+        self.sp = model_state.get('sp', self.sp)
+        self.loss_function = model_state.get('loss_function', self.loss_function)
+        self.forecast_horizon = model_state.get('forecast_horizon', self.forecast_horizon)
+        self.target_cols = model_state.get('target_cols', self.target_cols)
+        self.is_fitted = model_state.get('is_fitted', False)
+        
         return self
