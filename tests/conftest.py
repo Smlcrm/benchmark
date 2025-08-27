@@ -53,7 +53,12 @@ def mock_config():
         },
         "model": {
             "name": "test_model",
-            "type": "univariate"
+            "type": "univariate",
+            "parameters": {
+                "test_model": {
+                    "target_cols": ["y"]
+                }
+            }
         },
         "training": {
             "epochs": 10,
