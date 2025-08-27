@@ -1,85 +1,160 @@
 """
-Model Router for handling model_name:variant format and routing to appropriate folders.
+Model Router for handling model routing based on target_cols configuration.
 
-This module provides intelligent routing for models based on their location and variant type.
+This module provides intelligent routing for models based on their location and the number of target columns.
 """
 
 import os
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional, Set
 from pathlib import Path
 
 
 class ModelRouter:
     """
-    Routes model requests to appropriate folders based on model_name:variant format.
+    Routes model requests to appropriate folders based on target_cols configuration.
     
     Handles three cases:
-    1. anyvariate models: Route to univariate/multivariate implementation based on user choice
-    2. non-anyvariate models: Route directly to specified variant folder
-    3. legacy models: Route to univariate folder (backward compatibility)
+    1. anyvariate models: Route to anyvariate implementation (handles both variants)
+    2. models with separate implementations: Route to univariate/multivariate based on target_cols count
+    3. univariate-only models: Route to univariate implementation
     """
     
     def __init__(self):
-        # Define which models are truly anyvariate (can handle both cases)
-        self.anyvariate_models = {
-            'chronos', 'moment', 'lagllama', 'toto', 'moirai', 'moirai_moe', 
-            'tiny_time_mixer', 'timesfm', 'croston_classic', 'exponential_smoothing'
-        }
+        # Auto-detect available models from folder structure
+        self.anyvariate_models: Set[str] = set()
+        self.multivariate_models: Set[str] = set()
+        self.univariate_models: Set[str] = set()
         
-        # Define which models have separate multivariate implementations
-        self.multivariate_models = {
-            'arima', 'lstm', 'svr', 'theta', 'xgboost'
-        }
-        
-        # Define which models are univariate-only
-        self.univariate_models = {
-            'prophet', 'random_forest', 'seasonal_naive', 'tabpfn', 'deepar'
-        }
+        self._discover_models()
+        self._validate_model_categorization()
     
-    def parse_model_spec(self, model_spec: str) -> Tuple[str, str]:
+    def _discover_models(self):
+        """Discover available models by examining the folder structure."""
+        models_dir = Path(__file__).parent
+        
+        # Discover anyvariate models
+        anyvariate_dir = models_dir / "anyvariate"
+        if anyvariate_dir.exists():
+            for item in anyvariate_dir.iterdir():
+                if item.is_dir() and (item / f"{item.name}_model.py").exists():
+                    self.anyvariate_models.add(item.name)
+        
+        # Discover models that have separate multivariate implementations
+        multivariate_dir = models_dir / "multivariate"
+        if multivariate_dir.exists():
+            for item in multivariate_dir.iterdir():
+                if item.is_dir() and (item / f"{item.name}_model.py").exists():
+                    self.multivariate_models.add(item.name)
+        
+        # Discover univariate-only models (models that only exist in univariate folder)
+        univariate_dir = models_dir / "univariate"
+        if univariate_dir.exists():
+            for item in univariate_dir.iterdir():
+                if item.is_dir() and (item / f"{item.name}_model.py").exists():
+                    # Only add to univariate_models if it's not already in multivariate_models
+                    if item.name not in self.multivariate_models:
+                        self.univariate_models.add(item.name)
+    
+    def _validate_model_categorization(self):
+        """Validate that all models are properly categorized and raise errors for inconsistencies."""
+        # Check for models that appear in multiple categories
+        anyvariate_multivariate_overlap = self.anyvariate_models & self.multivariate_models
+        anyvariate_univariate_overlap = self.anyvariate_models & self.univariate_models
+        
+        if anyvariate_multivariate_overlap:
+            raise ValueError(f"Models cannot be both anyvariate and multivariate: {anyvariate_multivariate_overlap}")
+        
+        if anyvariate_univariate_overlap:
+            raise ValueError(f"Models cannot be both anyvariate and univariate: {anyvariate_univariate_overlap}")
+        
+        # Note: multivariate_models and univariate_models can overlap because:
+        # - multivariate_models = models that have separate multivariate implementations
+        # - univariate_models = models that only exist in univariate folder
+        # So a model can be in both if it has both implementations
+        
+        # Check for models that are not in any category
+        all_models = self.anyvariate_models | self.multivariate_models | self.univariate_models
+        models_dir = Path(__file__).parent
+        
+        # Find all model folders
+        all_model_folders = set()
+        for category_dir in [models_dir / "anyvariate", models_dir / "multivariate", models_dir / "univariate"]:
+            if category_dir.exists():
+                for item in category_dir.iterdir():
+                    if item.is_dir() and (item / f"{item.name}_model.py").exists():
+                        all_model_folders.add(item.name)
+        
+        uncategorized_models = all_model_folders - all_models
+        if uncategorized_models:
+            raise ValueError(f"Found models that are not properly categorized: {uncategorized_models}. "
+                           f"Each model must be in exactly one of: anyvariate, multivariate, or univariate folders.")
+        
+        # Check for models that are in categories but don't have proper structure
+        for model_name in all_models:
+            if model_name in self.anyvariate_models:
+                model_path = models_dir / "anyvariate" / model_name / f"{model_name}_model.py"
+                if not model_path.exists():
+                    raise ValueError(f"Anyvariate model '{model_name}' missing required file: {model_path}")
+            elif model_name in self.multivariate_models:
+                # Check both multivariate and univariate implementations
+                multivariate_path = models_dir / "multivariate" / model_name / f"{model_name}_model.py"
+                univariate_path = models_dir / "univariate" / model_name / f"{model_name}_model.py"
+                if not multivariate_path.exists():
+                    raise ValueError(f"Multivariate model '{model_name}' missing required file: {multivariate_path}")
+                if not univariate_path.exists():
+                    raise ValueError(f"Multivariate model '{model_name}' missing required file: {univariate_path}")
+            elif model_name in self.univariate_models:
+                model_path = models_dir / "univariate" / model_name / f"{model_name}_model.py"
+                if not model_path.exists():
+                    raise ValueError(f"Univariate model '{model_name}' missing required file: {model_path}")
+    
+    def parse_model_spec(self, model_spec: str) -> str:
         """
-        Parse model specification in format 'model_name:variant' or just 'model_name'.
+        Parse model specification to extract the model name.
         
         Args:
-            model_spec: Model specification string (e.g., 'arima:multivariate', 'chronos:univariate', 'prophet')
+            model_spec: Model specification string (e.g., 'arima', 'chronos', 'prophet')
             
         Returns:
-            Tuple of (model_name, variant)
+            Model name string
             
         Examples:
             >>> router = ModelRouter()
-            >>> router.parse_model_spec('arima:multivariate')
-            ('arima', 'multivariate')
-            >>> router.parse_model_spec('chronos:univariate')
-            ('chronos', 'univariate')
+            >>> router.parse_model_spec('arima')
+            'arima'
+            >>> router.parse_model_spec('chronos')
+            'chronos'
             >>> router.parse_model_spec('prophet')
-            ('prophet', 'auto')  # Will be auto-detected
+            'prophet'
         """
-        if ':' in model_spec:
-            model_name, variant = model_spec.split(':', 1)
-            return model_name.strip(), variant.strip()
-        else:
-            # Smart defaults: will be auto-detected based on dataset
-            return model_spec.strip(), 'auto'
+        return model_spec.strip()
     
-    def get_model_path(self, model_name: str, variant: str) -> Tuple[str, str, str]:
+    def get_model_path(self, model_name: str, config: Dict[str, Any]) -> Tuple[str, str, str]:
         """
-        Get the appropriate model path, file name, and class name.
+        Get the appropriate model path, file name, and class name based on target_cols in config.
         
         Args:
             model_name: Name of the model (e.g., 'arima', 'chronos')
-            variant: Variant type ('univariate', 'multivariate')
+            config: Configuration dictionary containing target_cols
             
         Returns:
             Tuple of (folder_path, file_name, class_name)
             
         Examples:
             >>> router = ModelRouter()
-            >>> router.get_model_path('arima', 'multivariate')
+            >>> router.get_model_path('arima', {'target_cols': ['y']})
+            ('benchmarking_pipeline/models/univariate/arima', 'arima_model', 'ArimaModel')
+            >>> router.get_model_path('arima', {'target_cols': ['y', 'z']})
             ('benchmarking_pipeline/models/multivariate/arima', 'arima_model', 'ArimaModel')
-            >>> router.get_model_path('chronos', 'univariate')
-            ('benchmarking_pipeline/models/anyvariate/chronos', 'chronos_model', 'ChronosModel')
         """
+        # Validate target_cols is present in config
+        target_cols = config.get('target_cols')
+        if not target_cols:
+            raise ValueError(f"target_cols must be defined in config for model '{model_name}'")
+        
+        # Auto-detect variant based on target_cols
+        variant = 'multivariate' if len(target_cols) > 1 else 'univariate'
+        
         # Handle anyvariate models
         if model_name in self.anyvariate_models:
             folder_path = f"benchmarking_pipeline/models/anyvariate/{model_name}"
@@ -115,36 +190,58 @@ class ModelRouter:
     
     def _generate_class_name(self, model_name: str) -> str:
         """
-        Generate the class name from model name.
+        Generate the class name by dynamically discovering it from the model file.
         
         Args:
             model_name: Name of the model
             
         Returns:
-            Class name in PascalCase
+            Class name as defined in the model file
+            
+        Raises:
+            ValueError: If the class name cannot be determined
         """
-        # Handle special cases
-        if model_name == 'moirai_moe':
-            return 'MoiraiMoeModel'
-        elif model_name == 'tiny_time_mixer':
-            return 'TinyTimeMixerModel'
-        elif model_name == 'seasonal_naive':
-            return 'SeasonalNaiveModel'
-        elif model_name == 'random_forest':
-            return 'RandomForestModel'
-        elif model_name == 'exponential_smoothing':
-            return 'ExponentialSmoothingModel'
-        elif model_name == 'croston_classic':
-            return 'CrostonClassicModel'
-        elif model_name == 'tabpfn':
-            return 'TabpfnModel'
-        elif model_name == 'deepar':
-            return 'DeepARModel'
-        elif model_name == 'timesfm':
-            return 'TimesFMModel'
+        models_dir = Path(__file__).parent
+        
+        # Determine which folder to check based on model category
+        if model_name in self.anyvariate_models:
+            model_file = models_dir / "anyvariate" / model_name / f"{model_name}_model.py"
+        elif model_name in self.multivariate_models:
+            # For multivariate models, check the univariate implementation for class name
+            # (both implementations should have the same class name)
+            model_file = models_dir / "univariate" / model_name / f"{model_name}_model.py"
+        elif model_name in self.univariate_models:
+            model_file = models_dir / "univariate" / model_name / f"{model_name}_model.py"
         else:
-            # Default: capitalize first letter and add 'Model' suffix
-            return f"{model_name.title()}Model"
+            raise ValueError(f"Unknown model '{model_name}'")
+        
+        if not model_file.exists():
+            raise ValueError(f"Model file not found: {model_file}")
+        
+        # Read the model file and extract the class name
+        try:
+            with open(model_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Look for class definitions
+            import re
+            class_pattern = r'class\s+(\w+)(?:\(|:)'
+            class_matches = re.findall(class_pattern, content)
+            
+            if not class_matches:
+                raise ValueError(f"No class definition found in {model_file}")
+            
+            # Find the main model class (usually the one ending with 'Model')
+            model_classes = [cls for cls in class_matches if cls.endswith('Model')]
+            
+            if model_classes:
+                return model_classes[0]  # Return the first Model class found
+            else:
+                # If no class ends with 'Model', return the first class found
+                return class_matches[0]
+                
+        except Exception as e:
+            raise ValueError(f"Failed to read class name from {model_file}: {e}")
     
     def validate_model_spec(self, model_spec: str) -> bool:
         """
@@ -157,18 +254,14 @@ class ModelRouter:
             True if valid, False otherwise
         """
         try:
-            model_name, variant = self.parse_model_spec(model_spec)
+            model_name = self.parse_model_spec(model_spec)
             
-            # Check if variant is valid
-            if variant not in ['univariate', 'multivariate', 'auto']:
-                return False
-            
-            # Check if model supports the requested variant
-            if model_name in self.univariate_models and variant == 'multivariate':
+            # Check if model exists in any category
+            if model_name not in (self.anyvariate_models | self.multivariate_models | self.univariate_models):
                 return False
             
             # Check if folder exists
-            folder_path, _, _ = self.get_model_path(model_name, variant)
+            folder_path, _, _ = self.get_model_path(model_name, {'target_cols': ['y']})
             return os.path.exists(folder_path)
             
         except (ValueError, Exception):
@@ -227,58 +320,18 @@ class ModelRouter:
         
         return info
     
-    def auto_detect_variant(self, model_name: str, dataset_info: Dict[str, Any]) -> str:
+    def get_model_path_with_auto_detection(self, model_name: str, config: Dict[str, Any]) -> Tuple[str, str, str]:
         """
-        Automatically detect the optimal variant based on dataset properties.
+        Get model path with automatic variant detection based on target_cols in config.
         
         Args:
             model_name: Name of the model
-            dataset_info: Dictionary containing dataset information
-                - target_columns: int, number of target columns
-                - total_columns: int, total number of columns
-                - has_multiple_targets: bool, whether dataset has multiple targets
-            
-        Returns:
-            Optimal variant: 'univariate' or 'multivariate'
-            
-        Examples:
-            >>> router = ModelRouter()
-            >>> dataset_info = {'target_columns': 3, 'total_columns': 5, 'has_multiple_targets': True}
-            >>> router.auto_detect_variant('arima', dataset_info)
-            'multivariate'
-        """
-        # Strategy 1: Target Column Count (Simplest and most reliable)
-        target_columns = dataset_info.get('target_columns', 1)
-        
-        # If model only supports univariate, return that
-        if model_name in self.univariate_models:
-            return 'univariate'
-        
-        # For models that support both variants, use target count
-        if target_columns > 1:
-            return 'multivariate'
-        else:
-            return 'univariate'
-    
-    def get_model_path_with_auto_detection(self, model_name: str, variant: str, dataset_info: Dict[str, Any]) -> Tuple[str, str, str]:
-        """
-        Get model path with automatic variant detection if needed.
-        
-        Args:
-            model_name: Name of the model
-            variant: Variant type ('auto', 'univariate', 'multivariate')
-            dataset_info: Dataset information for auto-detection
+            config: Configuration dictionary containing target_cols
             
         Returns:
             Tuple of (folder_path, file_name, class_name)
         """
-        # Handle auto-detection
-        if variant == 'auto':
-            detected_variant = self.auto_detect_variant(model_name, dataset_info)
-            print(f"[INFO] Auto-detected variant for {model_name}: {detected_variant}")
-            variant = detected_variant
-        
-        return self.get_model_path(model_name, variant)
+        return self.get_model_path(model_name, config)
 
 
 # Global router instance
