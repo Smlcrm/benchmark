@@ -53,7 +53,7 @@ class MultivariateLSTMModel(BaseModel):
         self.batch_size = self.config.get('batch_size', 32)
         self.epochs = self.config.get('epochs', 100)
         self.sequence_length = self.config.get('sequence_length', 10)
-        self.target_cols = self.config.get('target_cols', ['target_0', 'target_1'])  # Default for multivariate
+        self.target_cols = self.config.get('target_cols')  # Default for multivariate
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.model = None
@@ -141,14 +141,18 @@ class MultivariateLSTMModel(BaseModel):
         if isinstance(y_context, pd.DataFrame):
             # Multivariate case - use all columns
             target = y_context.values
-            # Update target_cols if not already set
-            if self.target_cols == ['target_0', 'target_1'] and len(y_context.columns) > 0:
-                self.target_cols = list(y_context.columns)
-                self.n_targets = len(self.target_cols)
+            # target_cols should already be set from config, validate consistency
+            if self.target_cols and len(y_context.columns) > 0:
+                expected_cols = set(self.target_cols)
+                actual_cols = set(y_context.columns)
+                if expected_cols != actual_cols:
+                    raise ValueError(f"Data columns {actual_cols} don't match configured target_cols {expected_cols}")
         elif isinstance(y_context, pd.Series):
             # Univariate case - reshape to 2D
             target = y_context.values.reshape(-1, 1)
-            self.target_cols = [y_context.name if y_context.name else 'target_0']
+            # For univariate case, validate against config
+            if len(self.target_cols) != 1:
+                raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
             self.n_targets = 1
         else:
             # Numpy array case
