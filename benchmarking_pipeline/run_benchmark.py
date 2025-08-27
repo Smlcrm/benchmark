@@ -80,13 +80,25 @@ class BenchmarkRunner:
         dataset_name = dataset_cfg['name']
         split_ratio = dataset_cfg.get('split_ratio', [0.8, 0.1, 0.1])
 
+        # Load config first so data loader can access target_cols
+        config_path = self.config_path
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        
         # Use 'chunks' from config, default to 1 if not present
         num_chunks = dataset_cfg.get('chunks', 1)
-        data_loader = DataLoader({"dataset": {
-            "path": dataset_path,
-            "name": dataset_name,
-            "split_ratio": split_ratio
-        }})
+        
+        # Create full config for data loader (includes model parameters with target_cols)
+        full_config = {
+            "dataset": {
+                "path": dataset_path,
+                "name": dataset_name,
+                "split_ratio": split_ratio
+            },
+            "model": config.get('model', {})  # Include model parameters with target_cols
+        }
+        
+        data_loader = DataLoader(full_config)
 
         # Preprocess all dataset chunks
         all_dataset_chunks = data_loader.load_several_chunks(num_chunks)
@@ -111,34 +123,21 @@ class BenchmarkRunner:
             print(f"[DEBUG] First chunk train features shape: {features_shape}")
 
         # Load config
-        config_path = self.config_path
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
+        # config_path = self.config_path
+        # with open(config_path, 'r') as f:
+        #     config = yaml.safe_load(f)
         model_names = config['model']['name']
 
         # Import the model router
-        from benchmarking_pipeline.models.model_router import model_router
+        from benchmarking_pipeline.models.model_router import ModelRouter
         
-        # Analyze dataset to determine properties for auto-detection
-        print("[INFO] Analyzing dataset for auto-detection...")
-        dataset_info = self._analyze_dataset(all_dataset_chunks[0])
-        print(f"[INFO] Dataset analysis: {dataset_info}")
+        # Initialize model router
+        model_router = ModelRouter()
         
         # Run each model we have individually
         for model_spec in model_names:
             # Parse the model specification (e.g., 'arima', 'chronos')
-            model_name, variant = model_router.parse_model_spec(model_spec)
-            
-            # Get the appropriate model path with auto-detection
-            folder_path, model_file_name, model_class_name = model_router.get_model_path_with_auto_detection(
-                model_name, variant, dataset_info
-            )
-            
-            print(f"[INFO] Processing model: {model_spec}")
-            print(f"[INFO] Model name: {model_name}, Variant: {variant}")
-            print(f"[INFO] Folder path: {folder_path}")
-            print(f"[INFO] File name: {model_file_name}")
-            print(f"[INFO] Class name: {model_class_name}")
+            model_name = model_router.parse_model_spec(model_spec)
             
             # Get parameters for the base model name (without variant)
             if model_name in config['model']['parameters']:
@@ -146,11 +145,28 @@ class BenchmarkRunner:
             else:
                 print(f"[WARNING] No parameters found for {model_name}, using defaults")
                 model_params = {}
-
+            
+            # Extract target_cols for model routing
+            target_cols = model_params.get('target_cols', ['y'])  # Default to univariate if not specified
+            
+            # Create config for model router (needs target_cols at top level)
+            router_config = {'target_cols': target_cols}
+            
+            # Get the appropriate model path with auto-detection
+            folder_path, model_file_name, model_class_name = model_router.get_model_path_with_auto_detection(
+                model_name, router_config
+            )
+            
+            print(f"[INFO] Processing model: {model_spec}")
+            print(f"[INFO] Model name: {model_name}")
+            print(f"[INFO] Target columns: {target_cols}")
+            print(f"[INFO] Folder path: {folder_path}")
+            print(f"[INFO] File name: {model_file_name}")
+            print(f"[INFO] Class name: {model_class_name}")
+            
             requirements_path = f"{folder_path}/requirements.txt"
 
             # Create conda environment name based on model name to avoid conflicts
-            # The variant is now auto-detected, so we use just the model name
             conda_env_name = model_name
 
             # Something on my mind: uv could probably make this process a LOT quicker - definitely something to explore.
