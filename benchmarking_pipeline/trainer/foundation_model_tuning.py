@@ -31,6 +31,48 @@ class FoundationModelTuner:
     else:
         raise ValueError(f"Invalid frequency string: {freq_str}")
 
+  def _get_target_data(self, dataset_split, target_col):
+    """
+    Get target data from either features or targets, handling cases where features is None.
+    
+    Args:
+        dataset_split: Train, validation, or test split from dataset
+        target_col: Target column name or index
+        
+    Returns:
+        Target data as numpy array
+    """
+    if dataset_split.features is not None:
+        # Dataset has exogenous features - use features with target column
+        if isinstance(target_col, str):
+            return dataset_split.features[target_col].values
+        else:
+            return dataset_split.features.iloc[:, target_col].values
+    else:
+        # Dataset has no exogenous features - use targets directly
+        if dataset_split.targets is not None:
+            if isinstance(target_col, str):
+                # For multivariate targets, extract specific target column
+                if hasattr(dataset_split.targets, 'shape') and len(dataset_split.targets.shape) > 1:
+                    if target_col == 'target_0':
+                        return dataset_split.targets[:, 0]
+                    elif target_col == 'target_1':
+                        return dataset_split.targets[:, 1]
+                    else:
+                        # Default to first column if target_col not recognized
+                        return dataset_split.targets[:, 0]
+                else:
+                    # Univariate case
+                    return dataset_split.targets
+            else:
+                # Integer index for target column
+                if hasattr(dataset_split.targets, 'shape') and len(dataset_split.targets.shape) > 1:
+                    return dataset_split.targets[:, target_col]
+                else:
+                    return dataset_split.targets
+        else:
+            raise ValueError("Both features and targets are None - no data available")
+
   def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
     """
     Perform grid search over hyperparameter combinations for multiple time series datasets, 
@@ -68,11 +110,20 @@ class FoundationModelTuner:
         # Change the model's hyperparameter values
         self.model_class.set_params(**current_hyperparameter_dict)
         # Train a new model
-        print(f"DEBUG: train.features columns: {time_series_dataset.train.features.columns}")
-        print(f"DEBUG: train.features head:\n{time_series_dataset.train.features.head()}")
+        
+        # Handle datasets with or without exogenous features
+        if time_series_dataset.train.features is not None:
+            print(f"DEBUG: train.features columns: {time_series_dataset.train.features.columns}")
+            print(f"DEBUG: train.features head:\n{time_series_dataset.train.features.head()}")
+        else:
+            print(f"DEBUG: train.features is None, using train.targets")
+            print(f"DEBUG: train.targets shape: {time_series_dataset.train.targets.shape if time_series_dataset.train.targets is not None else 'None'}")
+        
         print(f"DEBUG: self.model_class.target_col: {self.model_class.target_col}")
-        target = time_series_dataset.train.features[self.model_class.target_col].values
-        validation_series = time_series_dataset.validation.features[self.model_class.target_col].values
+        
+        target = self._get_target_data(time_series_dataset.train, self.model_class.target_col)
+        validation_series = self._get_target_data(time_series_dataset.validation, self.model_class.target_col)
+        
         start_date = time_series_dataset.metadata["start"]
         freq_str = time_series_dataset.metadata["freq"]
         first_capital_letter_finder = re.search(r'[A-Z]', freq_str)
@@ -88,13 +139,16 @@ class FoundationModelTuner:
         # Get validation losses over every chunk
         current_train_loss = 0
         for time_series_dataset_from_all in list_of_time_series_datasets:
-          target = time_series_dataset_from_all.train.features[self.model_class.target_col].values
-          validation_series = time_series_dataset_from_all.validation.features[self.model_class.target_col].values
+          target = self._get_target_data(time_series_dataset_from_all.train, self.model_class.target_col)
+          validation_series = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_col)
           #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
           # Handle different model types with different predict method signatures
           
           model_predictions = trained_model.predict(y_context=target, y_target=validation_series, y_context_timestamps=time_series_dataset_from_all.train.timestamps, y_target_timestamps=time_series_dataset_from_all.validation.timestamps)
-          train_loss = trained_model.compute_loss(time_series_dataset_from_all.validation.features[self.model_class.target_col], model_predictions)
+          
+          # Get validation targets for loss computation
+          validation_targets = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_col)
+          train_loss = trained_model.compute_loss(validation_targets, model_predictions)
           current_train_loss += train_loss[self.model_class.primary_loss]
         # Average validation losses over the chunks
         current_train_loss /= len(list_of_time_series_datasets)
@@ -136,10 +190,11 @@ class FoundationModelTuner:
     self.model_class.set_params(**best_hyperparamters)
     results_dict = None
     for time_series_dataset in list_of_time_series_datasets:
-      train_val_split = np.concatenate([
-            time_series_dataset.train.features[self.model_class.target_col],
-            time_series_dataset.validation.features[self.model_class.target_col]
-        ])
+      # Get train and validation data using helper method
+      train_data = self._get_target_data(time_series_dataset.train, self.model_class.target_col)
+      validation_data = self._get_target_data(time_series_dataset.validation, self.model_class.target_col)
+      
+      train_val_split = np.concatenate([train_data, validation_data])
       target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
       y_target_start_date = time_series_dataset.test.timestamps[0]
       # Combine train and validation timestamps for context
@@ -151,9 +206,10 @@ class FoundationModelTuner:
       trained_model = self.model_class
             
       # Handle different model types with different predict method signatures
-      predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.features[self.model_class.target_col], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
+      test_targets = self._get_target_data(time_series_dataset.test, self.model_class.target_col)
+      predictions = trained_model.predict(y_context=target, y_target=test_targets, y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
 
-      train_loss_dict = trained_model.compute_loss(time_series_dataset.test.features[self.model_class.target_col], predictions)
+      train_loss_dict = trained_model.compute_loss(test_targets, predictions)
       if results_dict is None:
         results_dict = train_loss_dict
       else:
@@ -164,4 +220,3 @@ class FoundationModelTuner:
     return results_dict
       
     
-  
