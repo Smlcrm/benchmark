@@ -47,7 +47,8 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Test ModelRouter functionality
-        folder_path, file_name, class_name = model_router.get_model_path('arima', 'univariate')
+        router_config = {'target_cols': ['y']}
+        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
         assert file_name is not None
         assert class_name is not None
@@ -85,7 +86,8 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Test ModelRouter with multivariate model
-        folder_path, file_name, class_name = model_router.get_model_path('arima', 'multivariate')
+        router_config = {'target_cols': ['y', 'z']}
+        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
         assert 'multivariate/arima' in folder_path
     
@@ -148,7 +150,8 @@ class TestPipelineIntegration:
         assert len(chunk.test.targets) == expected_test_length
         
         # Verify ModelRouter still works with different split ratios
-        folder_path, file_name, class_name = model_router.get_model_path('arima', 'univariate')
+        router_config = {'target_cols': ['y']}
+        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
     
     @pytest.mark.integration
@@ -194,7 +197,8 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Verify that the same data can be processed by ModelRouter
-        folder_path, file_name, class_name = model_router.get_model_path('arima', 'univariate')
+        router_config = {'target_cols': ['y']}
+        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
         
         # Verify data integrity

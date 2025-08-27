@@ -49,7 +49,8 @@ class TestCompleteBenchmarkWorkflow:
         
         # Step 2: Model Routing
         model_router = ModelRouter()
-        folder_path, file_name, class_name = model_router.get_model_path('seasonal_naive', 'univariate')
+        router_config = {'target_cols': ['y']}  # Univariate
+        folder_path, file_name, class_name = model_router.get_model_path('seasonal_naive', router_config)
         assert folder_path is not None
         assert 'univariate/seasonal_naive' in folder_path
         
@@ -96,7 +97,8 @@ class TestCompleteBenchmarkWorkflow:
         
         # Step 2: Model Routing
         model_router = ModelRouter()
-        folder_path, file_name, class_name = model_router.get_model_path('lstm', 'multivariate')
+        router_config = {'target_cols': ['y', 'z']}  # Multivariate with 2 targets
+        folder_path, file_name, class_name = model_router.get_model_path('lstm', router_config)
         assert folder_path is not None
         assert 'multivariate/lstm' in folder_path
         
@@ -141,7 +143,8 @@ class TestCompleteBenchmarkWorkflow:
         # Test processing multiple chunks
         model_router = ModelRouter()
         for i, chunk in enumerate(chunks):
-            folder_path, file_name, class_name = model_router.get_model_path('arima', 'univariate')
+            router_config = {'target_cols': ['y']}
+            folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
             assert folder_path is not None
     
     @pytest.mark.e2e
@@ -185,7 +188,8 @@ class TestCompleteBenchmarkWorkflow:
         
         # Test ModelRouter functionality
         model_router = ModelRouter()
-        folder_path, file_name, class_name = model_router.get_model_path('arima', 'univariate')
+        router_config = {'target_cols': ['y']}
+        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
         
         # Verify that the workflow components are properly configured
