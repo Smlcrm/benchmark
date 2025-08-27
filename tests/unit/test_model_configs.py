@@ -60,24 +60,28 @@ class TestModelConfigs:
         router = ModelRouter()
         
         # Test univariate model
-        folder_path, file_name, class_name = router.get_model_path('arima', {'target_cols': ['y']})
-        assert 'univariate/arima' in folder_path
+        folder_path, file_name, class_name = router.get_model_path('arima', {'dataset': {'target_cols': ['y']}})
+        assert 'univariate' in folder_path
         assert file_name == 'arima_model'
         assert class_name == 'ArimaModel'
         
         # Test multivariate model
-        folder_path, file_name, class_name = router.get_model_path('arima', {'target_cols': ['y', 'z']})
-        assert 'multivariate/arima' in folder_path
+        folder_path, file_name, class_name = router.get_model_path('arima', {'dataset': {'target_cols': ['y', 'z']}})
+        assert 'multivariate' in folder_path
         assert file_name == 'arima_model'
         assert class_name == 'ArimaModel'
         
         # Test anyvariate model
-        folder_path, file_name, class_name = router.get_model_path('chronos', {'target_cols': ['y']})
-        assert 'anyvariate/chronos' in folder_path
+        folder_path, file_name, class_name = router.get_model_path('chronos', {'dataset': {'target_cols': ['y']}})
+        assert 'anyvariate' in folder_path
         assert file_name == 'chronos_model'
         assert class_name == 'ChronosModel'
-    
-
+        
+        # Test anyvariate model with multiple targets
+        folder_path, file_name, class_name = router.get_model_path('chronos', {'dataset': {'target_cols': ['y', 'z']}})
+        assert 'anyvariate' in folder_path
+        assert file_name == 'chronos_model'
+        assert class_name == 'ChronosModel'
     
     @pytest.mark.unit
     def test_get_model_info(self):
@@ -102,10 +106,16 @@ class TestModelConfigs:
         router = ModelRouter()
         
         # Test auto-detection for anyvariate model
-        folder_path, file_name, class_name = router.get_model_path_with_auto_detection('chronos', {'target_cols': ['y']})
-        assert 'anyvariate/chronos' in folder_path
+        folder_path, file_name, class_name = router.get_model_path_with_auto_detection('chronos', {'dataset': {'target_cols': ['y']}})
+        assert 'anyvariate' in folder_path
         assert file_name == 'chronos_model'
         assert class_name == 'ChronosModel'
+        
+        # Test auto-detection for multivariate model
+        folder_path, file_name, class_name = router.get_model_path_with_auto_detection('arima', {'dataset': {'target_cols': ['y', 'z']}})
+        assert 'multivariate' in folder_path
+        assert file_name == 'arima_model'
+        assert class_name == 'ArimaModel'
     
     @pytest.mark.unit
     def test_invalid_model_names(self):

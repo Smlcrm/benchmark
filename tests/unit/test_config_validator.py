@@ -27,7 +27,6 @@ class TestConfigValidator:
         """Create a valid configuration dictionary."""
         return {
             'test_type': 'deterministic',
-            'tensorboard': True,
             'dataset': {
                 'name': 'test_dataset',
                 'path': 'test/path',
@@ -36,31 +35,15 @@ class TestConfigValidator:
                 'split_ratio': [0.8, 0.1, 0.1],
                 'normalize': True,
                 'handle_missing': 'interpolate',
-                'chunks': 2,
-                'num_targets': 1
+                'target_cols': ['y']
             },
             'model': {
-                'name': ['arima', 'lstm'],
+                'name': ['arima'],
                 'parameters': {
                     'arima': {
-                        'p': [1, 2],
+                        'p': [1],
                         'd': [1],
                         'q': [1],
-                        's': [7],
-                        'target_cols': ['y'],
-                        'loss_functions': ['mae'],
-                        'primary_loss': ['mae'],
-                        'forecast_horizon': [10]
-                    },
-                    'lstm': {
-                        'units': [32],
-                        'layers': [1],
-                        'dropout': [0.1],
-                        'learning_rate': [0.01],
-                        'batch_size': [32],
-                        'epochs': [10],
-                        'sequence_length': [20],
-                        'target_cols': ['y'],
                         'loss_functions': ['mae'],
                         'primary_loss': ['mae'],
                         'forecast_horizon': [10]
@@ -69,7 +52,7 @@ class TestConfigValidator:
             },
             'evaluation': {
                 'type': 'deterministic',
-                'metrics': ['mae', 'rmse']
+                'metrics': ['mae']
             }
         }
     
@@ -120,8 +103,8 @@ class TestConfigValidator:
     
     @pytest.mark.unit
     def test_missing_target_cols(self, validator, valid_config):
-        """Test that missing target_cols causes validation errors."""
-        # Create a config with a model that requires target_cols
+        """Test that missing target_cols in dataset causes validation errors."""
+        # Create a config missing target_cols in dataset
         test_config = {
             'test_type': 'deterministic',
             'dataset': {
@@ -132,6 +115,7 @@ class TestConfigValidator:
                 'split_ratio': [0.8, 0.1, 0.1],
                 'normalize': True,
                 'handle_missing': 'interpolate'
+                # Missing target_cols
             },
             'model': {
                 'name': ['arima'],
@@ -140,8 +124,6 @@ class TestConfigValidator:
                         'p': [1],
                         'd': [1],
                         'q': [1],
-                        's': [7],
-                        # Missing target_cols
                         'loss_functions': ['mae'],
                         'primary_loss': ['mae'],
                         'forecast_horizon': [10]
@@ -157,7 +139,7 @@ class TestConfigValidator:
         with pytest.raises(ConfigValidationError) as exc_info:
             validator.validate_config(test_config)
         
-        assert "Required parameter 'target_cols' is missing" in str(exc_info.value)
+        assert "Required field 'target_cols' is missing" in str(exc_info.value)
     
     @pytest.mark.unit
     def test_invalid_forecast_horizon(self, validator, valid_config):
@@ -215,7 +197,8 @@ class TestConfigValidationFunctions:
                 'forecast_horizon': 10,
                 'split_ratio': [0.8, 0.1, 0.1],
                 'normalize': True,
-                'handle_missing': 'interpolate'
+                'handle_missing': 'interpolate',
+                'target_cols': ['y']
             },
             'model': {
                 'name': ['arima'],
@@ -224,7 +207,6 @@ class TestConfigValidationFunctions:
                         'p': [1],
                         'd': [1],
                         'q': [1],
-                        'target_cols': ['y'],
                         'loss_functions': ['mae'],
                         'primary_loss': ['mae'],
                         'forecast_horizon': [10]

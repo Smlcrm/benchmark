@@ -15,6 +15,19 @@ from unittest.mock import patch
 def test_data_dir():
     """Create a temporary directory for test data that persists across the test session."""
     test_dir = tempfile.mkdtemp()
+    
+    # Create mock metadata.json for testing
+    metadata = {
+        "variables": [
+            {"var_name": "y", "target_index": 0}
+        ]
+    }
+    
+    import json
+    metadata_path = os.path.join(test_dir, 'metadata.json')
+    with open(metadata_path, 'w') as f:
+        json.dump(metadata, f)
+    
     yield test_dir
     shutil.rmtree(test_dir)
 
@@ -49,15 +62,14 @@ def mock_config():
         "dataset": {
             "path": "/tmp/test_dataset",
             "name": "test_dataset",
-            "split_ratio": [0.8, 0.1, 0.1]
+            "split_ratio": [0.8, 0.1, 0.1],
+            "target_cols": ["y"]
         },
         "model": {
             "name": "test_model",
             "type": "univariate",
             "parameters": {
-                "test_model": {
-                    "target_cols": ["y"]
-                }
+                "test_model": {}
             }
         },
         "training": {
