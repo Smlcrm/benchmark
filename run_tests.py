@@ -16,6 +16,15 @@ import argparse
 from pathlib import Path
 
 
+def check_dependency(dependency_name, import_name):
+    """Check if a dependency is available."""
+    try:
+        __import__(import_name)
+        return True
+    except ImportError:
+        return False
+
+
 def run_command(cmd, description):
     """Run a command and handle errors."""
     print(f"\n{'='*60}")
@@ -53,12 +62,12 @@ def main():
     parser.add_argument(
         "--coverage", "-c",
         action="store_true",
-        help="Generate coverage report"
+        help="Generate coverage report (overrides pytest.ini settings)"
     )
     parser.add_argument(
         "--fast", "-f",
         action="store_true",
-        help="Skip slow tests"
+        help="Skip slow tests (if slow marker is defined)"
     )
     parser.add_argument(
         "--parallel", "-p",
@@ -75,15 +84,42 @@ def main():
     if args.verbose:
         cmd.append("-v")
     
+    # Handle coverage - only add if explicitly requested and pytest-cov is available
     if args.coverage:
-        cmd.extend(["--cov=benchmarking_pipeline", "--cov-report=term-missing"])
+        if check_dependency("pytest-cov", "pytest_cov"):
+            # Override pytest.ini coverage settings with explicit ones
+            cmd.extend([
+                "--cov=benchmarking_pipeline", 
+                "--cov-report=term-missing",
+                "--cov-report=html:htmlcov",
+                "--cov-report=xml"
+            ])
+        else:
+            print("❌ Warning: pytest-cov not available. Coverage option ignored.")
+            print("   Install with: pip install pytest-cov")
     
+    # Handle fast option - only add if slow marker exists
     if args.fast:
-        cmd.append("-m")
-        cmd.append("not slow")
+        # Check if we can find any tests with slow marker
+        slow_check_cmd = ["python", "-m", "pytest", "--collect-only", "-m", "slow", "tests/"]
+        try:
+            result = subprocess.run(slow_check_cmd, capture_output=True, text=True)
+            if "collected 0 items" not in result.stdout:
+                cmd.extend(["-m", "not slow"])
+                print("ℹ️  Fast mode: Skipping slow tests")
+            else:
+                print("ℹ️  Fast mode: No slow tests found, running all tests")
+        except Exception:
+            print("ℹ️  Fast mode: Could not determine slow tests, running all tests")
     
+    # Handle parallel execution
     if args.parallel:
-        cmd.extend(["-n", "auto"])
+        if check_dependency("pytest-xdist", "xdist"):
+            cmd.extend(["-n", "auto"])
+            print("ℹ️  Parallel mode: Running tests in parallel")
+        else:
+            print("❌ Warning: pytest-xdist not available. Parallel option ignored.")
+            print("   Install with: pip install pytest-xdist")
     
     # Add test type specific options
     if args.type == "unit":
