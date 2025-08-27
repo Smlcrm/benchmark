@@ -36,8 +36,10 @@ class BenchmarkRunner:
         Returns:
             Dictionary with dataset analysis information
         """
-        # Prefer explicit config when available
-        num_targets_cfg = self.config.get('dataset', {}).get('num_targets')
+        # Get target_cols from dataset config
+        target_cols_cfg = self.config.get('dataset', {}).get('target_cols')
+        if not target_cols_cfg:
+            raise ValueError("target_cols must be defined in dataset configuration")
 
         # Use training targets to determine number of target columns
         train_targets = dataset_chunk.train.targets
@@ -46,10 +48,8 @@ class BenchmarkRunner:
         if not hasattr(train_targets, 'shape') or len(getattr(train_targets, 'shape')) < 2:
             raise ValueError("Dataset analysis failed: train.targets has no valid 2D shape")
 
-        if isinstance(num_targets_cfg, int) and num_targets_cfg > 0:
-            target_columns = num_targets_cfg
-        else:
-            target_columns = train_targets.shape[1]
+        # Use configured target_cols length
+        target_columns = len(target_cols_cfg)
 
         # Basic shape info of targets
         data_shape = train_targets.shape
@@ -146,20 +146,14 @@ class BenchmarkRunner:
                 print(f"[WARNING] No parameters found for {model_name}, using defaults")
                 model_params = {}
             
-            # Extract target_cols for model routing
-            target_cols = model_params.get('target_cols', ['y'])  # Default to univariate if not specified
-            
-            # Create config for model router (needs target_cols at top level)
-            router_config = {'target_cols': target_cols}
-            
             # Get the appropriate model path with auto-detection
             folder_path, model_file_name, model_class_name = model_router.get_model_path_with_auto_detection(
-                model_name, router_config
+                model_name, config
             )
             
             print(f"[INFO] Processing model: {model_spec}")
             print(f"[INFO] Model name: {model_name}")
-            print(f"[INFO] Target columns: {target_cols}")
+            print(f"[INFO] Target columns: {config['dataset']['target_cols']}")
             print(f"[INFO] Folder path: {folder_path}")
             print(f"[INFO] File name: {model_file_name}")
             print(f"[INFO] Class name: {model_class_name}")

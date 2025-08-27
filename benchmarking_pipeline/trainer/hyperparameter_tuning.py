@@ -236,7 +236,7 @@ class HyperparameterTuner:
           elif hasattr(self.model_class, 'target_cols') and len(self.model_class.target_cols) > 1:
               trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets, y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
           else:
-              trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_col], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
+              trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_cols[0]], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
       else:
           # Default case for other models
           if hasattr(self.model_class, 'target_columns') and len(self.model_class.target_columns) > 1:
@@ -244,7 +244,7 @@ class HyperparameterTuner:
           elif hasattr(self.model_class, 'target_cols') and len(self.model_class.target_cols) > 1:
               trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets, y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
           else:
-              trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_col], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
+              trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_cols[0]], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
             
       # Handle different model types with different predict method signatures
       if hasattr(self.model_class, '__class__') and 'DeepAR' in self.model_class.__class__.__name__:
@@ -254,7 +254,7 @@ class HyperparameterTuner:
           elif hasattr(self.model_class, 'target_cols') and len(self.model_class.target_cols) > 1:
               predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets)
           else:
-              predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_col].values)
+              predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_cols[0]].values)
       elif hasattr(self.model_class, '__class__') and 'RandomForest' in self.model_class.__class__.__name__:
           # Random Forest model uses timestamp features
           if hasattr(self.model_class, 'target_columns') and len(self.model_class.target_columns) > 1:
@@ -262,7 +262,7 @@ class HyperparameterTuner:
           elif hasattr(self.model_class, 'target_cols') and len(self.model_class.target_cols) > 1:
               predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets, y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
           else:
-              predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_col], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
+              predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_cols[0]], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
       else:
           # All other models (including Prophet) use both y_context_timestamps and y_target_timestamps
           if hasattr(self.model_class, 'target_columns') and len(self.model_class.target_columns) > 1:
@@ -270,7 +270,7 @@ class HyperparameterTuner:
           elif hasattr(self.model_class, 'target_cols') and len(self.model_class.target_cols) > 1:
               predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets, y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
           else:
-              predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_col], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
+              predictions = trained_model.predict(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_cols[0]], y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
 
       # Handle multivariate vs univariate loss computation for final evaluation
       if hasattr(self.model_class, 'target_columns') and len(self.model_class.target_columns) > 1:
@@ -281,7 +281,7 @@ class HyperparameterTuner:
           train_loss_dict = trained_model.compute_loss(time_series_dataset.test.targets, predictions)
       else:
           # Univariate case - use specific target column
-          train_loss_dict = trained_model.compute_loss(time_series_dataset.test.targets[self.model_class.target_col], predictions)
+          train_loss_dict = trained_model.compute_loss(time_series_dataset.test.targets[self.model_class.target_cols[0]], predictions)
       if results_dict is None:
         results_dict = train_loss_dict
       else:
