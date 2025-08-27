@@ -67,7 +67,7 @@ class HyperparameterTuner:
         # Train a new model
         print(f"DEBUG: train.targets columns: {time_series_dataset.train.targets.columns}")
         print(f"DEBUG: train.targets head:\n{time_series_dataset.train.targets.head()}")
-        print(f"DEBUG: self.model_class.target_col: {self.model_class.target_col}")
+        print(f"DEBUG: self.model_class.target_cols: {self.model_class.target_cols}")
         # Handle multivariate vs univariate data
         if hasattr(self.model_class, 'target_columns') and len(self.model_class.target_columns) > 1:
             # Multivariate case - use all targets
@@ -79,8 +79,8 @@ class HyperparameterTuner:
             validation_series = time_series_dataset.validation.targets
         else:
             # Univariate case - use specific target column
-            target = time_series_dataset.train.targets[self.model_class.target_col].values
-            validation_series = time_series_dataset.validation.targets[self.model_class.target_col].values
+                    target = time_series_dataset.train.targets[self.model_class.target_cols[0]].values
+        validation_series = time_series_dataset.validation.targets[self.model_class.target_cols[0]].values
         start_date = time_series_dataset.metadata["start"]
         freq_str = time_series_dataset.metadata["freq"]
         first_capital_letter_finder = re.search(r'[A-Z]', freq_str)
@@ -119,8 +119,8 @@ class HyperparameterTuner:
               validation_series = time_series_dataset_from_all.validation.targets
           else:
               # Univariate case - use specific target column
-              target = time_series_dataset_from_all.train.targets[self.model_class.target_col].values
-              validation_series = time_series_dataset_from_all.validation.targets[self.model_class.target_col].values
+              target = time_series_dataset_from_all.train.targets[self.model_class.target_cols[0]].values
+              validation_series = time_series_dataset_from_all.validation.targets[self.model_class.target_cols[0]].values
           #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
           # Handle different model types with different predict method signatures
           if hasattr(self.model_class, '__class__') and 'DeepAR' in self.model_class.__class__.__name__:
@@ -141,7 +141,7 @@ class HyperparameterTuner:
               train_loss = trained_model.compute_loss(time_series_dataset_from_all.validation.targets, model_predictions)
           else:
               # Univariate case - use specific target column
-              train_loss = trained_model.compute_loss(time_series_dataset_from_all.validation.targets[self.model_class.target_col], model_predictions)
+              train_loss = trained_model.compute_loss(time_series_dataset_from_all.validation.targets[self.model_class.target_cols[0]], model_predictions)
           current_train_loss += train_loss[self.model_class.primary_loss]
         # Average validation losses over the chunks
         current_train_loss /= len(list_of_time_series_datasets)
@@ -207,8 +207,8 @@ class HyperparameterTuner:
       else:
           # Univariate case - use specific target column
           train_val_split = np.concatenate([
-              time_series_dataset.train.targets[self.model_class.target_col],
-              time_series_dataset.validation.targets[self.model_class.target_col]
+                          time_series_dataset.train.targets[self.model_class.target_cols[0]],
+            time_series_dataset.validation.targets[self.model_class.target_cols[0]]
           ])
           target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
       y_target_start_date = time_series_dataset.test.timestamps[0]
@@ -228,7 +228,7 @@ class HyperparameterTuner:
           elif hasattr(self.model_class, 'target_cols') and len(self.model_class.target_cols) > 1:
               trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets)
           else:
-              trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_col].values)
+              trained_model = self.model_class.train(y_context=target, y_target=time_series_dataset.test.targets[self.model_class.target_cols[0]].values)
       elif hasattr(self.model_class, '__class__') and 'RandomForest' in self.model_class.__class__.__name__:
           # Random Forest model uses timestamp features
           if hasattr(self.model_class, 'target_columns') and len(self.model_class.target_columns) > 1:

@@ -120,10 +120,10 @@ class FoundationModelTuner:
             print(f"DEBUG: train.features is None, using train.targets")
             print(f"DEBUG: train.targets shape: {time_series_dataset.train.targets.shape if time_series_dataset.train.targets is not None else 'None'}")
         
-        print(f"DEBUG: self.model_class.target_col: {self.model_class.target_col}")
+        print(f"DEBUG: self.model_class.target_cols: {self.model_class.target_cols}")
         
-        target = self._get_target_data(time_series_dataset.train, self.model_class.target_col)
-        validation_series = self._get_target_data(time_series_dataset.validation, self.model_class.target_col)
+        target = self._get_target_data(time_series_dataset.train, self.model_class.target_cols[0])
+        validation_series = self._get_target_data(time_series_dataset.validation, self.model_class.target_cols[0])
         
         start_date = time_series_dataset.metadata["start"]
         freq_str = time_series_dataset.metadata["freq"]
@@ -140,15 +140,15 @@ class FoundationModelTuner:
         # Get validation losses over every chunk
         current_train_loss = 0
         for time_series_dataset_from_all in list_of_time_series_datasets:
-          target = self._get_target_data(time_series_dataset_from_all.train, self.model_class.target_col)
-          validation_series = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_col)
+          target = self._get_target_data(time_series_dataset_from_all.train, self.model_class.target_cols[0])
+          validation_series = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_cols[0])
           #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
           # Handle different model types with different predict method signatures
           
           model_predictions = trained_model.predict(y_context=target, y_target=validation_series, y_context_timestamps=time_series_dataset_from_all.train.timestamps, y_target_timestamps=time_series_dataset_from_all.validation.timestamps)
           
           # Get validation targets for loss computation
-          validation_targets = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_col)
+          validation_targets = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_cols[0])
           train_loss = trained_model.compute_loss(validation_targets, model_predictions)
           current_train_loss += train_loss[self.model_class.primary_loss]
         # Average validation losses over the chunks
@@ -192,8 +192,8 @@ class FoundationModelTuner:
     results_dict = None
     for time_series_dataset in list_of_time_series_datasets:
       # Get train and validation data using helper method
-      train_data = self._get_target_data(time_series_dataset.train, self.model_class.target_col)
-      validation_data = self._get_target_data(time_series_dataset.validation, self.model_class.target_col)
+      train_data = self._get_target_data(time_series_dataset.train, self.model_class.target_cols[0])
+      validation_data = self._get_target_data(time_series_dataset.validation, self.model_class.target_cols[0])
       
       train_val_split = np.concatenate([train_data, validation_data])
       target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
@@ -207,7 +207,7 @@ class FoundationModelTuner:
       trained_model = self.model_class
             
       # Handle different model types with different predict method signatures
-      test_targets = self._get_target_data(time_series_dataset.test, self.model_class.target_col)
+      test_targets = self._get_target_data(time_series_dataset.test, self.model_class.target_cols[0])
       predictions = trained_model.predict(y_context=target, y_target=test_targets, y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
 
       train_loss_dict = trained_model.compute_loss(test_targets, predictions)
