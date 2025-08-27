@@ -19,9 +19,10 @@ class TotoModel(FoundationModel):
             samples_per_batch (int): Controls memory usage during inference.
         """
         super().__init__(config, config_file)
-        self.prediction_length = self.config.get('prediction_length', 4)
-        self.num_samples = self.config.get('num_samples', 4)
-        self.samples_per_batch = self.config.get('samples_per_batch', 4)
+        self.model_name = self.config.get('model_name', 'toto')
+        self.num_samples = self.config.get('num_samples', 40)
+        self.samples_per_batch = self.config.get('samples_per_batch', 40)
+        # forecast_horizon is inherited from parent class (FoundationModel)
 
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
         torch.use_deterministic_algorithms(True)
@@ -77,12 +78,12 @@ class TotoModel(FoundationModel):
             time_interval_seconds=time_interval_seconds,
         )
 
-        # Forecast
-        forecast = self.forecaster.forecast(
-            inputs,
-            prediction_length=self.prediction_length,
+        # Generate forecasts
+        forecasts = self.model.forecast(
+            df,
+            prediction_length=self.forecast_horizon,
             num_samples=self.num_samples,
-            samples_per_batch=self.samples_per_batch,
+            samples_per_batch=self.samples_per_batch
         )
 
         return np.array(forecast.median)

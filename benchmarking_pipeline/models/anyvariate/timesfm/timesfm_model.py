@@ -11,8 +11,8 @@ class TimesFMModel(FoundationModel):
         self.model_path = "timesfm-1.0-50m"  # Try without google/ prefix
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.per_core_batch_size = self.config.get("per_core_batch_size", 2)
-        self.horizon_len = self.config.get("horizon_len", 40),
-        self.num_layers = self.config.get("num_layers", 2),
+        # forecast_horizon is inherited from parent class (FoundationModel)
+        self.num_layers = self.config.get("num_layers", 2)
         self.context_len = self.config.get("context_len", 2)
         self.use_positional_embedding = self.config.get("use_positional_embedding", False)
         print(f"Loading TimesFM model: {self.model_path} to device '{self.device}'")
@@ -37,7 +37,7 @@ class TimesFMModel(FoundationModel):
             hparams=timesfm.TimesFmHparams(
                 backend="gpu" if self.device == "cuda" else "cpu",
                 per_core_batch_size=self.per_core_batch_size,
-                horizon_len=self.horizon_len,
+                horizon_len=self.forecast_horizon,
                 num_layers=self.num_layers,
                 use_positional_embedding=self.use_positional_embedding,
                 context_len=self.context_len,

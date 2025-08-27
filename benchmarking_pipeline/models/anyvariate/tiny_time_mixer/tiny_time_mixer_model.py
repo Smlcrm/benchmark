@@ -16,7 +16,9 @@ class TinyTimeMixerModel(FoundationModel):
     """
     
     super().__init__(config, config_file)
-    self.prediction_length = self.config.get('prediction_length', '96')
+    self.model_name = self.config.get('model_name', 'tiny_time_mixer')
+    # forecast_horizon is inherited from parent class (FoundationModel)
+    self.model = None
   
   def set_params(self, **params: Dict[str, Any]) -> 'TinyTimeMixerModel':
     for key, value in params.items():
@@ -67,8 +69,8 @@ class TinyTimeMixerModel(FoundationModel):
 
     forecaster = TinyTimeMixerForecaster() 
 
-    # performs zero-shot forecasting, as default config (unchanged) is used
-    forecaster.fit(dataframe, fh=list(range(1,self.prediction_length+1))) 
+    # Fit the model
+    forecaster.fit(dataframe, fh=list(range(1, self.forecast_horizon + 1)))
     y_pred = forecaster.predict() 
 
     all_time_series_names = dataframe.columns.values
