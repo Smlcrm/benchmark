@@ -1,0 +1,9 @@
+{
+  "variables": [
+    {
+      "var_name": "daily_saugeen_river_flow",
+      "units": "m³/s",
+      "target_index": 0
+    }
+  ]
+}

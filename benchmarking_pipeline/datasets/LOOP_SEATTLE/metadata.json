@@ -1,0 +1,9 @@
+{
+  "variables": [
+    {
+      "var_name": "seattle_loop_traffic",
+      "units": "vehicles",
+      "target_index": 0
+    }
+  ]
+}
