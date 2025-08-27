@@ -42,11 +42,11 @@ class MultivariateARIMAModel(BaseModel):
         self.p = int(self.config.get('p', 1))
         self.d = int(self.config.get('d', 1))
         self.maxlags = int(self.config.get('maxlags', 10))
-        self.target_cols = self.config.get('target_cols')
+        # target_cols is inherited from parent class (BaseModel/FoundationModel)
         self.forecast_horizon = int(self.config.get('forecast_horizon', 1))
         self.model = None
         self.fitted_model = None
-        self.n_targets = len(self.target_cols)
+        # n_targets will be calculated when needed: len(self.target_cols)
         self.differenced_data = None
         self.original_data = None
         self.is_fitted = False
@@ -159,19 +159,17 @@ class MultivariateARIMAModel(BaseModel):
         elif isinstance(y_context, pd.Series):
             # Convert Series to DataFrame
             data = pd.DataFrame({y_context.name if y_context.name else 'target_0': y_context.values})
-            self.target_cols = list(data.columns)
-            self.n_targets = 1
         else:
             # Numpy array case
             if y_context.ndim == 1:
                 data = pd.DataFrame({'target_0': y_context})
-                self.n_targets = 1
             else:
                 # Multivariate numpy array
                 columns = [f'target_{i}' for i in range(y_context.shape[1])]
                 data = pd.DataFrame(y_context, columns=columns)
-                self.n_targets = y_context.shape[1]
-            self.target_cols = list(data.columns)
+        
+        # Calculate n_targets from inherited target_cols
+        self.n_targets = len(self.target_cols)
         
         # Store original data for integration
         self.original_data = data.copy()
@@ -329,9 +327,7 @@ class MultivariateARIMAModel(BaseModel):
                 if key in ['p', 'd', 'maxlags', 'forecast_horizon']:
                     value = int(value)
                 setattr(self, key, value)
-        # Update n_targets if target_cols changed
-        if 'target_cols' in params:
-            self.n_targets = len(self.target_cols)
+        # Note: target_cols is inherited from parent class and shouldn't be modified
         return self
         
     def save(self, path: str) -> None:

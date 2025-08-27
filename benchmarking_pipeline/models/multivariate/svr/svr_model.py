@@ -38,8 +38,8 @@ class MultivariateSVRModel(BaseModel):
         # Extract model parameters from config
         self.lookback_window = self.config.get('lookback_window', 10)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        self.target_cols = self.config.get('target_cols')
-        self.n_targets = len(self.target_cols)  # Number of target variables
+        # target_cols is inherited from parent class (BaseModel/FoundationModel)
+        # n_targets will be calculated when needed: len(self.target_cols)
         
         self._build_model()
 
@@ -121,16 +121,15 @@ class MultivariateSVRModel(BaseModel):
             # For univariate case, validate against config
             if len(self.target_cols) != 1:
                 raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
-            self.n_targets = 1
         else:
             # Numpy array case
             y_series = y_context
             if y_series.ndim == 1:
                 y_series = y_series.reshape(-1, 1)
-                self.n_targets = 1
-            else:
-                self.n_targets = y_series.shape[1]
 
+        # Calculate n_targets from inherited target_cols
+        self.n_targets = len(self.target_cols)
+        
         # Combine context and target for full training series if y_target is provided
         if y_target is not None:
             if isinstance(y_target, pd.DataFrame):
@@ -340,9 +339,7 @@ class MultivariateSVRModel(BaseModel):
             if k in params:
                 setattr(self, k, params[k])
         
-        # Update n_targets if target_cols changed
-        if 'target_cols' in params:
-            self.n_targets = len(self.target_cols)
+        # Note: target_cols is inherited from parent class and shouldn't be modified
         
         # Convert parameter types for scikit-learn compatibility
         converted_params = {}
