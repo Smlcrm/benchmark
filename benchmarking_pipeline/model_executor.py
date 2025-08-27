@@ -51,9 +51,30 @@ class ModelExecutor:
         with open(self.chunk_path, 'rb') as f:
           all_dataset_chunks = pickle.load(f)
         
+        # Get the base hyperparameter grid for this model
+        base_hyper_grid = config['model'][model_name] or {}
+        
+        # Automatically inject forecast_horizon from dataset config into the hyperparameter grid
+        dataset_forecast_horizons = config['dataset'].get('forecast_horizon', [1])
+        if isinstance(dataset_forecast_horizons, list):
+            # Create a copy of the base hyper grid and add forecast_horizon
+            hyper_grid = base_hyper_grid.copy()
+            hyper_grid['forecast_horizon'] = dataset_forecast_horizons
+            print(f"[INFO] Auto-injected forecast_horizon: {dataset_forecast_horizons}")
+        else:
+            # Single value case
+            hyper_grid = base_hyper_grid.copy()
+            hyper_grid['forecast_horizon'] = [dataset_forecast_horizons]
+            print(f"[INFO] Auto-injected forecast_horizon: {[dataset_forecast_horizons]}")
+        
+        print(f"[INFO] Final hyperparameter grid for {model_name}: {hyper_grid}")
+        
         if issubclass(model_class, BaseModel):
             print(f"{model_name} is a Base Model!")
-            hyper_grid = config['model']['parameters'][model_name]
+            # Handle case where model has no parameters (empty model)
+            if not hyper_grid:
+                print(f"[INFO] {model_name} has no parameters, using empty hyper_grid")
+            
             print(f"{model_name} hyper grid: {hyper_grid}")
 
             model_params = {k: v[0] if isinstance(v, list) else v for k, v in hyper_grid.items()}
@@ -75,7 +96,10 @@ class ModelExecutor:
         elif issubclass(model_class, FoundationModel):
             print(f"{model_name} is a Foundation Model!")
             
-            hyper_grid = config['model']['parameters'][model_name]
+            # Handle case where model has no parameters (empty model)
+            if not hyper_grid:
+                print(f"[INFO] {model_name} has no parameters, using empty hyper_grid")
+            
             model_params = {k: v[0] if isinstance(v, list) else v for k, v in hyper_grid.items()}
             # Include dataset configuration for target_cols access
             model_params['dataset'] = config['dataset']
