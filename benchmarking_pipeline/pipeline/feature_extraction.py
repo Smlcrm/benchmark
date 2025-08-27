@@ -13,7 +13,12 @@ class FeatureExtractor:
                                      Defaults to None for basic operation.
         """
         self.config = config if config is not None else {}
-        self.target_col = self.config.get('target_col', 'target')
+        # target_cols must be explicitly specified in config - no defaults allowed
+        self.target_cols = self.config.get('target_cols')
+        if not self.target_cols:
+            raise ValueError("target_cols must be defined in config")
+        # For backward compatibility, use first target column as primary target
+        self.target_col = self.target_cols[0]
         self.datetime_col = self.config.get('datetime_col', None) # If None, assumes index is datetime
 
     def _create_lags(self, df, column_name, lags):

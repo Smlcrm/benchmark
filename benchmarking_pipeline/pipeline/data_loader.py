@@ -1,5 +1,6 @@
 import os
 import ast
+import json
 import pandas as pd
 from typing import Dict, Any, List, Optional
 from .data_types import Dataset, DatasetSplit  # assumes these are in data_types.py
@@ -16,7 +17,7 @@ class DataLoader:
                 - dataset.name: name of the dataset
                 - dataset.chunk_index: which chunk to load (default=1)
                 - dataset.split_ratio: list of [train, val, test] ratios
-                - model.parameters.{model_name}.target_cols: list of target column names to load
+                - dataset.target_cols: list of target column names to load
         """
         self.config = config
         self.dataset_cfg = config.get('dataset', {})
@@ -24,35 +25,133 @@ class DataLoader:
         self.name = self.dataset_cfg.get('name')
         self.split_ratio = self.dataset_cfg.get('split_ratio', [0.6, 0.2, 0.2])
         
-        # Extract target_cols from model configuration
+        # Extract target_cols from dataset configuration
         self.target_cols = self._extract_target_cols()
+        
+        # Load dataset metadata to get target column mappings
+        self.target_mappings = self._load_target_mappings()
     
     def _extract_target_cols(self) -> List[str]:
         """
-        Extract target_cols from model configuration.
+        Extract target_cols from dataset configuration.
         
         Returns:
             List of target column names
             
         Raises:
-            ValueError: If target_cols is not defined in any model's parameters or is None
+            ValueError: If target_cols is not defined in dataset configuration or is None
         """
-        model_cfg = self.config.get('model', {})
-        parameters = model_cfg.get('parameters', {})
+        target_cols = self.dataset_cfg.get('target_cols')
+        if target_cols is None:
+            raise ValueError("target_cols must be defined in dataset configuration. "
+                           "Please add target_cols to the dataset section of your config.")
+        if not isinstance(target_cols, list):
+            raise ValueError("target_cols must be a list of column names.")
+        if len(target_cols) == 0:
+            raise ValueError("target_cols must be a non-empty list of column names.")
+        return target_cols
+    
+    def _load_target_mappings(self) -> Dict[str, int]:
+        """
+        Load target column mappings from dataset metadata.
         
-        # Look for target_cols in any model's parameters
-        for model_params in parameters.values():
-            if isinstance(model_params, dict) and 'target_cols' in model_params:
-                target_cols = model_params['target_cols']
-                if target_cols is None:
-                    raise ValueError("target_cols cannot be None. Please provide a list of column names.")
-                if not isinstance(target_cols, list) or len(target_cols) == 0:
-                    raise ValueError("target_cols must be a non-empty list of column names.")
-                return target_cols
+        Returns:
+            Dictionary mapping target column names to their indices
+            
+        Raises:
+            ValueError: If metadata file is missing or invalid
+        """
+        metadata_path = os.path.join(self.path, 'metadata.json')
+        if not os.path.exists(metadata_path):
+            raise ValueError(f"Dataset metadata file not found: {metadata_path}")
         
-        # target_cols is mandatory - no backward compatibility
-        raise ValueError("target_cols must be defined in model parameters. "
-                        "Please add target_cols to at least one model's configuration.")
+        try:
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            raise ValueError(f"Failed to load dataset metadata: {e}")
+        
+        if 'variables' not in metadata:
+            raise ValueError("Dataset metadata missing 'variables' section")
+        
+        # Create mapping from variable name to target index
+        target_mappings = {}
+        for var in metadata['variables']:
+            if 'var_name' in var and 'target_index' in var:
+                target_mappings[var['var_name']] = var['target_index']
+        
+        if not target_mappings:
+            raise ValueError("No valid target variables found in dataset metadata")
+        
+        return target_mappings
+    
+    def _validate_target_cols(self):
+        """
+        Validate that all configured target_cols exist in the dataset metadata.
+        
+        Raises:
+            ValueError: If any target_cols are not found in the dataset
+        """
+        missing_cols = [col for col in self.target_cols if col not in self.target_mappings]
+        if missing_cols:
+            available_cols = list(self.target_mappings.keys())
+            raise ValueError(f"Target columns {missing_cols} not found in dataset. "
+                           f"Available columns: {available_cols}")
+    
+    def _extract_target_series(self, target_data: List) -> pd.DataFrame:
+        """
+        Extract target series based on target_cols configuration and metadata mappings.
+        
+        Args:
+            target_data: Raw target data from CSV
+            
+        Returns:
+            DataFrame with properly named target columns
+            
+        Raises:
+            ValueError: If target data structure is invalid or missing required columns
+        """
+        if not isinstance(target_data, list) or len(target_data) == 0:
+            raise ValueError("Target data must be a non-empty list")
+        
+        # Validate target_cols against available dataset columns
+        self._validate_target_cols()
+        
+        if isinstance(target_data[0], list):
+            # 2D structure: [[val1, val2, ...], [val1, val2, ...], ...]
+            # Each inner list represents a time series for a different variable
+            if len(target_data) < max(self.target_mappings.values()) + 1:
+                raise ValueError(f"Dataset has {len(target_data)} series but metadata requires up to index {max(self.target_mappings.values())}")
+            
+            # Extract series based on target_cols and their indices
+            extracted_series = []
+            for col_name in self.target_cols:
+                target_index = self.target_mappings[col_name]
+                if target_index >= len(target_data):
+                    raise ValueError(f"Target index {target_index} for column '{col_name}' exceeds available series count {len(target_data)}")
+                extracted_series.append(target_data[target_index])
+            
+            # Create DataFrame with proper column names
+            targets_df = pd.DataFrame(extracted_series).T
+            targets_df.columns = self.target_cols
+            
+        else:
+            # 1D structure: [val1, val2, val3, ...] - Single univariate time series
+            if len(self.target_cols) != 1:
+                raise ValueError(f"Data is univariate but target_cols specifies {len(self.target_cols)} columns")
+            
+            col_name = self.target_cols[0]
+            if col_name not in self.target_mappings:
+                raise ValueError(f"Target column '{col_name}' not found in dataset metadata")
+            
+            # For univariate, the data should already be in the correct format
+            targets_df = pd.DataFrame({col_name: target_data})
+        
+        # Convert None values to NaN and ensure numeric dtype
+        targets_df = targets_df.replace([None, 'None'], np.nan)
+        targets_df = targets_df.astype(float)
+        
+        return targets_df
     
     def _generate_timestamp_list(self, start, freq, horizon) -> List[Any]:
         """
@@ -105,26 +204,13 @@ class DataLoader:
         # Handle targets based on target_cols configuration
         # target_cols is now mandatory, so this will always be defined
         if isinstance(target, list) and len(target) > 0:
-            if isinstance(target[0], list):
-                # 2D structure: [[val1, val2], [val3, val4], ...] - Multiple target series
-                if len(target[0]) == len(self.target_cols):
-                    # Create DataFrame with user-specified column names
-                    targets_df = pd.DataFrame(target, columns=self.target_cols)
-                else:
-                    # Mismatch between data structure and target_cols
-                    raise ValueError(f"Data has {len(target[0])} series but target_cols specifies {len(self.target_cols)} columns")
-            else:
-                # 1D structure: [val1, val2, val3, ...] - Single univariate time series
-                if len(self.target_cols) == 1:
-                    targets_df = pd.DataFrame({self.target_cols[0]: target})
-                else:
-                    raise ValueError(f"Data is univariate but target_cols specifies {len(self.target_cols)} columns")
+            targets_df = self._extract_target_series(target)
         else:
-            # Single target series (univariate)
+            # Handle case where target is not a list (single value)
             if len(self.target_cols) == 1:
-                targets_df = pd.DataFrame({self.target_cols[0]: target})
+                targets_df = pd.DataFrame({self.target_cols[0]: [target]})
             else:
-                raise ValueError(f"Data is univariate but target_cols specifies {len(self.target_cols)} columns")
+                raise ValueError(f"Single target value provided but target_cols specifies {len(self.target_cols)} columns")
         
         # Handle exogenous features if present
         exogenous_df = None
