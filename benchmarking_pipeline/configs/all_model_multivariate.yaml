@@ -1,15 +1,15 @@
 test_type: deterministic
 tensorboard: true
 dataset:
-  name: BEIJING_SUBWAY_30MIN
-  path: benchmarking_pipeline/datasets/BEIJING_SUBWAY_30MIN
-  frequency: 30T
+  name: china_air_quality
+  path: benchmarking_pipeline/datasets/china_air_quality
+  frequency: H
   forecast_horizon: 50
   split_ratio: [0.8, 0.1, 0.1]
   normalize: true
   handle_missing: interpolate
   chunks: 3
-  num_targets: 2
+  target_cols: ["PM2.5", "PM10", "O3", "NO2", "CO", "SO2"]  # Air quality metrics (6 columns)
 
 model:
   # Running only models that support multivariate forecasting
@@ -26,7 +26,6 @@ model:
   parameters:
     tiny_time_mixer:
       prediction_length: [40]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     moment:
       model_path: ['AutonLab/MOMENT-1-large']
       context_length: [512]
@@ -34,26 +33,22 @@ model:
       batch_size: [8]
       learning_rate: [0.0001]
       prediction_length: [40]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     lagllama:
       prediction_length: [100]
       context_length: [4]
       num_samples: [5]
       batch_size: [4]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     timesfm:
       per_core_batch_size: [2]
       horizon_len: [40]
       num_layers: [2]
       context_len: [2]
       use_positional_embedding: [False]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     chronos:
       model_size: ['small']
       context_length: [8]
       num_samples: [5]
       prediction_length: [40]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     xgboost:
       lookback_window: [50, 100]
       forecast_horizon: [50]
@@ -64,7 +59,6 @@ model:
       colsample_bytree: [0.8, 1.0]
       random_state: [42]
       n_jobs: [-1]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     lstm:
       units: [32]
       layers: [1]
@@ -73,7 +67,6 @@ model:
       batch_size: [32]
       epochs: [20]
       sequence_length: [10]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
       loss_functions: ["mae"]
       primary_loss: ["mae"]
       forecast_horizon: [50]
@@ -83,7 +76,6 @@ model:
       seasonal_periods: [7]
       damped_trend: [false]
       forecast_horizon: [50]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     svr:
       kernel: ["rbf", "linear"]
       C: [0.1, 1.0, 10.0]
@@ -93,20 +85,17 @@ model:
       forecast_horizon: [50]
       max_iter: [1000]
       random_state: [42]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     arima:
       p: [0, 1, 2]
       d: [0, 1]
       q: [0, 1, 2]
       s: [2, 4]
       maxlags: [10]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
       loss_functions: ["mae"]
       primary_loss: ["mae"]
       forecast_horizon: [50]
     theta:
       sp: [1, 2, 3, 7, 48]  # 48 for daily seasonality in 30min data
-      target_cols: ["target_0", "target_1"]  # Will be auto-detected from data
       use_reduced_rank: [false, true]
       theta_method: ["least_squares", "correlation_optimal"]
       loss_functions: ["mae"]
@@ -119,7 +108,6 @@ model:
       psz: [32]
       bsz: [8]
       num_samples: [5]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     moirai_moe:
       model_name: ["moirai_moe"]  # moirai and moirai_moe come from the same model file
       size: ["small"]
@@ -127,16 +115,13 @@ model:
       psz: [32]
       bsz: [8]
       num_samples: [5]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     toto:
       model_name: ["toto"]
       prediction_length: [900]
       num_samples: [40]
       samples_per_batch: [40]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
     croston_classic:
       alpha: [0.1, 0.5, 1]
-      target_cols: ["target_0", "target_1"]  # Multivariate targets
       loss_functions: ["mae"]
       primary_loss: ["mae"]
       forecast_horizon: [50]
