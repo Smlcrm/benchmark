@@ -57,6 +57,8 @@ class ModelExecutor:
             print(f"{model_name} hyper grid: {hyper_grid}")
 
             model_params = {k: v[0] if isinstance(v, list) else v for k, v in hyper_grid.items()}
+            # Include dataset configuration for target_cols access
+            model_params['dataset'] = config['dataset']
             print(f"{model_name} initial model_params: {model_params}")
 
             base_model = model_class(model_params)
@@ -75,6 +77,8 @@ class ModelExecutor:
             
             hyper_grid = config['model']['parameters'][model_name]
             model_params = {k: v[0] if isinstance(v, list) else v for k, v in hyper_grid.items()}
+            # Include dataset configuration for target_cols access
+            model_params['dataset'] = config['dataset']
 
             foundation_model = model_class(model_params)
 

@@ -8,12 +8,12 @@ import logging
 from datetime import datetime
 import os
 
-from pipeline.data_loader import DataLoader
-from pipeline.preprocessor import Preprocessor
-from pipeline.trainer import Trainer
-from pipeline.logger import Logger
-from pipeline.visualizer import Visualizer
-from pipeline.data_types import Dataset, PreprocessedData, EvaluationMetrics
+from benchmarking_pipeline.pipeline.data_loader import DataLoader
+from benchmarking_pipeline.pipeline.preprocessor import Preprocessor
+from benchmarking_pipeline.pipeline.trainer import Trainer
+from benchmarking_pipeline.pipeline.logger import Logger
+from benchmarking_pipeline.pipeline.visualizer import Visualizer
+from benchmarking_pipeline.pipeline.data_types import Dataset, PreprocessedData, EvaluationMetrics
 
 from statsmodels.tsa.arima.model import ARIMA
 from sklearn.metrics import mean_absolute_error, mean_squared_error
