@@ -18,10 +18,11 @@ class Evaluator:
         """
         self.config = config if config is not None else {}
         self.metrics_to_calculate = self.config.get('metrics_to_calculate', ['mae', 'rmse'])
-        # target_cols must be explicitly specified in config - no defaults allowed
-        self.target_cols = self.config.get('target_cols')
+        # target_cols must be explicitly specified in dataset config - no defaults allowed
+        dataset_cfg = self.config.get('dataset', {})
+        self.target_cols = dataset_cfg.get('target_cols')
         if not self.target_cols:
-            raise ValueError("target_cols must be defined in config")
+            raise ValueError("target_cols must be defined in dataset configuration")
         
         # maps string names to metric class instances
         self.metric_registry = {

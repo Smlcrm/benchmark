@@ -13,10 +13,11 @@ class FeatureExtractor:
                                      Defaults to None for basic operation.
         """
         self.config = config if config is not None else {}
-        # target_cols must be explicitly specified in config - no defaults allowed
-        self.target_cols = self.config.get('target_cols')
+        # target_cols must be explicitly specified in dataset config - no defaults allowed
+        dataset_cfg = self.config.get('dataset', {})
+        self.target_cols = dataset_cfg.get('target_cols')
         if not self.target_cols:
-            raise ValueError("target_cols must be defined in config")
+            raise ValueError("target_cols must be defined in dataset configuration")
         # For backward compatibility, use first target column as primary target
         self.target_col = self.target_cols[0]
         self.datetime_col = self.config.get('datetime_col', None) # If None, assumes index is datetime
@@ -104,7 +105,49 @@ class FeatureExtractor:
         """
         df = data.copy()
         
-        forecast_horizon = self.config.get('forecast_horizon', 1)
+        # Get forecast_horizon from dataset configuration
+        dataset_cfg = self.config.get('dataset', {})
+        forecast_horizon = dataset_cfg.get('forecast_horizon', 1)
+        df['y_target'] = df[self.target_col].shift(-forecast_horizon)
+
+        # Target lags
+        target_lags = self.config.get('lags_target', [1, 7, 14])
+        if target_lags:
+            df = self._create_lags(df, self.target_col, lags=target_lags)
+
+        # Exogenous lags
+        exogenous_lags = self.config.get('lags_exogenous', [1, 7])
+        if exogenous_lags and self.config.get('exogenous_cols'):
+            for col in self.config.get('exogenous_cols'):
+                df = self._create_lags(df, col, lags=exogenous_lags)
+
+        # Rolling features
+        rolling_configs = self.config.get('rolling_features', [{'window': 7, 'aggs': ['mean', 'std']}])
+        if rolling_configs:
+            df = self._create_rolling_features(df, self.target_col, rolling_configs)
+
+        # Datetime features
+        df = self._create_datetime_features(df)
+
+        # Drop rows with NaN values (from lag creation)
+        df = df.dropna()
+
+        # Extract target variable
+        y = df['y_target'].values
+        X = df.drop(columns=['y_target']).values
+
+        return X, y
+
+    def extract_features_for_sequence(self, data):
+        """
+        Extracts features for sequence models like LSTM, GRU, Transformer.
+        Assumes 'data' is a Pandas DataFrame.
+        """
+        df = data.copy()
+        
+        # Get forecast_horizon from dataset configuration
+        dataset_cfg = self.config.get('dataset', {})
+        forecast_horizon = dataset_cfg.get('forecast_horizon', 1)
         df['y_target'] = df[self.target_col].shift(-forecast_horizon)
 
         # Target lags
@@ -146,56 +189,6 @@ class FeatureExtractor:
         cols_to_drop_from_X = ['y_target', self.target_col] + exog_cols
         X = df.drop(columns=cols_to_drop_from_X, errors='ignore')
         
-        return X, y
-
-    def extract_features_for_sequential(self, data):
-        """
-        Extracts features for LSTM, TCN, Transformer.
-        Outputs X (sequences) and y (targets).
-        Scaling should be done after this.
-        """
-        df = data.copy()
-        sequence_length = self.config.get('sequence_length', 14)
-        forecast_horizon = self.config.get('forecast_horizon', 1)
-        exog_cols = self.config.get('exog_cols', [])
-        
-        # Prepare features for sequencing (datetime, exog)
-        if self.config.get('extract_datetime_features_sequential', True):
-            dt_feature_names = self.config.get('datetime_features_for_sequential', ['month', 'dayofweek'])
-            df_dt_temp = self._create_datetime_features(pd.DataFrame(index=df.index))
-            
-            for col in dt_feature_names:
-                if col in df_dt_temp.columns:
-                    # One-hot encode for neural nets
-                    if df_dt_temp[col].nunique() > 2 and df_dt_temp[col].dtype == 'int64': #簡易的なカテゴリカル判定
-                         dummies = pd.get_dummies(df_dt_temp[col], prefix=col, dummy_na=False)
-                         df = pd.concat([df, dummies], axis=1)
-                    else: # Keep as is if binary or already suitable
-                         df[col] = df_dt_temp[col]
-        
-        feature_columns_for_sequence = [self.target_col]
-        if exog_cols:
-            feature_columns_for_sequence.extend(exog_cols)
-        
-        # Add one-hot encoded datetime features to the list of columns for sequencing
-        dt_one_hot_cols = [c for c in df.columns if any(dt_feat_base in c for dt_feat_base in self.config.get('datetime_features_for_sequential', [])) and c not in feature_columns_for_sequence]
-        feature_columns_for_sequence.extend(dt_one_hot_cols)
-        
-        df_features = df[feature_columns_for_sequence].copy()
-        # Simple fill for NaNs that might be in exog or newly created datetime features
-        df_features = df_features.fillna(method='bfill').fillna(method='ffill').fillna(0)
-
-
-        X_list, y_list = [], []
-        for i in range(len(df_features) - sequence_length - forecast_horizon + 1):
-            X_list.append(df_features.iloc[i : i + sequence_length].values)
-            y_list.append(df_features[self.target_col].iloc[i + sequence_length + forecast_horizon - 1])
-
-        X = np.array(X_list)
-        y = np.array(y_list)
-        
-        print(f"Sequential X shape: {X.shape}, y shape: {y.shape}")
-        print("Remember to scale/normalize X (and y for some models/losses) before training.")
         return X, y
 
     def extract_features_for_prophet(self, data):
@@ -249,7 +242,7 @@ class FeatureExtractor:
             return self.extract_features_for_tabular(data)
             
         elif model_type in ['lstm', 'tcn', 'transformer']:
-            return self.extract_features_for_sequential(data)
+            return self.extract_features_for_sequence(data)
             
         elif model_type == 'prophet':
             return self.extract_features_for_prophet(data)
