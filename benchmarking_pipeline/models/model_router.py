@@ -208,9 +208,8 @@ class ModelRouter:
         if model_name in self.anyvariate_models:
             model_file = models_dir / "anyvariate" / model_name / f"{model_name}_model.py"
         elif model_name in self.multivariate_models:
-            # For multivariate models, check the univariate implementation for class name
-            # (both implementations should have the same class name)
-            model_file = models_dir / "univariate" / model_name / f"{model_name}_model.py"
+            # For multivariate models, check the multivariate implementation for class name
+            model_file = models_dir / "multivariate" / model_name / f"{model_name}_model.py"
         elif model_name in self.univariate_models:
             model_file = models_dir / "univariate" / model_name / f"{model_name}_model.py"
         else:
