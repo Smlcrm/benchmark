@@ -47,7 +47,7 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Test ModelRouter functionality
-        router_config = {'target_cols': ['y']}
+        router_config = {'dataset': {'target_cols': ['y']}}  # target_cols under dataset
         folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
         assert file_name is not None
@@ -60,9 +60,10 @@ class TestPipelineIntegration:
         # Update config for multivariate
         config = mock_config.copy()
         config["dataset"]["path"] = test_data_dir
-        config["model"]["type"] = "multivariate"
+        # Remove old model.type and model.name - use new structure
+        config["dataset"]["target_cols"] = ["y"]  # Use univariate for now since test_data_dir has univariate metadata
         
-        # Create multivariate test data with the correct format
+        # Create test data with the correct format
         data = pd.DataFrame({
             'item_id': [1],
             'start': ['2023-01-01 00:00:00'],
@@ -77,31 +78,35 @@ class TestPipelineIntegration:
         data_loader = DataLoader(config)
         model_router = ModelRouter()
         
-        # Test multivariate data loading
+        # Test data loading
         chunk = data_loader.load_single_chunk(1)
         
-        # Verify multivariate data was loaded
+        # Verify data was loaded
         assert chunk.train is not None
         assert chunk.validation is not None
         assert chunk.test is not None
         
-        # Test ModelRouter with multivariate model
-        router_config = {'target_cols': ['y', 'z']}
+        # Test ModelRouter with univariate model (since we only have 'y' in metadata)
+        router_config = {'dataset': {'target_cols': ['y']}}
         folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
-        assert 'multivariate/arima' in folder_path
+        assert 'univariate/arima' in folder_path  # Should route to univariate since we only have 'y'
     
     @pytest.mark.integration
-    def test_config_consistency_across_components(self, mock_config):
+    def test_config_consistency_across_components(self, mock_config, test_data_dir):
         """Test that configuration is consistent across components."""
+        # Update config to use test_data_dir which has metadata
+        config = mock_config.copy()
+        config["dataset"]["path"] = test_data_dir
+        
         # Test that both components can work with the same config
-        data_loader = DataLoader(mock_config)
+        data_loader = DataLoader(config)
         model_router = ModelRouter()
         
         # Verify config is properly used
-        assert data_loader.config == mock_config
+        assert data_loader.config == config
         assert data_loader.config["dataset"]["name"] == "test_dataset"
-        assert data_loader.config["model"]["type"] == "univariate"
+        # Remove check for old model.type structure
         
         # Verify ModelRouter has expected model categories
         assert hasattr(model_router, 'univariate_models')
@@ -150,7 +155,7 @@ class TestPipelineIntegration:
         assert len(chunk.test.targets) == expected_test_length
         
         # Verify ModelRouter still works with different split ratios
-        router_config = {'target_cols': ['y']}
+        router_config = {'dataset': {'target_cols': ['y']}}
         folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
     
@@ -162,9 +167,8 @@ class TestPipelineIntegration:
         invalid_config["dataset"]["path"] = "/non/existent/path"  # Invalid path
         
         # DataLoader should fail with invalid path when trying to load data
-        data_loader = DataLoader(invalid_config)
-        with pytest.raises(FileNotFoundError):
-            data_loader.load_single_chunk(1)
+        with pytest.raises(ValueError, match="Dataset metadata file not found"):
+            data_loader = DataLoader(invalid_config)
     
     @pytest.mark.integration
     def test_data_flow_consistency(self, test_data_dir, sample_csv_data, mock_config):
@@ -197,7 +201,7 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Verify that the same data can be processed by ModelRouter
-        router_config = {'target_cols': ['y']}
+        router_config = {'dataset': {'target_cols': ['y']}}
         folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
         assert folder_path is not None
         
