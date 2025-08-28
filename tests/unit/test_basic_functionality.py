@@ -26,10 +26,23 @@ class TestBasicFunctionality:
     
     @pytest.mark.unit
     def test_mock_config(self, mock_config):
-        """Test the mock_config fixture specifically."""
+        """Test that mock_config fixture works correctly."""
+        # Test that mock_config has the expected structure
+        assert "dataset" in mock_config
+        assert "model" in mock_config
+        assert "training" in mock_config
+        
+        # Test dataset configuration
         assert mock_config["dataset"]["name"] == "test_dataset"
-        assert mock_config["model"]["type"] == "univariate"
+        assert mock_config["dataset"]["target_cols"] == ["y"]
+        assert mock_config["dataset"]["forecast_horizon"] == [10, 25, 50]
+        
+        # Test model configuration (new structure)
+        assert "test_model" in mock_config["model"]
+        
+        # Test training configuration
         assert mock_config["training"]["epochs"] == 10
+        assert mock_config["training"]["batch_size"] == 32
     
     @pytest.mark.parametrize("input_val,expected", [
         (0, 0),
