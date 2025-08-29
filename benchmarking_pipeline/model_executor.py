@@ -10,6 +10,8 @@ import argparse
 import yaml
 import pickle
 import importlib
+import os
+from datetime import datetime
 
 from benchmarking_pipeline.models.base_model import BaseModel
 from benchmarking_pipeline.models.foundation_model import FoundationModel
@@ -28,6 +30,48 @@ class ModelExecutor:
         self.model_class_name = model_class_name
         # Prepare a results output path if provided via config
         self.result_path = result_path or self.config.get('result_path')
+        
+        # Setup TensorBoard logging like we had before
+        self.setup_tensorboard_logging()
+    
+    def setup_tensorboard_logging(self):
+        """Setup TensorBoard logging with the exact structure we had before."""
+        # Only enable TensorBoard if config specifies tensorboard: true
+        if not self.config.get('tensorboard', False):
+            print("[INFO] TensorBoard logging disabled (tensorboard: false in config)")
+            self.writer = None
+            self.log_dir = None
+            return
+            
+        try:
+            from torch.utils.tensorboard import SummaryWriter
+            
+            # Create runs directory structure like before: runs/MODEL_NAME/TIMESTAMP/train/
+            model_name = self.model_folder_name.split('/')[-1]
+            timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            
+            # Create the exact directory structure we had before
+            runs_dir = "runs"
+            model_runs_dir = os.path.join(runs_dir, model_name)
+            timestamp_dir = os.path.join(model_runs_dir, timestamp)
+            train_dir = os.path.join(timestamp_dir, "train")
+            
+            # Ensure directories exist
+            os.makedirs(train_dir, exist_ok=True)
+            
+            # Create TensorBoard writer
+            self.writer = SummaryWriter(train_dir)
+            self.log_dir = train_dir
+            print(f"[INFO] TensorBoard logging enabled at: {train_dir}")
+            
+        except ImportError:
+            print("[WARNING] TensorBoard not available, logging disabled")
+            self.writer = None
+            self.log_dir = None
+        except Exception as e:
+            print(f"[WARNING] Failed to setup TensorBoard logging: {e}")
+            self.writer = None
+            self.log_dir = None
 
     def run(self):
         # Extract the model name from the folder path for parameter lookup
@@ -133,10 +177,48 @@ class ModelExecutor:
             print(f"{model_name} validation score hyperparameter tuple: {validation_score_hyperparameter_tuple}")
             best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(hyper_grid.keys())}
             print(f"{model_name} best hyperparameters dict: {best_hyperparameters_dict}")
+            
+            # Log hyperparameter search results to TensorBoard like we had before
+            if self.writer:
+                try:
+                    # Log the best validation score
+                    best_score = validation_score_hyperparameter_tuple[0]
+                    self.writer.add_scalar('hyperparameter_search/best_validation_score', best_score, 0)
+                    
+                    # Log each hyperparameter value
+                    for param_name, param_value in best_hyperparameters_dict.items():
+                        if isinstance(param_value, (int, float)):
+                            self.writer.add_scalar(f'hyperparameters/{param_name}', param_value, 0)
+                        else:
+                            self.writer.add_text(f'hyperparameters/{param_name}', str(param_value), 0)
+                    
+                    print(f"[INFO] Logged hyperparameter search results to TensorBoard")
+                except Exception as e:
+                    print(f"[WARNING] Failed to log hyperparameter results to TensorBoard: {e}")
+            
             results = model_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
 
             print(f"{model_name} results: {results}")
             print(f"[SUCCESS] {model_name} execution completed successfully!")
+            
+            # Log final evaluation results to TensorBoard like we had before
+            if self.writer:
+                try:
+                    # Log each metric
+                    for metric_name, metric_value in results.items():
+                        if isinstance(metric_value, (int, float)):
+                            self.writer.add_scalar(f'evaluation/{metric_name}', metric_value, 0)
+                        else:
+                            self.writer.add_text(f'evaluation/{metric_name}', str(metric_value), 0)
+                    
+                    # Log model configuration
+                    self.writer.add_text('model/config', str(self.config), 0)
+                    self.writer.add_text('model/name', model_name, 0)
+                    
+                    print(f"[INFO] Logged final evaluation results to TensorBoard")
+                except Exception as e:
+                    print(f"[WARNING] Failed to log evaluation results to TensorBoard: {e}")
+            
             # Persist results for host process to log to TensorBoard
             if self.result_path:
                 try:
@@ -229,10 +311,48 @@ class ModelExecutor:
             validation_score_hyperparameter_tuple = model_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
             best_hyperparameters_dict = {k: validation_score_hyperparameter_tuple[1][i] for i, k in enumerate(hyper_grid.keys())}
             print(f"{model_name} best hyperparameters dict: {best_hyperparameters_dict}")
+            
+            # Log hyperparameter search results to TensorBoard like we had before
+            if self.writer:
+                try:
+                    # Log the best validation score
+                    best_score = validation_score_hyperparameter_tuple[0]
+                    self.writer.add_scalar('hyperparameter_search/best_validation_score', best_score, 0)
+                    
+                    # Log each hyperparameter value
+                    for param_name, param_value in best_hyperparameters_dict.items():
+                        if isinstance(param_value, (int, float)):
+                            self.writer.add_scalar(f'hyperparameters/{param_name}', param_value, 0)
+                        else:
+                            self.writer.add_text(f'hyperparameters/{param_name}', str(param_value), 0)
+                    
+                    print(f"[INFO] Logged foundation model hyperparameter search results to TensorBoard")
+                except Exception as e:
+                    print(f"[WARNING] Failed to log foundation model hyperparameter results to TensorBoard: {e}")
+            
             results = model_hyperparameter_tuner.final_evaluation(best_hyperparameters_dict, all_dataset_chunks)
 
             print(f"{model_name} results: {results}")
             print(f"[SUCCESS] {model_name} execution completed successfully!")
+            
+            # Log final evaluation results to TensorBoard like we had before
+            if self.writer:
+                try:
+                    # Log each metric
+                    for metric_name, metric_value in results.items():
+                        if isinstance(metric_value, (int, float)):
+                            self.writer.add_scalar(f'evaluation/{metric_name}', metric_value, 0)
+                        else:
+                            self.writer.add_text(f'evaluation/{metric_name}', str(metric_value), 0)
+                    
+                    # Log model configuration
+                    self.writer.add_text('model/config', str(self.config), 0)
+                    self.writer.add_text('model/name', model_name, 0)
+                    
+                    print(f"[INFO] Logged foundation model final evaluation results to TensorBoard")
+                except Exception as e:
+                    print(f"[WARNING] Failed to log foundation model evaluation results to TensorBoard: {e}")
+            
             # Persist results for host process to log to TensorBoard
             if self.result_path:
                 try:
@@ -303,6 +423,18 @@ class ModelExecutor:
                         json.dump(payload, rf)
                 except Exception as write_err:
                     print(f"[WARNING] Failed to write results to {self.result_path}: {write_err}")
+        
+        # Cleanup TensorBoard writer to ensure all logs are flushed
+        self.cleanup()
+
+    def cleanup(self):
+        """Cleanup TensorBoard writer and ensure all logs are flushed."""
+        if self.writer:
+            try:
+                self.writer.close()
+                print(f"[INFO] TensorBoard writer closed, logs saved to: {self.log_dir}")
+            except Exception as e:
+                print(f"[WARNING] Failed to close TensorBoard writer: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Execute a single model in an isolated environment for benchmarking.")

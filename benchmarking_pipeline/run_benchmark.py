@@ -26,6 +26,47 @@ class BenchmarkRunner:
         self.config = config
         self.config_path = config_path
         
+        # Setup TensorBoard logging for benchmark runner like we had before
+        self.setup_tensorboard_logging()
+    
+    def setup_tensorboard_logging(self):
+        """Setup TensorBoard logging for benchmark runner execution."""
+        # Only enable TensorBoard if config specifies tensorboard: true
+        if not self.config.get('tensorboard', False):
+            print("[INFO] Benchmark runner TensorBoard logging disabled (tensorboard: false in config)")
+            self.writer = None
+            self.log_dir = None
+            return
+            
+        try:
+            from torch.utils.tensorboard import SummaryWriter
+            
+            # Create benchmark runner logging directory like before
+            config_file_name = os.path.splitext(os.path.basename(self.config_path))[0] if self.config_path else 'unknown_config'
+            timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            
+            # Create the exact directory structure we had before
+            runs_dir = "runs"
+            benchmark_dir = f"benchmark_runner_{config_file_name}_{timestamp}"
+            benchmark_runs_dir = os.path.join(runs_dir, benchmark_dir)
+            
+            # Ensure directories exist
+            os.makedirs(benchmark_runs_dir, exist_ok=True)
+            
+            # Create TensorBoard writer
+            self.writer = SummaryWriter(benchmark_runs_dir)
+            self.log_dir = benchmark_runs_dir
+            print(f"[INFO] Benchmark runner TensorBoard logging enabled at: {benchmark_runs_dir}")
+            
+        except ImportError:
+            print("[WARNING] TensorBoard not available, benchmark logging disabled")
+            self.writer = None
+            self.log_dir = None
+        except Exception as e:
+            print(f"[WARNING] Failed to setup benchmark TensorBoard logging: {e}")
+            self.writer = None
+            self.log_dir = None
+    
     def _analyze_dataset(self, dataset_chunk):
         """
         Analyze dataset chunk to determine properties for auto-detection.
@@ -198,6 +239,18 @@ class BenchmarkRunner:
             print(f"[INFO] File name: {model_file}")
             print(f"[INFO] Class name: {model_class}")
             
+            # Log model execution start to TensorBoard like we had before
+            if self.writer:
+                try:
+                    self.writer.add_text(f'model_execution/{model_name}/start_time', 
+                                       datetime.datetime.now().isoformat(), 0)
+                    self.writer.add_text(f'model_execution/{model_name}/config', 
+                                       str(full_config_data.get('model', {}).get(model_name, {})), 0)
+                    self.writer.add_scalar(f'model_execution/{model_name}/num_targets', num_targets, 0)
+                    print(f"[INFO] Logged model execution start to TensorBoard")
+                except Exception as e:
+                    print(f"[WARNING] Failed to log model execution start to TensorBoard: {e}")
+            
             requirements_path = f"{model_path}/requirements.txt"
 
             # Prepare a per-model temporary config that injects shared log_dir and per-model run_name
@@ -284,6 +337,16 @@ class BenchmarkRunner:
             except Exception as host_log_err:
                 print(f"[WARNING] Failed to host-log model results: {host_log_err}")
 
+            # Log model execution completion to TensorBoard like we had before
+            if self.writer:
+                try:
+                    self.writer.add_text(f'model_execution/{model_name}/completion_time', 
+                                       datetime.datetime.now().isoformat(), 0)
+                    self.writer.add_scalar(f'model_execution/{model_name}/status', 1, 0)  # 1 = completed
+                    print(f"[INFO] Logged model execution completion to TensorBoard")
+                except Exception as e:
+                    print(f"[WARNING] Failed to log model execution completion to TensorBoard: {e}")
+
             # Get rid of the environment when we're done with the current model.
             # Keep env to avoid re-creation overhead
             print(f"[INFO] Keeping conda environment '{conda_env_name}' for reuse.")
@@ -291,6 +354,29 @@ class BenchmarkRunner:
             
         os.remove(chunk_path)
         print("All model files ran!")
+        
+        # Log benchmark completion and cleanup TensorBoard writer
+        if self.writer:
+            try:
+                self.writer.add_text('benchmark/completion_time', 
+                                   datetime.datetime.now().isoformat(), 0)
+                self.writer.add_scalar('benchmark/total_models', len(model_names), 0)
+                self.writer.add_scalar('benchmark/status', 1, 0)  # 1 = completed
+                print(f"[INFO] Logged benchmark completion to TensorBoard")
+            except Exception as e:
+                print(f"[WARNING] Failed to log benchmark completion to TensorBoard: {e}")
+        
+        # Cleanup TensorBoard writer
+        self.cleanup()
+    
+    def cleanup(self):
+        """Cleanup TensorBoard writer and ensure all logs are flushed."""
+        if self.writer:
+            try:
+                self.writer.close()
+                print(f"[INFO] Benchmark runner TensorBoard writer closed, logs saved to: {self.log_dir}")
+            except Exception as e:
+                print(f"[WARNING] Failed to close benchmark TensorBoard writer: {e}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run benchmarking pipeline with specified config file.")
