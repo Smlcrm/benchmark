@@ -11,11 +11,11 @@ dataset:
 
 model:
   moirai_moe:
-    size: ["small"]
-    psz: [32]
-    bsz: [8]
-    num_samples: [5]
-    pdt: [10]
+    size: ["small", "base"]  # Try both small and base for better performance
+    psz: [16, 32, 64]       # Try different patch sizes for better feature extraction
+    bsz: [8]                 # Keep working batch size
+    num_samples: [5, 10]     # Try more samples for robust predictions
+    pdt: [900]               # Keep working commit prediction length
 
 evaluation:
   type: deterministic

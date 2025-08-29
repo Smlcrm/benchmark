@@ -15,7 +15,7 @@ model:
     psz: [32]
     bsz: [8]
     num_samples: [5]
-    pdt: [10]
+    pdt: [900]
 
 evaluation:
   type: deterministic

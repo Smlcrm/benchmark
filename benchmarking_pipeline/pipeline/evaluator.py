@@ -70,12 +70,14 @@ class Evaluator:
             a = np.asarray(arr)
             if a.ndim == 1:
                 return a
-            # If shape is (time, targets), transpose to (targets, time)
-            if a.shape[0] < a.shape[1]:
-                # ambiguous; keep as is
-                return a
-            else:
+            # For multivariate data: if shape is (time, targets), transpose to (targets, time)
+            # But only if we have multiple targets (more than 1)
+            if a.ndim == 2 and a.shape[1] > 1:
+                # Multiple targets, transpose to (targets, time)
                 return a.T
+            else:
+                # Single target or univariate, keep as is
+                return a
         
         y_predictions = ensure_targets_by_horizon(y_predictions)
         y_true = ensure_targets_by_horizon(y_true)
@@ -106,9 +108,7 @@ class Evaluator:
                 if metric_name == 'mase':
                     if y_train is None:
                         raise ValueError("y_train must be provided for MASE calculation.")
-                    print(f"[DEBUG] Calculating MASE with y_true shape: {y_true.shape}, y_pred shape: {y_predictions.shape}, y_train shape: {y_train.shape}")
                     metric_value = metric(y_true, y_predictions, y_train=y_train)
-                    print(f"[DEBUG] MASE result: {metric_value}")
                 elif metric_name == 'crps':
                     if 'y_pred_dist_samples' not in metric_kwargs:
                         raise ValueError("y_pred_dist_samples must be provided for CRPS calculation.")

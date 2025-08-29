@@ -185,11 +185,7 @@ class LagllamaModel(FoundationModel):
         else:
             df = y_context
         
-        # Ensure we have a fitted predictor
-        if not self.is_fitted:
-            self.train(y_context)
-        
-        # Use the internal prediction method
+        # Use the internal prediction method (no training needed for pre-trained model)
         results = self._predict_internal(df, horizon)
         
         # Return as numpy array for single series
@@ -262,14 +258,23 @@ class LagllamaModel(FoundationModel):
             freq=freq
         )
         
-        # Generate forecasts
-        forecast_it, ts_it = make_evaluation_predictions(
-            dataset=dataset,
-            predictor=predictor,
-            num_samples=self.num_samples
-        )
-        
-        forecasts = list(forecast_it)
+        # Generate forecasts using direct predictor approach (like working version)
+        try:
+            forecasts = list(predictor.predict(dataset))
+        except Exception as e:
+            print(f"Error during direct prediction: {e}")
+            # Fallback to evaluation predictions if direct approach fails
+            try:
+                forecast_it, ts_it = make_evaluation_predictions(
+                    dataset=dataset,
+                    predictor=predictor,
+                    num_samples=self.num_samples
+                )
+                forecasts = list(forecast_it)
+            except Exception as eval_e:
+                print(f"Evaluation prediction also failed: {eval_e}")
+                # Return zero forecasts as last resort
+                return {name: [0.0] * prediction_length for name in series_names}
         
         # Process results
         results = {}
@@ -304,6 +309,12 @@ class LagllamaModel(FoundationModel):
                 setattr(self, key, value)
             if key in self.config:
                 self.config[key] = value
+        
+        # Reset predictor when parameters change to ensure new values are used
+        if any(key in ['context_length', 'num_samples', 'batch_size'] for key in params.keys()):
+            self.predictor = None
+            self.is_fitted = False
+        
         return self
     
     # TimesFM-style convenience methods

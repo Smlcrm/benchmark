@@ -7,6 +7,7 @@ import yaml
 import json
 import pickle
 import tempfile
+import pathlib
 
 # Save to temp file
 
@@ -190,9 +191,7 @@ class BenchmarkRunner:
         model_names = list(full_config_data['model'].keys())
         
         # Import the model router
-        import sys
-        sys.path.append('benchmarking_pipeline')
-        from models.model_router import ModelRouter
+        from benchmarking_pipeline.models.model_router import ModelRouter
         
         # Initialize model router
         model_router = ModelRouter()
@@ -293,7 +292,10 @@ class BenchmarkRunner:
             print(f"[SUCCESS] Dependencies for {conda_env_name} have been installed in the proper conda environment!")
 
             # Install the benchmarking_pipeline package in the model environment
-            subprocess.run(["conda", "run", "-n", conda_env_name, "pip", "install", "-e", "."], check=True)
+            # Install from the root directory of the package where pyproject.toml is located
+            # This file is benchmarking_pipeline/run_benchmark.py, so root is parent of 'benchmarking_pipeline'
+            root_dir = pathlib.Path(__file__).resolve().parent.parent
+            subprocess.run(["conda", "run", "-n", conda_env_name, "pip", "install", "-e", root_dir], check=True)
             print(f"[SUCCESS] Benchmarking pipeline package installed in {conda_env_name} environment!")
 
             # Temp file for model results to be written by subprocess

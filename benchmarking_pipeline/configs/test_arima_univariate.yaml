@@ -12,12 +12,12 @@ dataset:
 
 model:
   arima:
-    p: [0, 1, 2]      # Working univariate config from 3 days ago
-    d: [0, 1]         # Working univariate config from 3 days ago  
-    q: [0, 1, 2]      # Working univariate config from 3 days ago
-    s: [2, 4]         # Working univariate config from 3 days ago
+    p: [0, 1, 2]      # AR order: 0, 1, 2
+    d: [1]             # Only use d=1 (first differencing) - d=0 creates unstable models
+    q: [0, 1, 2]      # MA order: 0, 1, 2
+    s: [2, 4]         # Seasonality period: 2, 4
     training_loss: ["mae"]
-    forecast_horizon: [10]
+    forecast_horizon: [50]
 
 evaluation:
   type: deterministic

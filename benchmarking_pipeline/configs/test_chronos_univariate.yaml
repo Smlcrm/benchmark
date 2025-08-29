@@ -12,10 +12,10 @@ dataset:
 
 model:
   chronos:
-    model_size: ['small']
-    context_length: [8]
-    num_samples: [5]
-    prediction_length: [10]
+    model_size: ['tiny', 'small']  # Try different model sizes
+    context_length: [8, 16, 32]   # Try different context lengths
+    num_samples: [5, 10]           # Try different sample counts
+    prediction_length: [64]        # Use Chronos's recommended maximum
 
 evaluation:
   type: deterministic
