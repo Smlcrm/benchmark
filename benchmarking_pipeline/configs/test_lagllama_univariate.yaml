@@ -2,7 +2,7 @@ test_type: deterministic
 tensorboard: true
 dataset:
   name: bdg-2_bear
-  path: benchmarking_pipeline/datasets/bdg-2_bear
+  path: datasets/bdg-2_bear
   frequency: 30T
   split_ratio: [0.8, 0.1, 0.1]
   normalize: true
@@ -11,10 +11,10 @@ dataset:
 
 model:
   lagllama:
-    context_length: [4]
-    num_samples: [5]
-    batch_size: [4]
-    prediction_length: [10]
+    context_length: [128]
+    num_samples: [100]
+    batch_size: [1]
+    prediction_length: [30]
 
 evaluation:
   type: deterministic

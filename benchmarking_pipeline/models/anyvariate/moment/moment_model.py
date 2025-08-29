@@ -109,6 +109,10 @@ class MomentModel(FoundationModel):
         if y_context is None:
             raise ValueError("y_context is required for MOMENT")
         
+        print(f"DEBUG: y_context type: {type(y_context)}")
+        print(f"DEBUG: y_context shape: {y_context.shape if hasattr(y_context, 'shape') else 'no shape'}")
+        print(f"DEBUG: y_context: {y_context}")
+        
         # Convert to DataFrame format
         if isinstance(y_context, np.ndarray):
             if y_context.ndim == 1:
@@ -118,12 +122,24 @@ class MomentModel(FoundationModel):
         else:
             df = y_context
         
+        print(f"DEBUG: df shape: {df.shape}")
+        print(f"DEBUG: df head:\n{df.head()}")
+        
         # Use the existing fit method
         return self.fit(df, self.forecast_horizon, verbose=True)
 
     def fit(self, df: pd.DataFrame, forecast_horizon: int, verbose: bool = True):
         self._load_model(forecast_horizon)
-        data = df.values.T  # Shape: [n_series, time_steps]
+        print(f"DEBUG: df in fit: {df.shape}")
+        print(f"DEBUG: df head in fit:\n{df.head()}")
+        
+        # The data comes in as (n_targets, time_steps) from DataFrame
+        # We need to convert it to (n_series, time_steps) format for MomentDataset
+        # where each row is a different time series
+        data = df.values  # Shape: [n_targets, time_steps]
+        print(f"DEBUG: data before processing: {data.shape}")
+        print(f"DEBUG: data sample: {data[:, :5] if data.shape[1] >= 5 else data}")
+        
         min_required = self.context_length + forecast_horizon
         if data.shape[1] < min_required:
             raise ValueError(

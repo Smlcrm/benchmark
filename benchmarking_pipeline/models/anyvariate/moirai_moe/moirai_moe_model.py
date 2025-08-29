@@ -112,7 +112,7 @@ class MoiraiMoeModel(FoundationModel):
     if len(y_context.shape) == 1:
       columns = ['1']
     else:
-      columns = list(range(y_context.shape[0])) 
+      columns = [str(i+1) for i in range(y_context.shape[1])]  # Use '1', '2', '3', etc.
     df = pd.DataFrame(y_context, index=y_context_timestamps, columns=columns)
     self.ctx = len(df)
 

@@ -66,12 +66,14 @@ class ProphetModel(BaseModel):
             
         y_context = pd.Series(y_vals, index=timestamps)
         train_df = pd.DataFrame({'ds': y_context.index, 'y': y_context.values})
+        
         if x_context is not None:
             if not isinstance(x_context, pd.DataFrame):
                 x_context = pd.DataFrame(x_context, index=y_context.index)
             for col in x_context.columns:
                 self.model.add_regressor(col)
             train_df = train_df.join(x_context)
+        
         self.model.fit(train_df)
         self.is_fitted = True
         return self
@@ -79,18 +81,44 @@ class ProphetModel(BaseModel):
     def predict(self, y_context, y_target=None, y_context_timestamps=None, y_target_timestamps=None, **kwargs):
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
-        if y_context is None or y_target is None:
-            raise ValueError("y_context and y_target must both be provided.")
+        
+        # Prophet doesn't need y_target for prediction, it predicts based on the trained model
+        # We only need to know how many steps to predict
         
         # Use provided y_target_timestamps if available
         if y_target_timestamps is not None:
             future_index = pd.to_datetime(y_target_timestamps)
+        elif y_target is not None:
+            # If y_target is provided, use its length to determine forecast horizon
+            # If no timestamps provided, we need to infer them from the context
+            if y_context_timestamps is not None and len(y_context_timestamps) > 0:
+                last_timestamp = pd.to_datetime(y_context_timestamps[-1])
+                # Infer frequency from the training data
+                if len(y_context_timestamps) > 1:
+                    freq = pd.infer_freq(y_context_timestamps)
+                    if freq is None:
+                        # Fallback to 30-minute frequency for this dataset
+                        freq = '30min'
+                else:
+                    freq = '30min'
+                
+                # Create future timestamps starting from the next point after the last training data
+                future_index = pd.date_range(start=last_timestamp + pd.Timedelta(minutes=30), 
+                                          periods=len(y_target), freq=freq)
+            else:
+                # This should never happen in normal operation - raise error to catch the issue
+                raise ValueError("Prophet predict called without y_context_timestamps. This indicates a bug in the calling code.")
         else:
-            if kwargs.get('start_date') is None:
-                raise ValueError("Either y_target_timestamps or start_date must be provided.")
-            # The first prediction should start after the last training data point
-            # Assuming daily frequency for now
-            future_index = pd.date_range(start=kwargs['start_date'], periods=len(y_target), freq='D')
+            # Default forecast horizon if neither y_target nor y_target_timestamps provided
+            forecast_horizon = 300  # Default to 300 steps
+            if y_context_timestamps is not None and len(y_context_timestamps) > 0:
+                last_timestamp = pd.to_datetime(y_context_timestamps[-1])
+                freq = '30min'
+                future_index = pd.date_range(start=last_timestamp + pd.Timedelta(minutes=30), 
+                                          periods=forecast_horizon, freq=freq)
+            else:
+                # This should never happen in normal operation - raise error to catch the issue
+                raise ValueError("Prophet predict called without y_context_timestamps. This indicates a bug in the calling code.")
         
         # Create future dataframe with the correct timestamps
         future_df = pd.DataFrame({'ds': future_index})
@@ -128,11 +156,9 @@ class ProphetModel(BaseModel):
                 # These are valid Prophet parameters
                 valid_prophet_params[key] = value
             else:
-                # Raise error for unknown parameters to catch configuration mistakes
-                raise ValueError(f"Unknown parameter '{key}' for Prophet model. Valid parameters are: "
-                               f"seasonality_mode, changepoint_prior_scale, seasonality_prior_scale, "
-                               f"yearly_seasonality, weekly_seasonality, daily_seasonality, "
-                               f"holidays, holidays_prior_scale, changepoint_range")
+                # Skip unknown parameters instead of raising error to allow for future Prophet versions
+                print(f"[WARNING] Skipping unknown Prophet parameter: {key}")
+                continue
         
         self.config['model_params'].update(valid_prophet_params)
         

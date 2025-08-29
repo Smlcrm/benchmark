@@ -75,19 +75,22 @@ class ModelExecutor:
 
     def run(self):
         # Extract the model name from the folder path for parameter lookup
-        # The folder path is now like 'benchmarking_pipeline/models/multivariate/arima'
+        # The folder path is now an absolute path like '/path/to/benchmarking_pipeline/models/multivariate/arima'
         # We need to extract just 'arima' for parameter lookup
         model_name = self.model_folder_name.split('/')[-1]
         
         # Build the module path for import
-        if self.model_folder_name.startswith('benchmarking_pipeline/models/'):
-            # Remove the prefix and convert to module path
-            relative_path = self.model_folder_name.replace('benchmarking_pipeline/models/', '')
+        # The model_folder_name is now an absolute path, so we need to extract the relative part
+        # from the models directory to construct the module path
+        if '/models/' in self.model_folder_name:
+            # Extract the part after 'models/' to get the relative path
+            models_index = self.model_folder_name.find('/models/')
+            relative_path = self.model_folder_name[models_index + 8:]  # +8 to skip '/models/'
             # Replace forward slashes with dots for proper Python module path
             relative_path = relative_path.replace('/', '.')
             module_path = f"benchmarking_pipeline.models.{relative_path}.{self.model_file_name}"
         else:
-            raise ValueError(f"Invalid model folder path: {self.model_folder_name}. Must start with 'benchmarking_pipeline/models/'")
+            raise ValueError(f"Invalid model folder path: {self.model_folder_name}. Must contain '/models/'")
         
         print(f"[INFO] Importing module: {module_path}")
         module = importlib.import_module(module_path)
@@ -246,8 +249,25 @@ class ModelExecutor:
                         colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
                                   '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
                         def _save_plot(y_true_arr, preds_arr, title_suffix):
+                            # DEBUG: Print array shapes and values
+                            print(f"[PLOT DEBUG] y_true_arr shape: {y_true_arr.shape if hasattr(y_true_arr, 'shape') else 'no shape'}")
+                            print(f"[PLOT DEBUG] preds_arr shape: {preds_arr.shape if hasattr(preds_arr, 'shape') else 'no shape'}")
+                            print(f"[PLOT DEBUG] y_true_arr first 5 values: {y_true_arr[:5] if hasattr(y_true_arr, '__getitem__') else y_true_arr}")
+                            print(f"[PLOT DEBUG] preds_arr first 5 values: {preds_arr[:5] if hasattr(preds_arr, '__getitem__') else preds_arr}")
+                            
                             y_true_arr = np.asarray(y_true_arr)
                             preds_arr = np.asarray(preds_arr)
+                            
+                            # DEBUG: Print numpy array shapes after conversion
+                            print(f"[PLOT DEBUG] After np.asarray - y_true_arr shape: {y_true_arr.shape}")
+                            print(f"[PLOT DEBUG] After np.asarray - preds_arr shape: {preds_arr.shape}")
+                            
+                            # Fix: Ensure predictions have the right shape for plotting
+                            if preds_arr.ndim == 2 and preds_arr.shape[0] == 1:
+                                # ARIMA returns (1, 300), convert to (300,)
+                                preds_arr = preds_arr.flatten()
+                                print(f"[PLOT DEBUG] Flattened preds_arr shape: {preds_arr.shape}")
+                            
                             fig, ax = plt.subplots(figsize=(12, 6))
                             if y_true_arr.ndim == 1:
                                 min_len = min(len(y_true_arr), len(preds_arr))
