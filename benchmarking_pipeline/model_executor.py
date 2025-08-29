@@ -13,18 +13,21 @@ import importlib
 
 from benchmarking_pipeline.models.base_model import BaseModel
 from benchmarking_pipeline.models.foundation_model import FoundationModel
+import json
 
 from benchmarking_pipeline.trainer.hyperparameter_tuning import HyperparameterTuner
 from benchmarking_pipeline.trainer.foundation_model_tuning import FoundationModelTuner
 
 class ModelExecutor:
 
-    def __init__(self, config, chunk_path, model_folder_name, model_file_name, model_class_name):
+    def __init__(self, config, chunk_path, model_folder_name, model_file_name, model_class_name, result_path=None):
         self.config = config
         self.chunk_path = chunk_path
         self.model_folder_name = model_folder_name
         self.model_file_name = model_file_name
         self.model_class_name = model_class_name
+        # Prepare a results output path if provided via config
+        self.result_path = result_path or self.config.get('result_path')
 
     def run(self):
         # Extract the model name from the folder path for parameter lookup
@@ -40,8 +43,7 @@ class ModelExecutor:
             relative_path = relative_path.replace('/', '.')
             module_path = f"benchmarking_pipeline.models.{relative_path}.{self.model_file_name}"
         else:
-            # Fallback for backward compatibility
-            module_path = f"benchmarking_pipeline.models.{self.model_folder_name}.{self.model_file_name}"
+            raise ValueError(f"Invalid model folder path: {self.model_folder_name}. Must start with 'benchmarking_pipeline/models/'")
         
         print(f"[INFO] Importing module: {module_path}")
         module = importlib.import_module(module_path)
@@ -49,25 +51,60 @@ class ModelExecutor:
         print(f"[INFO] Executing {model_name} model...")
         
         with open(self.chunk_path, 'rb') as f:
-          all_dataset_chunks = pickle.load(f)
+          serializable_chunks = pickle.load(f)
         
-        # Get the base hyperparameter grid for this model
-        base_hyper_grid = config['model'][model_name] or {}
+        # Reconstruct Dataset objects from serializable chunks
+        from benchmarking_pipeline.pipeline.data_types import Dataset, DatasetSplit
+        import numpy as np
         
-        # Automatically inject forecast_horizon from dataset config into the hyperparameter grid
-        dataset_forecast_horizons = config['dataset'].get('forecast_horizon', [1])
-        if isinstance(dataset_forecast_horizons, list):
-            # Create a copy of the base hyper grid and add forecast_horizon
-            hyper_grid = base_hyper_grid.copy()
-            hyper_grid['forecast_horizon'] = dataset_forecast_horizons
-            print(f"[INFO] Auto-injected forecast_horizon: {dataset_forecast_horizons}")
-        else:
-            # Single value case
-            hyper_grid = base_hyper_grid.copy()
-            hyper_grid['forecast_horizon'] = [dataset_forecast_horizons]
-            print(f"[INFO] Auto-injected forecast_horizon: {[dataset_forecast_horizons]}")
+        all_dataset_chunks = []
+        for chunk_data in serializable_chunks:
+            # Convert back to numpy arrays and reconstruct Dataset objects
+            # For univariate data, ensure targets are 1D arrays (time series)
+            train_targets = np.array(chunk_data['train']['targets'])
+            if train_targets.ndim == 2 and train_targets.shape[0] == 1:
+                # If shape is (1, time_steps), squeeze to (time_steps,)
+                train_targets = train_targets.squeeze()
+            
+            validation_targets = np.array(chunk_data['validation']['targets'])
+            if validation_targets.ndim == 2 and validation_targets.shape[0] == 1:
+                validation_targets = validation_targets.squeeze()
+            
+            test_targets = np.array(chunk_data['test']['targets'])
+            if test_targets.ndim == 2 and test_targets.shape[0] == 1:
+                test_targets = test_targets.squeeze()
+            
+            train_split = DatasetSplit(
+                targets=train_targets,
+                features=np.array(chunk_data['train']['features']) if chunk_data['train']['features'] is not None else None,
+                timestamps=np.array(chunk_data['train']['timestamps'])
+            )
+            
+            validation_split = DatasetSplit(
+                targets=validation_targets,
+                features=np.array(chunk_data['validation']['features']) if chunk_data['validation']['features'] is not None else None,
+                timestamps=np.array(chunk_data['validation']['timestamps'])
+            )
+            
+            test_split = DatasetSplit(
+                targets=test_targets,
+                features=np.array(chunk_data['test']['features']) if chunk_data['test']['features'] is not None else None,
+                timestamps=np.array(chunk_data['test']['timestamps'])
+            )
+            
+            dataset = Dataset(
+                train=train_split,
+                validation=validation_split,
+                test=test_split,
+                name=chunk_data['name'],
+                metadata=chunk_data['metadata']
+            )
+            all_dataset_chunks.append(dataset)
         
-        print(f"[INFO] Final hyperparameter grid for {model_name}: {hyper_grid}")
+        # Get the hyperparameter grid for this model (no auto-injection)
+        hyper_grid = self.config['model'][model_name] or {}
+        
+        print(f"[INFO] Hyperparameter grid for {model_name}: {hyper_grid}")
         
         if issubclass(model_class, BaseModel):
             print(f"{model_name} is a Base Model!")
@@ -78,11 +115,18 @@ class ModelExecutor:
             print(f"{model_name} hyper grid: {hyper_grid}")
 
             model_params = {k: v[0] if isinstance(v, list) else v for k, v in hyper_grid.items()}
-            # Include dataset configuration for target_cols access
-            model_params['dataset'] = config['dataset']
+            # Include dataset configuration for other parameters
+            model_params['dataset'] = self.config['dataset']
             print(f"{model_name} initial model_params: {model_params}")
 
-            base_model = model_class(model_params)
+            # Create a full config that includes evaluation metrics
+            full_config = self.config.copy()
+            # Update the model section with the current model parameters
+            if 'model' not in full_config:
+                full_config['model'] = {}
+            full_config['model'][model_name] = model_params
+
+            base_model = model_class(full_config)
 
             model_hyperparameter_tuner = HyperparameterTuner(base_model, hyper_grid, False)
             validation_score_hyperparameter_tuple = model_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
@@ -93,6 +137,74 @@ class ModelExecutor:
 
             print(f"{model_name} results: {results}")
             print(f"[SUCCESS] {model_name} execution completed successfully!")
+            # Persist results for host process to log to TensorBoard
+            if self.result_path:
+                try:
+                    payload = {
+                        "model": model_name,
+                        "best_hyperparameters": best_hyperparameters_dict,
+                        "metrics": results,
+                    }
+                    # Try to create forecast plots for validation and test from last chunk
+                    try:
+                        last_chunk = all_dataset_chunks[-1]
+                        y_context = last_chunk.train.targets
+                        y_val = last_chunk.validation.targets
+                        y_test = last_chunk.test.targets
+                        trained_model = model_hyperparameter_tuner.model_class
+                        # Predict on validation
+                        preds_val = trained_model.predict(y_context=y_context, y_target=y_val)
+                        # Predict on test using train+val as context when applicable
+                        import numpy as np
+                        y_ctx_plus_val = np.concatenate([y_context, y_val]) if y_context is not None and y_val is not None else y_context
+                        preds_test = trained_model.predict(y_context=y_ctx_plus_val, y_target=y_test)
+                        import matplotlib
+                        matplotlib.use('Agg')
+                        import matplotlib.pyplot as plt
+                        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+                                  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+                        def _save_plot(y_true_arr, preds_arr, title_suffix):
+                            y_true_arr = np.asarray(y_true_arr)
+                            preds_arr = np.asarray(preds_arr)
+                            fig, ax = plt.subplots(figsize=(12, 6))
+                            if y_true_arr.ndim == 1:
+                                min_len = min(len(y_true_arr), len(preds_arr))
+                                ax.plot(y_true_arr[:min_len], color=colors[0], label='True', linewidth=2)
+                                ax.plot(preds_arr[:min_len], color=colors[1], label='Predicted', linewidth=2, linestyle='--', alpha=0.9)
+                            else:
+                                num_targets = y_true_arr.shape[1]
+                                for i in range(num_targets):
+                                    c_true = colors[i % len(colors)]
+                                    ax.plot(y_true_arr[:, i], color=c_true, label=f'True Target {i}', linewidth=2, alpha=0.8)
+                                    if preds_arr.ndim == 1 and i == 0:
+                                        ax.plot(preds_arr, color=colors[(i+1) % len(colors)], label=f'Predicted Target {i}', linewidth=2, linestyle='--', alpha=0.9)
+                                    elif preds_arr.ndim == 2 and i < preds_arr.shape[1]:
+                                        pred_vals = preds_arr[:, i]
+                                        if not np.all(np.isnan(pred_vals)):
+                                            ax.plot(pred_vals, color=colors[(i+1) % len(colors)], label=f'Predicted Target {i}', linewidth=2, linestyle='--', alpha=0.9)
+                            ax.set_title(f'{model_name} Predictions vs True Values ({title_suffix})', fontsize=14, fontweight='bold')
+                            ax.set_xlabel('Time Steps', fontsize=12)
+                            ax.set_ylabel('Values', fontsize=12)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                            plt.tight_layout()
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_png:
+                                p = tmp_png.name
+                            fig.savefig(p)
+                            plt.close(fig)
+                            return p
+                        plot_val = _save_plot(y_true_arr=y_val, preds_arr=preds_val, title_suffix='Validation')
+                        plot_test = _save_plot(y_true_arr=y_test, preds_arr=preds_test, title_suffix='Test')
+                        payload["forecast_plot_val_path"] = plot_val
+                        payload["forecast_plot_test_path"] = plot_test
+                    except Exception as e:
+                        print(f"[WARNING] Failed to create forecast plots: {e}")
+
+                    with open(self.result_path, 'w') as rf:
+                        json.dump(payload, rf)
+                except Exception as write_err:
+                    print(f"[WARNING] Failed to write results to {self.result_path}: {write_err}")
         elif issubclass(model_class, FoundationModel):
             print(f"{model_name} is a Foundation Model!")
             
@@ -101,10 +213,17 @@ class ModelExecutor:
                 print(f"[INFO] {model_name} has no parameters, using empty hyper_grid")
             
             model_params = {k: v[0] if isinstance(v, list) else v for k, v in hyper_grid.items()}
-            # Include dataset configuration for target_cols access
-            model_params['dataset'] = config['dataset']
+            # Include dataset configuration for other parameters
+            model_params['dataset'] = self.config['dataset']
 
-            foundation_model = model_class(model_params)
+            # Create a full config that includes evaluation metrics (like we do for base models)
+            full_config = self.config.copy()
+            # Update the model section with the current model parameters
+            if 'model' not in full_config:
+                full_config['model'] = {}
+            full_config['model'][model_name] = model_params
+
+            foundation_model = model_class(full_config)
 
             model_hyperparameter_tuner = FoundationModelTuner(foundation_model, hyper_grid, False)
             validation_score_hyperparameter_tuple = model_hyperparameter_tuner.hyperparameter_grid_search_several_time_series(all_dataset_chunks)
@@ -114,6 +233,76 @@ class ModelExecutor:
 
             print(f"{model_name} results: {results}")
             print(f"[SUCCESS] {model_name} execution completed successfully!")
+            # Persist results for host process to log to TensorBoard
+            if self.result_path:
+                try:
+                    payload = {
+                        "model": model_name,
+                        "best_hyperparameters": best_hyperparameters_dict,
+                        "metrics": results,
+                    }
+                    # Create plots using last chunk (validation and test)
+                    try:
+                        last_chunk = all_dataset_chunks[-1]
+                        y_context = last_chunk.train.targets
+                        y_val = last_chunk.validation.targets
+                        y_test = last_chunk.test.targets
+                        trained_model = model_hyperparameter_tuner.model_class
+                        import numpy as np
+                        preds_val = trained_model.predict(y_context=y_context, y_target=y_val,
+                                                          y_context_timestamps=last_chunk.train.timestamps,
+                                                          y_target_timestamps=last_chunk.validation.timestamps)
+                        y_ctx_plus_val = np.concatenate([y_context, y_val]) if y_context is not None and y_val is not None else y_context
+                        preds_test = trained_model.predict(y_context=y_ctx_plus_val, y_target=y_test,
+                                                           y_context_timestamps=np.concatenate([last_chunk.train.timestamps, last_chunk.validation.timestamps]),
+                                                           y_target_timestamps=last_chunk.test.timestamps)
+                        import matplotlib
+                        matplotlib.use('Agg')
+                        import matplotlib.pyplot as plt
+                        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+                                  '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+                        def _save_plot(y_true_arr, preds_arr, title_suffix):
+                            y_true_arr = np.asarray(y_true_arr)
+                            preds_arr = np.asarray(preds_arr)
+                            fig, ax = plt.subplots(figsize=(12, 6))
+                            if y_true_arr.ndim == 1:
+                                min_len = min(len(y_true_arr), len(preds_arr))
+                                ax.plot(y_true_arr[:min_len], color=colors[0], label='True', linewidth=2)
+                                ax.plot(preds_arr[:min_len], color=colors[1], label='Predicted', linewidth=2, linestyle='--', alpha=0.9)
+                            else:
+                                num_targets = y_true_arr.shape[1]
+                                for i in range(num_targets):
+                                    c_true = colors[i % len(colors)]
+                                    ax.plot(y_true_arr[:, i], color=c_true, label=f'True Target {i}', linewidth=2, alpha=0.8)
+                                    if preds_arr.ndim == 1 and i == 0:
+                                        ax.plot(preds_arr, color=colors[(i+1) % len(colors)], label=f'Predicted Target {i}', linewidth=2, linestyle='--', alpha=0.9)
+                                    elif preds_arr.ndim == 2 and i < preds_arr.shape[1]:
+                                        pred_vals = preds_arr[:, i]
+                                        if not np.all(np.isnan(pred_vals)):
+                                            ax.plot(pred_vals, color=colors[(i+1) % len(colors)], label=f'Predicted Target {i}', linewidth=2, linestyle='--', alpha=0.9)
+                            ax.set_title(f'{model_name} Predictions vs True Values ({title_suffix})', fontsize=14, fontweight='bold')
+                            ax.set_xlabel('Time Steps', fontsize=12)
+                            ax.set_ylabel('Values', fontsize=12)
+                            ax.grid(True, alpha=0.3)
+                            ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+                            plt.tight_layout()
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_png:
+                                p = tmp_png.name
+                            fig.savefig(p)
+                            plt.close(fig)
+                            return p
+                        plot_val = _save_plot(y_true_arr=y_val, preds_arr=preds_val, title_suffix='Validation')
+                        plot_test = _save_plot(y_true_arr=y_test, preds_arr=preds_test, title_suffix='Test')
+                        payload["forecast_plot_val_path"] = plot_val
+                        payload["forecast_plot_test_path"] = plot_test
+                    except Exception as e:
+                        print(f"[WARNING] Failed to create forecast plots (foundation): {e}")
+
+                    with open(self.result_path, 'w') as rf:
+                        json.dump(payload, rf)
+                except Exception as write_err:
+                    print(f"[WARNING] Failed to write results to {self.result_path}: {write_err}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Execute a single model in an isolated environment for benchmarking.")
@@ -122,6 +311,7 @@ if __name__ == "__main__":
     parser.add_argument('--model_folder_name', type=str, help='Name of the model folder to reference.')
     parser.add_argument('--model_file_name', type=str, help='Name of the model file containing the model class.')
     parser.add_argument('--model_class_name', type=str, help='Name of the model class to instantiate.')
+    parser.add_argument('--result_path', type=str, help='Path to write JSON results for host logging.')
     args = parser.parse_args()
     config_path = args.config
     with open(config_path, 'r') as f:
@@ -130,7 +320,8 @@ if __name__ == "__main__":
                                    chunk_path=args.chunk_path, 
                                    model_folder_name=args.model_folder_name,
                                    model_file_name=args.model_file_name,
-                                   model_class_name=args.model_class_name)
+                                   model_class_name=args.model_class_name,
+                                   result_path=args.result_path)
     print(f"[INFO] Config: {args.config}")
     print(f"[INFO] Chunk Path: {args.chunk_path}")
     print(f"[INFO] Model Folder: {args.model_folder_name}")

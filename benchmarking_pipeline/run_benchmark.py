@@ -36,36 +36,30 @@ class BenchmarkRunner:
         Returns:
             Dictionary with dataset analysis information
         """
-        # Get target_cols from dataset config
-        target_cols_cfg = self.config.get('dataset', {}).get('target_cols')
-        if not target_cols_cfg:
-            raise ValueError("target_cols must be defined in dataset configuration")
-
         # Use training targets to determine number of target columns
         train_targets = dataset_chunk.train.targets
         if train_targets is None:
             raise ValueError("Dataset analysis failed: train.targets is None")
-        if not hasattr(train_targets, 'shape') or len(getattr(train_targets, 'shape')) < 2:
-            raise ValueError("Dataset analysis failed: train.targets has no valid 2D shape")
-
-        # Use configured target_cols length
-        target_columns = len(target_cols_cfg)
+        if hasattr(train_targets, 'shape'):
+            num_targets = train_targets.shape[1] if len(getattr(train_targets, 'shape')) > 1 else 1
+        else:
+            num_targets = 1
 
         # Basic shape info of targets
         data_shape = train_targets.shape
         total_columns = data_shape[1]
 
         # More sophisticated detection could be added here
-        has_multiple_targets = target_columns > 1
+        has_multiple_targets = num_targets > 1
         
         dataset_info = {
-            'target_columns': target_columns,
+            'num_targets': num_targets,
             'total_columns': total_columns,
             'has_multiple_targets': has_multiple_targets,
             'data_shape': data_shape
         }
         
-        print(f"[DEBUG] Dataset analysis: shape={dataset_info['data_shape']}, targets={target_columns}")
+        print(f"[DEBUG] Dataset analysis: shape={dataset_info['data_shape']}, targets={num_targets}")
         return dataset_info
     
     def run(self):
@@ -80,27 +74,27 @@ class BenchmarkRunner:
         dataset_name = dataset_cfg['name']
         split_ratio = dataset_cfg.get('split_ratio', [0.8, 0.1, 0.1])
 
-        # Load config first so data loader can access target_cols
+        # Load config first so data loader can access dataset parameters
         config_path = self.config_path
         with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
+            full_config_data = yaml.safe_load(f)
         
         # Use 'chunks' from config, default to 1 if not present
         num_chunks = dataset_cfg.get('chunks', 1)
         
-        # Create full config for data loader (includes model parameters with target_cols)
+        # Create full config for data loader
+        # All data is treated as multivariate where univariate is just num_targets == 1
         full_config = {
             "dataset": {
                 "path": dataset_path,
                 "name": dataset_name,
                 "split_ratio": split_ratio,
-                "target_cols": dataset_cfg.get('target_cols'),
                 "forecast_horizon": dataset_cfg.get('forecast_horizon'),
                 "frequency": dataset_cfg.get('frequency'),
                 "normalize": dataset_cfg.get('normalize', False),
                 "handle_missing": dataset_cfg.get('handle_missing', 'interpolate')
             },
-            "model": config.get('model', {})  # Include model parameters with target_cols
+            "model": full_config_data.get('model', {})
         }
         
         data_loader = DataLoader(full_config)
@@ -110,9 +104,33 @@ class BenchmarkRunner:
         preprocessor = Preprocessor({"dataset": {"normalize": dataset_cfg.get('normalize', False)}})
         all_dataset_chunks = [preprocessor.preprocess(chunk).data for chunk in all_dataset_chunks]
 
+        # Convert Dataset objects to serializable dictionaries to avoid module import issues
+        serializable_chunks = []
+        for chunk in all_dataset_chunks:
+            serializable_chunk = {
+                'train': {
+                    'targets': chunk.train.targets.values.tolist() if hasattr(chunk.train.targets, 'values') else chunk.train.targets.tolist(),
+                    'features': chunk.train.features.values.tolist() if chunk.train.features is not None and hasattr(chunk.train.features, 'values') else chunk.train.features,
+                    'timestamps': chunk.train.timestamps.tolist() if hasattr(chunk.train.timestamps, 'tolist') else list(chunk.train.timestamps)
+                },
+                'validation': {
+                    'targets': chunk.validation.targets.values.tolist() if hasattr(chunk.validation.targets, 'values') else chunk.validation.targets.tolist(),
+                    'features': chunk.validation.features.values.tolist() if chunk.validation.features is not None and hasattr(chunk.validation.features, 'values') else chunk.validation.features,
+                    'timestamps': chunk.validation.timestamps.tolist() if hasattr(chunk.validation.timestamps, 'tolist') else list(chunk.validation.timestamps)
+                },
+                'test': {
+                    'targets': chunk.test.targets.values.tolist() if hasattr(chunk.test.targets, 'values') else chunk.test.targets.tolist(),
+                    'features': chunk.test.features.values.tolist() if chunk.test.features is not None and hasattr(chunk.test.features, 'values') else chunk.test.features,
+                    'timestamps': chunk.test.timestamps.tolist() if hasattr(chunk.test.timestamps, 'tolist') else list(chunk.test.timestamps)
+                },
+                'name': chunk.name,
+                'metadata': chunk.metadata
+            }
+            serializable_chunks.append(serializable_chunk)
+
         # Temporary file to access data across different subprocesses
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp:
-          pickle.dump(all_dataset_chunks, tmp)
+          pickle.dump(serializable_chunks, tmp)
           chunk_path = tmp.name
           print("[DEBUG] Temporary file path", chunk_path)
 
@@ -127,70 +145,148 @@ class BenchmarkRunner:
             print(f"[DEBUG] First chunk train targets shape: {targets_shape}")
             print(f"[DEBUG] First chunk train features shape: {features_shape}")
 
-        # Load config
-        # config_path = self.config_path
-        # with open(config_path, 'r') as f:
-        #     config = yaml.safe_load(f)
-        # Get model names directly from the model section (no more parameters level)
-        model_names = list(config['model'].keys())
-
+        # Get model names directly from the model section
+        model_names = list(full_config_data['model'].keys())
+        
         # Import the model router
-        from benchmarking_pipeline.models.model_router import ModelRouter
+        import sys
+        sys.path.append('benchmarking_pipeline')
+        from models.model_router import ModelRouter
         
         # Initialize model router
         model_router = ModelRouter()
         
         # Run each model we have individually
+        # Establish a shared, absolute TensorBoard base directory
+        base_log_dir = full_config_data.get('log_dir', 'logs/tensorboard')
+        base_log_dir = os.path.abspath(base_log_dir)
+        os.makedirs(base_log_dir, exist_ok=True)
+
         for model_spec in model_names:
             # Parse the model specification (e.g., 'arima', 'chronos')
             model_name = model_router.parse_model_spec(model_spec)
             
             # Get parameters for the base model name (without variant)
-            if model_name in config['model']:
-                model_params = config['model'][model_name]
+            if model_name in full_config_data['model']:
+                model_params = full_config_data['model'][model_name]
             else:
-                print(f"[WARNING] No parameters found for {model_name}, using defaults")
-                model_params = {}
+                raise ValueError(f"No parameters found for {model_name}. Please check your configuration.")
             
-            # Get the appropriate model path with auto-detection
-            folder_path, model_file_name, model_class_name = model_router.get_model_path_with_auto_detection(
-                model_name, config
+            # Analyze dataset to determine target structure
+            dataset_chunk = data_loader.load_single_chunk(1)
+            
+            # Infer target structure from data
+            # All data is treated as multivariate where univariate is just num_targets == 1
+            if dataset_chunk.metadata and 'num_targets' in dataset_chunk.metadata:
+                num_targets = dataset_chunk.metadata['num_targets']
+            else:
+                raise ValueError("Dataset metadata missing num_targets. Cannot determine target structure.")
+            
+            print(f"Dataset has {num_targets} target variable(s)")
+            print(f"Note: All data is treated as multivariate where univariate is just num_targets == 1")
+            
+            # Get model path based on inferred target count
+            # The model router now treats univariate as a special case of multivariate
+            model_path, model_file, model_class = model_router.get_model_path_by_target_count(
+                model_name, num_targets
             )
             
             print(f"[INFO] Processing model: {model_spec}")
             print(f"[INFO] Model name: {model_name}")
-            print(f"[INFO] Target columns: {config['dataset']['target_cols']}")
-            print(f"[INFO] Folder path: {folder_path}")
-            print(f"[INFO] File name: {model_file_name}")
-            print(f"[INFO] Class name: {model_class_name}")
+            print(f"[INFO] Num targets: {num_targets}")
+            print(f"[INFO] Folder path: {model_path}")
+            print(f"[INFO] File name: {model_file}")
+            print(f"[INFO] Class name: {model_class}")
             
-            requirements_path = f"{folder_path}/requirements.txt"
+            requirements_path = f"{model_path}/requirements.txt"
+
+            # Prepare a per-model temporary config that injects shared log_dir and per-model run_name
+            temp_config = full_config_data.copy()
+            temp_config['log_dir'] = base_log_dir
+            temp_config['run_name'] = model_name
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".yaml", mode='w') as tmp_cfg:
+                yaml.safe_dump(temp_config, tmp_cfg)
+                temp_config_path = tmp_cfg.name
 
             # Create conda environment name based on model name to avoid conflicts
             conda_env_name = model_name
 
             # Something on my mind: uv could probably make this process a LOT quicker - definitely something to explore.
         
-            # Create the conda environment.
-            subprocess.run(["conda", "create", "-n", conda_env_name, "python=3.10", "-y"], check=True)
-            print(f"[SUCCESS] Conda environment for {conda_env_name} has been made!")
+            # Create the conda environment if it doesn't already exist.
+            try:
+                # Check if environment exists using conda env list
+                result = subprocess.run([
+                    "conda", "env", "list"
+                ], check=True, capture_output=True, text=True)
+                
+                # Check if our environment name appears in the list
+                env_exists = conda_env_name in result.stdout
+                
+                if not env_exists:
+                    subprocess.run(["conda", "create", "-n", conda_env_name, "python=3.10", "-y"], check=True)
+                    print(f"[SUCCESS] Conda environment for {conda_env_name} has been made!")
+                else:
+                    print(f"[INFO] Conda environment '{conda_env_name}' already exists. Skipping creation.")
+                    
+            except subprocess.CalledProcessError:
+                # If conda env list fails, try to create the environment anyway
+                print(f"[WARNING] Could not check existing environments, attempting to create {conda_env_name}")
+                subprocess.run(["conda", "create", "-n", conda_env_name, "python=3.10", "-y"], check=True)
+                print(f"[SUCCESS] Conda environment for {conda_env_name} has been made!")
 
             # Install the dependencies of the corresponding model without activating the model.
             subprocess.run(["conda", "run", "-n", conda_env_name, "pip", "install", "-r", requirements_path], check=True)
             print(f"[SUCCESS] Dependencies for {conda_env_name} have been installed in the proper conda environment!")
 
+            # Install the benchmarking_pipeline package in the model environment
+            subprocess.run(["conda", "run", "-n", conda_env_name, "pip", "install", "-e", "."], check=True)
+            print(f"[SUCCESS] Benchmarking pipeline package installed in {conda_env_name} environment!")
+
+            # Temp file for model results to be written by subprocess
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp_res:
+                result_path = tmp_res.name
+
             subprocess.run([
-                "conda", "run", "-n", conda_env_name, "python3", "-m", "benchmarking_pipeline.model_executor",
-                "--config", args.config,
+                "conda", "run", "-n", conda_env_name, "python", "-m", "benchmarking_pipeline.model_executor",
+                "--config", temp_config_path,
                 "--chunk_path", chunk_path,
-                "--model_folder_name", folder_path,
-                "--model_file_name", model_file_name,
-                "--model_class_name", model_class_name
+                "--model_folder_name", model_path,
+                "--model_file_name", model_file,
+                "--model_class_name", model_class,
+                "--result_path", result_path
             ], check=True)
 
+            # Read back results and log to host TensorBoard
+            try:
+                with open(result_path, 'r') as rf:
+                    payload = json.load(rf)
+                # Lazy import to avoid TF in model envs
+                from benchmarking_pipeline.pipeline.logger import Logger
+                host_logger = Logger({"log_dir": base_log_dir, "run_name": model_name})
+                host_logger.log_hparams({**payload.get("best_hyperparameters", {}), "model": model_name}, payload.get("metrics", {}))
+                host_logger.log_metrics(payload.get("metrics", {}), step=1, model_name=model_name)
+                # If subprocess produced plots, log them as images
+                plot_val = payload.get("forecast_plot_val_path")
+                plot_test = payload.get("forecast_plot_test_path")
+                if plot_val and os.path.exists(plot_val):
+                    host_logger.log_image_file(plot_val, tag=f"{model_name}/forecast_validation", step=1)
+                    try:
+                        os.remove(plot_val)
+                    except Exception:
+                        pass
+                if plot_test and os.path.exists(plot_test):
+                    host_logger.log_image_file(plot_test, tag=f"{model_name}/forecast_test", step=1)
+                    try:
+                        os.remove(plot_test)
+                    except Exception:
+                        pass
+            except Exception as host_log_err:
+                print(f"[WARNING] Failed to host-log model results: {host_log_err}")
+
             # Get rid of the environment when we're done with the current model.
-            subprocess.run(["conda", "remove", "-n", conda_env_name, "--all", "-y"], check=True)
-            print(f"[SUCCESS] Conda environment for {conda_env_name} has been deleted!")
+            # Keep env to avoid re-creation overhead
+            print(f"[INFO] Keeping conda environment '{conda_env_name}' for reuse.")
 
             
         os.remove(chunk_path)
