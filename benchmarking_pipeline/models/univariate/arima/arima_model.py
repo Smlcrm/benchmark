@@ -100,11 +100,8 @@ class ArimaModel(BaseModel):
         
         # Use seasonal_order only if seasonal period is greater than 1
         if self.s > 1:
-            model = ARIMA(
-                endog=endog, 
-                seasonal_order=(self.p, self.d, self.q, self.s), 
-                exog=exog
-            )
+            model = ARIMA(endog=endog, order=(self.p, self.d, self.q), 
+                         seasonal_order=(0, 0, 0, self.s), exog=exog)
         else:
             # Non-seasonal ARIMA
             model = ARIMA(endog=endog, order=(self.p, self.d, self.q), exog=exog)
@@ -154,15 +151,8 @@ class ArimaModel(BaseModel):
         # Generate forecast
         forecast = self.model_.forecast(steps=forecast_steps, exog=exog)
         
-        # Store predictions and true values for evaluation
-        # Convert forecast to numpy array and reshape (simplified like working version)
-        if hasattr(forecast, 'values'):
-            forecast_array = forecast.values
-        else:
-            forecast_array = np.array(forecast)
-        
-        # Store predictions and true values for evaluation (simplified)
-        self._last_y_pred = forecast_array.reshape(1, -1)
+        # Store predictions and true values for evaluation (simplified like working version)
+        self._last_y_pred = forecast.reshape(1, -1)
         if y_target is not None:
             self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
         
