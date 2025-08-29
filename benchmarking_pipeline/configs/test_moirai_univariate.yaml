@@ -1,0 +1,22 @@
+test_type: deterministic
+tensorboard: true
+dataset:
+  name: bdg-2_bear
+  path: benchmarking_pipeline/datasets/bdg-2_bear
+  frequency: 30T
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: True
+  handle_missing: interpolate
+  chunks: 3
+
+model:
+  moirai:
+    size: ["small"]
+    psz: [32]
+    bsz: [8]
+    num_samples: [5]
+    pdt: [10]
+
+evaluation:
+  type: deterministic
+  metrics: [mae, mase, rmse]

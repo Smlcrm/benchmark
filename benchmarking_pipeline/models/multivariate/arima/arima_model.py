@@ -32,24 +32,19 @@ class MultivariateARIMAModel(BaseModel):
                 - p: int, VAR order (autoregressive order)
                 - d: int, differencing order for stationarity
                 - maxlags: int, maximum number of lags to consider
-                - target_cols: list of str, names of target columns (for multivariate)
-                - loss_functions: List[str], list of loss function names to use
-                - primary_loss: str, primary loss function for training
+                - training_loss: str, primary loss function for training
                 - forecast_horizon: int, number of steps to forecast ahead
             config_file: Path to a JSON configuration file
         """
         super().__init__(config, config_file)
-        self.p = int(self.config.get('p', 1))
-        self.d = int(self.config.get('d', 1))
-        self.maxlags = int(self.config.get('maxlags', 10))
-        # target_cols is inherited from parent class (BaseModel/FoundationModel)
-        self.forecast_horizon = int(self.config.get('forecast_horizon', 1))
-        self.model = None
-        self.fitted_model = None
-        # n_targets will be calculated when needed: len(self.target_cols)
-        self.differenced_data = None
-        self.original_data = None
-        self.is_fitted = False
+        # Extract model parameters from config
+        self.p = self.config.get('p', 1)  # AR order
+        self.d = self.config.get('d', 1)  # Differencing order
+        self.q = self.config.get('q', 1)  # MA order
+        self.s = self.config.get('s', 1)  # Seasonal period
+        
+        # Optional maximum lags for auto order selection
+        self.maxlags = self.config.get('maxlags', 12)
         
     def _check_stationarity(self, data: pd.DataFrame) -> Dict[str, bool]:
         """
@@ -117,10 +112,7 @@ class MultivariateARIMAModel(BaseModel):
     def train(self, 
               y_context: Union[pd.Series, np.ndarray, pd.DataFrame], 
               y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, 
-              x_context: Union[pd.Series, np.ndarray] = None, 
-              x_target: Union[pd.Series, np.ndarray] = None, 
               y_start_date: pd.Timestamp = None, 
-              x_start_date: pd.Timestamp = None, 
               **kwargs
     ) -> 'MultivariateARIMAModel':
         """
@@ -134,61 +126,48 @@ class MultivariateARIMAModel(BaseModel):
         - Uses Maximum Likelihood Estimation for parameter fitting
         
         Args:
-            y_context: Past target values (DataFrame for multivariate)
-            y_target: Future target values (optional, for validation)
-            x_context: Past exogenous variables (optional, ignored for now)
-            x_target: Future exogenous variables (optional, ignored for now)
+            y_context: Past target values (time series) - used for training (can be DataFrame for multivariate)
+            y_target: Future target values (optional, for extended training)
             y_start_date: The start date timestamp for y_context and y_target
-            x_start_date: The start date timestamp for x_context and x_target
             **kwargs: Additional keyword arguments
 
         Returns:
             self: The fitted model instance
         """
-        # Convert input to DataFrame
+        # Normalize input to a DataFrame with columns per target
         if isinstance(y_context, pd.DataFrame):
-            # Multivariate case - use all columns
-            data = y_context.copy()
-            # Update target_cols if not already set
-            # target_cols should already be set from config, validate consistency
-            if self.target_cols and len(y_context.columns) > 0:
-                expected_cols = set(self.target_cols)
-                actual_cols = set(y_context.columns)
-                if expected_cols != actual_cols:
-                    raise ValueError(f"Data columns {actual_cols} don't match configured target_cols {expected_cols}")
+            data_df = y_context.copy()
         elif isinstance(y_context, pd.Series):
-            # Convert Series to DataFrame
-            data = pd.DataFrame({y_context.name if y_context.name else 'target_0': y_context.values})
+            data_df = pd.DataFrame({'target_0': y_context.values})
         else:
-            # Numpy array case
-            if y_context.ndim == 1:
-                data = pd.DataFrame({'target_0': y_context})
+            arr = np.asarray(y_context)
+            if arr.ndim == 1:
+                data_df = pd.DataFrame({'target_0': arr})
             else:
-                # Multivariate numpy array
-                columns = [f'target_{i}' for i in range(y_context.shape[1])]
-                data = pd.DataFrame(y_context, columns=columns)
-        
-        # Calculate n_targets from inherited target_cols
-        self.n_targets = len(self.target_cols)
+                columns = [f'target_{i}' for i in range(arr.shape[1])]
+                data_df = pd.DataFrame(arr, columns=columns)
+
+        self.num_targets = data_df.shape[1]
+        self.y_context = data_df.values
         
         # Store original data for integration
-        self.original_data = data.copy()
+        self.original_data = data_df.copy()
         
         # Check stationarity and apply differencing if needed
-        stationarity = self._check_stationarity(data)
+        stationarity = self._check_stationarity(data_df)
         print(f"[DEBUG] Stationarity check: {stationarity}")
         
         if not all(stationarity.values()) and self.d > 0:
             print(f"[DEBUG] Applying differencing of order {self.d}")
-            data = self._difference_data(data, self.d)
-            self.differenced_data = data.copy()
+            differenced_df = self._difference_data(data_df, self.d)
+            self.differenced_data = differenced_df.copy()
         else:
             print(f"[DEBUG] Data is stationary, no differencing needed")
-            self.differenced_data = data.copy()
+            self.differenced_data = data_df.copy()
             self.d = 0  # No differencing needed
         
         # Fit VAR model
-        self.model = VAR(data)
+        self.model = VAR(self.differenced_data)
         
         # Determine optimal lag order if not specified
         if self.p == 'auto':
@@ -201,14 +180,12 @@ class MultivariateARIMAModel(BaseModel):
         self.fitted_model = self.model.fit(self.p)
         self.is_fitted = True
         
-        print(f"[DEBUG] VAR model fitted with order p={self.p}, targets={self.n_targets}")
+        print(f"[DEBUG] VAR model fitted with order p={self.p}, targets={self.num_targets}")
         return self
         
     def predict(self, 
                 y_context: Union[pd.Series, np.ndarray, pd.DataFrame] = None, 
                 y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, 
-                x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, 
-                x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, 
                 **kwargs
     ) -> np.ndarray:
         """
@@ -228,7 +205,7 @@ class MultivariateARIMAModel(BaseModel):
             **kwargs: Additional keyword arguments
             
         Returns:
-            np.ndarray: Model predictions with shape (forecast_steps, n_targets)
+            np.ndarray: Model predictions with shape (forecast_steps, num_targets)
         """
         if self.fitted_model is None:
             raise ValueError("Model not fitted. Call train first.")
@@ -249,12 +226,15 @@ class MultivariateARIMAModel(BaseModel):
                 context_data = pd.DataFrame(y_context, columns=columns)
         
         # Apply same differencing as during training
+        if y_target is None:
+            raise ValueError("y_target is required to determine prediction length. No forecast_horizon fallback allowed.")
+        
         if self.d > 0:
             differenced_context = self._difference_data(context_data, self.d)
         else:
             differenced_context = context_data.copy()
         
-        forecast_steps = len(y_target) if hasattr(y_target, '__len__') else self.forecast_horizon
+        forecast_steps = len(y_target)
         
         # Calculate how many prediction windows we need
         num_windows = math.ceil(forecast_steps / self.forecast_horizon)
@@ -286,8 +266,8 @@ class MultivariateARIMAModel(BaseModel):
         
         # Reverse differencing if it was applied
         if self.d > 0:
-            # Create DataFrame for integration
-            pred_df = pd.DataFrame(predictions, columns=self.target_cols)
+            # Create DataFrame for integration (no column names needed)
+            pred_df = pd.DataFrame(predictions)
             integrated_predictions = self._integrate_data(pred_df, self.original_data, self.d)
             predictions = integrated_predictions.values
         
@@ -304,10 +284,8 @@ class MultivariateARIMAModel(BaseModel):
             'p': self.p,
             'd': self.d,
             'maxlags': self.maxlags,
-            'target_cols': self.target_cols,
-            'n_targets': self.n_targets,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss,
+            'num_targets': self.num_targets,
+            'training_loss': self.training_loss,
             'forecast_horizon': self.forecast_horizon
         }
         
@@ -327,7 +305,6 @@ class MultivariateARIMAModel(BaseModel):
                 if key in ['p', 'd', 'maxlags', 'forecast_horizon']:
                     value = int(value)
                 setattr(self, key, value)
-        # Note: target_cols is inherited from parent class and shouldn't be modified
         return self
         
     def save(self, path: str) -> None:
@@ -379,14 +356,14 @@ class MultivariateARIMAModel(BaseModel):
         self.differenced_data = model_state['differenced_data']
         self.set_params(**model_state['params'])
         
-    def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray, loss_function: str = None) -> Dict[str, float]:
+    def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray, y_train: np.ndarray = None, loss_function: str = None) -> Dict[str, float]:
         """
         Compute all loss metrics between true and predicted values using the Evaluator class.
         
         Args:
             y_true: True target values
             y_pred: Predicted values
-            loss_function: Name of the loss function to use (defaults to primary_loss)
+            loss_function: Name of the loss function to use (defaults to training_loss)
             
         Returns:
             Dict[str, float]: Dictionary of computed loss metrics
@@ -398,6 +375,11 @@ class MultivariateARIMAModel(BaseModel):
             y_true = y_true.values
         if isinstance(y_pred, pd.Series):
             y_pred = y_pred.values
+        if y_train is not None:
+            if isinstance(y_train, pd.DataFrame):
+                y_train = y_train.values
+            elif isinstance(y_train, pd.Series):
+                y_train = y_train.values
             
         # Store for logging
         self._last_y_true = y_true
@@ -410,14 +392,17 @@ class MultivariateARIMAModel(BaseModel):
             for i in range(y_true.shape[1]):
                 target_true = y_true[:, i]
                 target_pred = y_pred[:, i]
+                target_train = None
+                if y_train is not None:
+                    target_train = y_train[:, i] if y_train.ndim == 2 else y_train
                 
                 # Ensure both arrays have the same length
                 min_length = min(len(target_true), len(target_pred))
                 target_true = target_true[:min_length]
                 target_pred = target_pred[:min_length]
                 
-                # Compute metrics for this target
-                target_metrics = self.evaluator.evaluate(target_pred, target_true)
+                # Compute metrics for this target (pass y_train for MASE when available)
+                target_metrics = self.evaluator.evaluate(target_pred, target_true, y_train=target_train)
                 
                 # Store metrics for this target
                 for metric_name, metric_value in target_metrics.items():
@@ -449,4 +434,4 @@ class MultivariateARIMAModel(BaseModel):
             y_pred = y_pred[:min_length]
             
             # Use evaluator to compute all metrics
-            return self.evaluator.evaluate(y_pred, y_true)
+            return self.evaluator.evaluate(y_pred, y_true, y_train=y_train)
