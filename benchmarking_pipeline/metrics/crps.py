@@ -12,10 +12,10 @@ class CRPS:
         Requires 'y_pred_dist_samples' in kwargs. y_pred is ignored.
         
         Args:
-            y_true: True values, shape (n_timesteps,) or (n_timesteps, n_targets)
+            y_true: True values, shape (n_timesteps,) or (n_timesteps, num_targets)
             y_pred: Point predictions (ignored, kept for API compatibility)
             **kwargs: Must contain 'y_pred_dist_samples'
-                - y_pred_dist_samples: shape (n_samples, n_timesteps) or (n_timesteps, n_targets, n_samples)
+                - y_pred_dist_samples: shape (n_samples, n_timesteps) or (n_timesteps, num_targets, n_samples)
         
         Returns:
             CRPS score(s) as array with one score per timestep for univariate, or per target for multivariate
@@ -53,14 +53,14 @@ class CRPS:
             # Return CRPS for each timestep (not the mean)
             return term1 - term2
             
-        elif y_true.ndim == 2:  # Multivariate: (n_timesteps, n_targets)
-            # y_s shape: (n_timesteps, n_targets, n_samples) from test
-            # y_true shape: (n_timesteps, n_targets)
+        elif y_true.ndim == 2:  # Multivariate: (n_timesteps, num_targets)
+            # y_s shape: (n_timesteps, num_targets, n_samples) from test
+            # y_true shape: (n_timesteps, num_targets)
             
-            n_targets = y_true.shape[1]
+            num_targets = y_true.shape[1]
             crps_per_series = []
             
-            for target_idx in range(n_targets):
+            for target_idx in range(num_targets):
                 y_t_series = y_true[:, target_idx]  # (n_timesteps,)
                 y_s_series = y_s[:, target_idx, :]  # (n_timesteps, n_samples)
                 

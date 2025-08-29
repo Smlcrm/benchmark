@@ -34,8 +34,7 @@ class TestConfigValidator:
                 'forecast_horizon': 10,
                 'split_ratio': [0.8, 0.1, 0.1],
                 'normalize': True,
-                'handle_missing': 'interpolate',
-                'target_cols': ['y']
+                'handle_missing': 'interpolate'
             },
             'model': {
                 'name': ['arima'],
@@ -44,8 +43,7 @@ class TestConfigValidator:
                         'p': [1],
                         'd': [1],
                         'q': [1],
-                        'loss_functions': ['mae'],
-                        'primary_loss': ['mae'],
+                        'training_loss': ['mae'],
                         'forecast_horizon': [10]
                     }
                 }
@@ -102,44 +100,12 @@ class TestConfigValidator:
         assert "Unknown models" in str(exc_info.value)
     
     @pytest.mark.unit
-    def test_missing_target_cols(self, validator, valid_config):
-        """Test that missing target_cols in dataset causes validation errors."""
-        # Create a config missing target_cols in dataset
-        test_config = {
-            'test_type': 'deterministic',
-            'dataset': {
-                'name': 'test_dataset',
-                'path': 'test/path',
-                'frequency': 'D',
-                'forecast_horizon': 10,
-                'split_ratio': [0.8, 0.1, 0.1],
-                'normalize': True,
-                'handle_missing': 'interpolate'
-                # Missing target_cols
-            },
-            'model': {
-                'name': ['arima'],
-                'parameters': {
-                    'arima': {
-                        'p': [1],
-                        'd': [1],
-                        'q': [1],
-                        'loss_functions': ['mae'],
-                        'primary_loss': ['mae'],
-                        'forecast_horizon': [10]
-                    }
-                }
-            },
-            'evaluation': {
-                'type': 'deterministic',
-                'metrics': ['mae']
-            }
-        }
-        
+    def test_forbidden_unknown_fields(self, validator, valid_config):
+        """Test that unknown fields (like target_cols) are forbidden."""
+        valid_config['dataset']['target_cols'] = ['y']
         with pytest.raises(ConfigValidationError) as exc_info:
-            validator.validate_config(test_config)
-        
-        assert "Required field 'target_cols' is missing" in str(exc_info.value)
+            validator.validate_config(valid_config)
+        assert "Unknown field 'target_cols' is not allowed" in str(exc_info.value)
     
     @pytest.mark.unit
     def test_invalid_forecast_horizon(self, validator, valid_config):
@@ -197,8 +163,7 @@ class TestConfigValidationFunctions:
                 'forecast_horizon': 10,
                 'split_ratio': [0.8, 0.1, 0.1],
                 'normalize': True,
-                'handle_missing': 'interpolate',
-                'target_cols': ['y']
+                'handle_missing': 'interpolate'
             },
             'model': {
                 'name': ['arima'],
@@ -207,8 +172,7 @@ class TestConfigValidationFunctions:
                         'p': [1],
                         'd': [1],
                         'q': [1],
-                        'loss_functions': ['mae'],
-                        'primary_loss': ['mae'],
+                        'training_loss': ['mae'],
                         'forecast_horizon': [10]
                     }
                 }

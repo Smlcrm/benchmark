@@ -34,7 +34,6 @@ class TestBasicFunctionality:
         
         # Test dataset configuration
         assert mock_config["dataset"]["name"] == "test_dataset"
-        assert mock_config["dataset"]["target_cols"] == ["y"]
         assert mock_config["dataset"]["forecast_horizon"] == [10, 25, 50]
         
         # Test model configuration (new structure)

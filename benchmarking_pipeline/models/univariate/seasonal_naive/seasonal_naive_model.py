@@ -51,6 +51,13 @@ class SeasonalNaiveModel(BaseModel):
         if self.model is None:
             self._build_model()
         if not isinstance(y_context, pd.Series):
+            # Handle both 1D and 2D input data
+            if isinstance(y_context, np.ndarray) and y_context.ndim == 2:
+                # Extract the single column from 2D array
+                y_context = y_context[:, 0]
+            elif hasattr(y_context, 'values') and hasattr(y_context.values, 'ndim') and y_context.values.ndim == 2:
+                # Handle pandas DataFrame or similar
+                y_context = y_context.values[:, 0]
             # works best with a proper index
             y_context = pd.Series(y_context)
         self.model.fit(y=y_context, X=None)
@@ -72,9 +79,9 @@ class SeasonalNaiveModel(BaseModel):
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
-        if y_target is None:
-            raise ValueError("y_target must be provided to determine prediction length.")
-        forecast_horizon = len(y_target)
+        
+        # Use the forecast_horizon from config, not the length of y_target
+        forecast_horizon = self.forecast_horizon
         fh = np.arange(1, forecast_horizon + 1)
         predictions = self.model.predict(fh=fh)
         return predictions.values.reshape(1, -1)

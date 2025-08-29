@@ -12,7 +12,6 @@ from gluonts.evaluation import make_evaluation_predictions
 from benchmarking_pipeline.models.foundation_model import FoundationModel
 
 from .lag_llama.gluon.estimator import LagLlamaEstimator
-from .lag_llama.gluon.predictor import LagLlamaPredictor
 
 # Try to import lag_llama, install if not available
 
@@ -59,20 +58,66 @@ class LagllamaModel(FoundationModel):
         scaling_factor = max(1.0, (self.context_length + forecast_horizon) /
                            self.context_length)
         
-        # Create the predictor with the specified horizon
-        predictor = LagLlamaPredictor.from_pretrained(
-            "time-series-foundation-models/Lag-Llama",
+        # Create the estimator with the specified horizon
+        estimator = LagLlamaEstimator(
             prediction_length=forecast_horizon,
             context_length=self.context_length,
-            num_samples=self.num_samples,
             batch_size=self.batch_size,
-            scaling_factor=scaling_factor,
+            num_parallel_samples=self.num_samples,
+            device=self.device,
         )
+        
+        # Create predictor from estimator
+        transformation = estimator.create_transformation()
+        lightning_module = estimator.create_lightning_module()
+        predictor = estimator.create_predictor(transformation, lightning_module)
+        
         return predictor
+
+    def train(self, 
+              y_context: Optional[Union[pd.Series, np.ndarray]], 
+              y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
+              y_start_date: Optional[str] = None
+    ) -> 'LagllamaModel':
+        """
+        Train/fine-tune the Lag-Llama model on given data.
+        Lag-Llama is pre-trained, so this method just validates inputs and sets fitted status.
+        
+        Args:
+            y_context: Past target values
+            y_target: Future target values (not used for pre-trained model)
+            y_start_date: Start date timestamp (not used for pre-trained model)
+            
+        Returns:
+            self: The fitted model instance
+        """
+        if y_context is None:
+            raise ValueError("y_context is required for Lag-Llama")
+        
+        # Convert to DataFrame format
+        if isinstance(y_context, np.ndarray):
+            if y_context.ndim == 1:
+                df = pd.DataFrame({'series': y_context})
+            else:
+                df = pd.DataFrame(y_context.T)
+        else:
+            df = y_context
+        
+        print(f"🦙 Lag-Llama is pre-trained, setting up for forecast_horizon={self.forecast_horizon}")
+        
+        # Create predictor for this horizon
+        self.predictor = self._create_predictor_for_horizon(self.forecast_horizon)
+        
+        # Lag-Llama is pre-trained, so we just mark as fitted
+        self.is_fitted = True
+        
+        print("✅ Lag-Llama ready (pre-trained)")
+        
+        return self
 
     def fit(self, df: pd.DataFrame, forecast_horizon: int = None, verbose: bool = True):
         """
-        Fit the Lag-Llama model to the data.
+        Lag-Llama is pre-trained, so this method just validates inputs and sets fitted status.
         
         Args:
             df: DataFrame with time series data
@@ -83,43 +128,53 @@ class LagllamaModel(FoundationModel):
             forecast_horizon = self.forecast_horizon
         
         if verbose:
-            print(f"🦙 Fitting Lag-Llama with forecast_horizon={forecast_horizon}")
+            print(f"🦙 Lag-Llama is pre-trained, setting up for forecast_horizon={forecast_horizon}")
         
         # Create predictor for this horizon
         self.predictor = self._create_predictor_for_horizon(forecast_horizon)
         
-        # Fit the model
-        self.predictor.train(df)
+        # Lag-Llama is pre-trained, so we just mark as fitted
         self.is_fitted = True
         
         if verbose:
-            print("✅ Lag-Llama training completed!")
+            print("✅ Lag-Llama ready (pre-trained)")
         
         return self
     
-    def predict(self,
-            y_context: Optional[Union[pd.Series, np.ndarray]] = None,
-            y_target: Union[pd.Series, np.ndarray] = None,
-            y_context_timestamps = None,
-            y_target_timestamps = None,
-            **kwargs) -> Union[np.ndarray, Dict[str, List[float]]]:
+    def predict(
+        self,
+        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_target: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_context_timestamps: Optional[np.ndarray] = None,
+        y_target_timestamps: Optional[np.ndarray] = None,
+        forecast_horizon: Optional[int] = None,
+        **kwargs
+    ) -> np.ndarray:
         """
-        Generate predictions using the fitted Lag-Llama model.
+        Make predictions using the trained Lag-Llama model.
         
         Args:
-            y_context: Historical time series data
-            y_target: Future target values (not used for prediction)
-            y_context_timestamps: Timestamps for context data
+            y_context: Recent/past target values
+            y_target: Future target values (used to determine forecast horizon if not provided)
+            y_context_timestamps: Timestamps for context data (not used)
             y_target_timestamps: Timestamps for target data (not used)
-            **kwargs: Additional arguments
+            forecast_horizon: Number of steps to forecast (defaults to model config if not provided)
+            **kwargs: Additional arguments (ignored)
             
         Returns:
-            Predicted values as numpy array or dictionary
+            np.ndarray: Model predictions with shape (forecast_horizon,)
         """
         if y_context is None:
             raise ValueError("y_context is required for prediction")
         
-        horizon = self.forecast_horizon
+        # Determine forecast horizon from y_target if not provided
+        if forecast_horizon is None:
+            if y_target is not None:
+                horizon = len(y_target)
+            else:
+                horizon = self.forecast_horizon
+        else:
+            horizon = forecast_horizon
         
         # Convert input to DataFrame format
         if isinstance(y_context, np.ndarray):
@@ -132,17 +187,21 @@ class LagllamaModel(FoundationModel):
         
         # Ensure we have a fitted predictor
         if not self.is_fitted:
-            self.fit(df, verbose=False)
+            self.train(y_context)
         
-        # Generate predictions
-        try:
-            predictions = self.predictor.predict(df)
-            return predictions
-        except Exception as e:
-            print(f"⚠️  Prediction error: {e}")
-            # Return zero predictions as fallback
-            series_names = df.columns if hasattr(df, 'columns') else [f'series_{i}' for i in range(df.shape[1])]
-            return {name: [0.0] * horizon for name in series_names}
+        # Use the internal prediction method
+        results = self._predict_internal(df, horizon)
+        
+        # Return as numpy array for single series
+        if 'series' in results:
+            return np.array(results['series'])
+        elif len(results) == 1:
+            # Return first series as numpy array
+            first_series = list(results.values())[0]
+            return np.array(first_series)
+        else:
+            # Fallback: return zeros
+            return np.zeros(horizon)
 
     def _predict_internal(
         self,
@@ -153,8 +212,11 @@ class LagllamaModel(FoundationModel):
     ) -> Union[Dict[str, List[float]], Dict[str, Dict[str, List[float]]]]:
         """Internal prediction method - similar to standalone forecaster"""
         
-        # Create predictor for this prediction length
-        predictor = self._create_predictor_for_horizon(prediction_length)
+        # Use existing predictor or create new one if needed
+        if self.predictor is None:
+            predictor = self._create_predictor_for_horizon(prediction_length)
+        else:
+            predictor = self.predictor
         
         # Prepare data for each series
         all_series_data = []
@@ -188,36 +250,26 @@ class LagllamaModel(FoundationModel):
         # Combine all series
         combined_df = pd.concat(all_series_data, ignore_index=True)
         
+        # Ensure target column is float32 to match model dtype
+        combined_df['target'] = combined_df['target'].astype(np.float32)
+        
         # Create GluonTS dataset
-        try:
-            dataset = PandasDataset.from_long_dataframe(
-                combined_df, 
-                target='target', 
-                item_id='unique_id', 
-                timestamp='ds', 
-                freq=freq
-            )
-        except Exception:
-            # Fallback
-            dataset_dict = {}
-            for series_name in series_names:
-                series_df = combined_df[combined_df['unique_id'] == series_name]
-                dataset_dict[series_name] = series_df.set_index('ds')['target']
-            dataset = PandasDataset(dataset_dict, target='target')
+        dataset = PandasDataset.from_long_dataframe(
+            combined_df, 
+            target='target', 
+            item_id='unique_id', 
+            timestamp='ds', 
+            freq=freq
+        )
         
         # Generate forecasts
-        try:
-            forecast_it, ts_it = make_evaluation_predictions(
-                dataset=dataset,
-                predictor=predictor,
-                num_samples=self.num_samples
-            )
-            
-            forecasts = list(forecast_it)
-            
-        except Exception as e:
-            print(f"Error during forecasting: {e}")
-            return {name: [0.0] * prediction_length for name in series_names}
+        forecast_it, ts_it = make_evaluation_predictions(
+            dataset=dataset,
+            predictor=predictor,
+            num_samples=self.num_samples
+        )
+        
+        forecasts = list(forecast_it)
         
         # Process results
         results = {}
@@ -225,27 +277,15 @@ class LagllamaModel(FoundationModel):
             series_name = getattr(forecast, 'item_id', 'unknown')
             
             if return_samples:
-                try:
-                    results[series_name] = {
-                        'mean': forecast.mean.tolist(),
-                        'median': forecast.quantile(0.5).tolist(),
-                        'q10': forecast.quantile(0.1).tolist(),
-                        'q90': forecast.quantile(0.9).tolist(),
-                        'samples': forecast.samples.tolist()
-                    }
-                except Exception:
-                    results[series_name] = {
-                        'mean': [0.0] * prediction_length,
-                        'median': [0.0] * prediction_length,
-                        'q10': [0.0] * prediction_length,
-                        'q90': [0.0] * prediction_length,
-                        'samples': [[0.0] * prediction_length]
-                    }
+                results[series_name] = {
+                    'mean': forecast.mean.tolist(),
+                    'median': forecast.quantile(0.5).tolist(),
+                    'q10': forecast.quantile(0.1).tolist(),
+                    'q90': forecast.quantile(0.9).tolist(),
+                    'samples': forecast.samples.tolist()
+                }
             else:
-                try:
-                    results[series_name] = forecast.mean.tolist()
-                except Exception:
-                    results[series_name] = [0.0] * prediction_length
+                results[series_name] = forecast.mean.tolist()
         
         return results
     

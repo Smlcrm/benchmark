@@ -25,6 +25,45 @@ class TinyTimeMixerModel(FoundationModel):
       if hasattr(self, key):
         setattr(self, key, value)
     return self
+  
+  def train(self, 
+            y_context: Optional[Union[pd.Series, np.ndarray]], 
+            x_context: Optional[Union[pd.Series, np.ndarray]] = None, 
+            y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
+            x_target: Optional[Union[pd.Series, np.ndarray]] = None,
+            y_start_date: Optional[str] = None,
+            x_start_date: Optional[str] = None
+  ) -> 'TinyTimeMixerModel':
+    """
+    Train/fine-tune the foundation model on given data.
+    
+    Args:
+        y_context: Past target values - training data during tuning time, training + validation data during testing time
+        x_context: Past exogenous variables - used during tuning and testing time
+        y_target: Future target values - validation data during tuning time, None during testing time (avoid data leakage)
+        x_target: Future exogenous variables - if provided, can be used with x_context for training
+        y_start_date: The start date timestamp for y_context and y_target in string form
+        x_start_date: The start date timestamp for x_context and x_target in string form
+        
+    Returns:
+        self: The fitted model instance
+    """
+    # TinyTimeMixer is a zero-shot model, so training is not needed
+    self.is_fitted = True
+    return self
+  
+  def get_params(self) -> Dict[str, Any]:
+    """
+    Get the current model parameters.
+    
+    Returns:
+        Dict[str, Any]: Dictionary of current model parameters
+    """
+    return {
+        'model_name': self.model_name,
+        'forecast_horizon': self.forecast_horizon,
+        'is_fitted': self.is_fitted
+    }
          
   def predict(self,
         y_context: Optional[Union[pd.Series, np.ndarray]] = None,

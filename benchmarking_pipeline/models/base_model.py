@@ -1,5 +1,12 @@
 """
-Base model class that defines the interface for all models.
+Base model class that defines the interface for all traditional time series forecasting models.
+
+This abstract base class provides a common interface for traditional statistical and machine learning
+models used in time series forecasting. It handles configuration management, training, prediction,
+evaluation, and model persistence.
+
+All traditional models (ARIMA, LSTM, XGBoost, etc.) should inherit from this class and implement
+the required abstract methods.
 """
 
 from abc import ABC, abstractmethod
@@ -13,16 +20,30 @@ from benchmarking_pipeline.pipeline.evaluator import Evaluator
 
 
 class BaseModel(ABC):
+    """
+    Abstract base class for traditional time series forecasting models.
+    
+    This class provides a unified interface for training, prediction, and evaluation
+    of traditional time series forecasting models. It handles configuration management,
+    data preprocessing, and evaluation metrics computation.
+    
+    Attributes:
+        config: Configuration dictionary containing model and dataset parameters
+        training_loss: Primary loss function for training
+        forecast_horizon: Number of steps to forecast ahead
+        is_fitted: Whether the model has been trained
+        evaluator: Evaluator instance for computing metrics
+    """
+    
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize the base model.
         
         Args:
             config: Configuration dictionary containing model parameters
-                - loss_functions: List[str], list of loss function names to use
-                - primary_loss: str, primary loss function for training (defaults to first in loss_functions)
+                - training_loss: str, primary loss function for training
                 - forecast_horizon: int, number of steps to forecast ahead
-                - dataset: dict containing dataset configuration including target_cols
+                - dataset: dict containing dataset configuration
             config_file: Path to a JSON configuration file
         """
         if config_file is not None:
@@ -32,51 +53,71 @@ class BaseModel(ABC):
                 config = json.load(f)
         
         self.config = config or {}
-        self.loss_functions = self.config.get('loss_functions', ['mae'])
-        self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         
-        # Extract target_cols and forecast_horizon from dataset configuration
-        dataset_cfg = self.config.get('dataset', {})
-        self.target_cols = dataset_cfg.get('target_cols')
-        if not self.target_cols:
-            raise ValueError("target_cols must be defined in dataset configuration")
+        # Handle nested model configurations (e.g., config['model']['arima'])
+        # Extract model-specific config if it exists
+        model_config = self._extract_model_config(self.config)
         
-        # Get forecast_horizon from model config (for hyperparameter tuning) or fall back to dataset config
-        self.forecast_horizon = self.config.get('forecast_horizon', dataset_cfg.get('forecast_horizon', 1))
-        if not self.forecast_horizon:
-            raise ValueError("forecast_horizon must be defined in model configuration or dataset configuration")
+        self.training_loss = model_config.get('training_loss', 'mae')
         
-        # If forecast_horizon is a list (from hyperparameter grid), take the first value for initialization
-        if isinstance(self.forecast_horizon, list):
-            self.forecast_horizon = self.forecast_horizon[0]
-            print(f"[INFO] Using forecast_horizon: {self.forecast_horizon} from hyperparameter grid")
+        # Determine forecast horizon from model configuration keys if present
+        # Common names across models: forecast_horizon, prediction_length, horizon_len, pdt
+        horizon = None
+        for key in ('forecast_horizon', 'prediction_length', 'horizon_len', 'pdt'):
+            if key in model_config:
+                horizon = model_config[key]
+                break
+        # If hyperparameter grid provides a list, take the first value for initialization
+        if isinstance(horizon, list) and len(horizon) > 0:
+            horizon = horizon[0]
+        self.forecast_horizon = horizon
         
         self.is_fitted = False
-        self.evaluator = Evaluator(config=self.config)
+        
+        # Initialize evaluator with the full config to access evaluation.metrics
+        # We need to pass the original config, not the extracted model config
+        print(f"[DEBUG] BaseModel: Original config parameter: {config}")
+        print(f"[DEBUG] BaseModel: Self.config after extraction: {self.config}")
+        self.evaluator = Evaluator(config=config)
+        
         # For logging last eval
         self._last_y_true = None
         self._last_y_pred = None
+    
+    def _extract_model_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract model-specific configuration from nested config structure.
         
+        Args:
+            config: Full configuration dictionary
+            
+        Returns:
+            Dict[str, Any]: Model-specific configuration
+        """
+        # If config has a 'model' section, look for the specific model type
+        if 'model' in config:
+            model_section = config['model']
+            # Find the first model configuration (e.g., 'arima', 'lstm', etc.)
+            for model_name, model_config in model_section.items():
+                if isinstance(model_config, dict):
+                    return model_config
+        
+        # If no nested structure, return the config as-is
+        return config
+    
     @abstractmethod
     def train(self, 
               y_context: Optional[Union[pd.Series, np.ndarray]], 
-              x_context: Optional[Union[pd.Series, np.ndarray]] = None, 
               y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
-              x_target: Optional[Union[pd.Series, np.ndarray]] = None,
-              y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None
+              y_start_date: Optional[str] = None
     ) -> 'BaseModel':
         """
         Train the model on given data.
         
         Args:
             y_context: Past target values - training data during tuning time, training + validation data during testing time
-            x_context: Past exogenous variables - used during tuning and testing time
             y_target: Future target values - validation data during tuning time, None during testing time (avoid data leakage)
-            x_target: Future exogenous variables - if provided, can be used with x_context for training (e.g., in ARIMA models)
-                     or with y_target for validation during tuning time
             y_start_date: The start date timestamp for y_context and y_target in string form
-            x_start_date: The start date timestamp for x_context and x_target in string form
             
         Returns:
             self: The fitted model instance
@@ -87,8 +128,6 @@ class BaseModel(ABC):
     def predict(
         self,
         y_context: Optional[Union[pd.Series, np.ndarray]] = None,
-        x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-        x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
         forecast_horizon: Optional[int] = None
     ) -> np.ndarray:
         """
@@ -96,8 +135,6 @@ class BaseModel(ABC):
         
         Args:
             y_context: Recent/past target values (for sequence models, optional for ARIMA)
-            x_context: Recent/past exogenous variables (for sequence models, optional for ARIMA)
-            x_target: Future exogenous variables for the forecast horizon (required if model uses exogenous variables)
             forecast_horizon: Number of steps to forecast (defaults to model config if not provided)
             
         Returns:
@@ -105,23 +142,28 @@ class BaseModel(ABC):
         """
         pass
     
-    def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray, loss_function: str = None) -> Dict[str, float]:
+    def compute_loss(self, y_true: np.ndarray, y_pred: np.ndarray, loss_function: str = None, y_train: np.ndarray = None) -> Dict[str, float]:
         """
         Compute all loss metrics between true and predicted values using the Evaluator class.
+        
+        This method computes evaluation metrics as configured in evaluation.metrics
         
         Args:
             y_true: True target values
             y_pred: Predicted values
-            loss_function: Name of the loss function to use (defaults to primary_loss)
+            loss_function: Name of the loss function to use (defaults to training_loss)
+            y_train: Training target values (required for MASE calculation)
             
         Returns:
-            Dict[str, float]: Dictionary of computed loss metrics
+            Dict[str, float]: Dictionary of computed loss metrics (from evaluation.metrics)
         """
         # Convert inputs to numpy arrays if needed
         if isinstance(y_true, pd.Series):
             y_true = y_true.values
         if isinstance(y_pred, pd.Series):
             y_pred = y_pred.values
+        if y_train is not None and isinstance(y_train, pd.Series):
+            y_train = y_train.values
             
         # Handle shape mismatches
         if y_pred.ndim == 2 and y_true.ndim == 1:
@@ -140,17 +182,14 @@ class BaseModel(ABC):
         min_length = min(len(y_true), len(y_pred))
         y_true = y_true[:min_length]
         y_pred = y_pred[:min_length]
-        # print(f"y_pred: {y_pred}")
-        # print(f"y_true: {y_true}")
+        
         # Store for TensorBoard logging
         self._last_y_true = y_true
         self._last_y_pred = y_pred
         
-        # Convert inputs to DataFrame format required by Evaluator
-        
-        
-        # Use evaluator to compute all metrics
-        return self.evaluator.evaluate(y_pred, y_true)
+        # Use evaluator to compute evaluation metrics (from evaluation.metrics)
+        # Pass y_train for metrics like MASE that require it
+        return self.evaluator.evaluate(y_pred, y_true, y_train=y_train)
     
     def evaluate(self, X: Union[pd.DataFrame, np.ndarray], y: Union[pd.Series, np.ndarray]) -> Dict[str, float]:
         """
@@ -245,10 +284,13 @@ class BaseModel(ABC):
             'model_type': self.__class__.__name__,
             'is_fitted': self.is_fitted,
             'parameters': self.get_params()
-        } 
+        }
 
     def get_last_eval_true_pred(self):
         """
         Return the last y_true and y_pred used in compute_loss for TensorBoard logging.
+        
+        Returns:
+            Tuple of (y_true, y_pred) arrays
         """
         return self._last_y_true, self._last_y_pred 

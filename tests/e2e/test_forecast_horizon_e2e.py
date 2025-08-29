@@ -31,8 +31,7 @@ class TestForecastHorizonE2E:
                 'split_ratio': [0.8, 0.1, 0.1],
                 'normalize': False,
                 'handle_missing': 'interpolate',
-                'chunks': 1,
-                'target_cols': ['test_target']
+                'chunks': 1
             },
             'model': {
                 'test_model': {
@@ -67,7 +66,6 @@ class TestForecastHorizonE2E:
         
         dataset_cfg = config['dataset']
         assert 'forecast_horizon' in dataset_cfg, "Dataset should have forecast_horizon"
-        assert 'target_cols' in dataset_cfg, "Dataset should have target_cols"
         
         # Verify forecast_horizon is a vector
         forecast_horizons = dataset_cfg['forecast_horizon']

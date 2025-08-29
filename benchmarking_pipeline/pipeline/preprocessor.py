@@ -61,8 +61,8 @@ class Preprocessor:
         elif strategy == 'median':
             return df.fillna(df.median(numeric_only=True))
         elif strategy == 'interpolate':
-            # Fill all NaNs, including at the edges
-            return df.interpolate().ffill().bfill()
+            # Fill NaNs over time per target (rows are time, columns are targets)
+            return df.interpolate(axis=0).ffill(axis=0).bfill(axis=0)
         elif strategy == 'forward_fill':
             return df.fillna(method='ffill')
         elif strategy == 'backward_fill':

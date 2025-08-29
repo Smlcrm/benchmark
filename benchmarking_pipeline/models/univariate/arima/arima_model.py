@@ -1,6 +1,14 @@
 """
-ARIMA model implementation.
+ARIMA (AutoRegressive Integrated Moving Average) model implementation.
+
+This module provides an ARIMA model implementation for univariate time series forecasting.
+ARIMA models combine autoregression, differencing, and moving average components to
+capture temporal dependencies in time series data.
+
+The model supports both seasonal and non-seasonal ARIMA variants and can handle
+exogenous variables for enhanced forecasting performance.
 """
+
 import numpy as np
 import pandas as pd
 from statsmodels.tsa.arima.model import ARIMA
@@ -11,39 +19,58 @@ from benchmarking_pipeline.models.base_model import BaseModel
 
 
 class ArimaModel(BaseModel):
+    """
+    ARIMA model for univariate time series forecasting.
+    
+    This class implements the ARIMA model with support for:
+    - Non-seasonal ARIMA(p,d,q) models
+    - Seasonal ARIMA(p,d,q)(P,D,Q,s) models
+    - Exogenous variable support
+    - Rolling window predictions
+    - Model persistence and loading
+    
+    Attributes:
+        p: AR order (autoregressive)
+        d: Differencing order (integration)
+        q: MA order (moving average)
+        s: Seasonality period
+        model_: Fitted ARIMA model instance
+        loss_function: Loss function for training
+    """
+    
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         """
         Initialize ARIMA model with given configuration.
         
         Args:
             config: Configuration dictionary containing model parameters
-                - p: int, AR order
-                - d: int, differencing order
-                - q: int, MA order
-                - s: int, seasonality
-                - target_col: str, name of target column
-                - loss_function: str, loss function for training
+                - p: int, AR order (default: 1)
+                - d: int, differencing order (default: 1)
+                - q: int, MA order (default: 1)
+                - s: int, seasonality period (default: 1)
+                - loss_function: str, loss function for training (default: 'mae')
                 - forecast_horizon: int, number of steps to forecast ahead
             config_file: Path to a JSON configuration file
         """
         super().__init__(config, config_file)
+        
+        # Extract ARIMA-specific parameters
         self.p = int(self.config.get('p', 1))
         self.d = int(self.config.get('d', 1))
         self.q = int(self.config.get('q', 1))
         self.s = int(self.config.get('s', 1))
-        # Remove target_col - use target_cols from parent class instead
-        self.model_ = None  # Use model_ consistently
-        self.is_fitted = False  # Explicitly initialize
-        self.loss_function = self.config.get('loss_function', 'mae')
+        
+        # Initialize model state
+        self.model_ = None
+        self.is_fitted = False
+        self.training_loss = self.config.get('training_loss', 'mae')
+        
         # forecast_horizon is inherited from parent class (BaseModel)
         
     def train(self, 
               y_context: Union[pd.Series, np.ndarray], 
               y_target: Union[pd.Series, np.ndarray] = None, 
-              x_context: Union[pd.Series, np.ndarray] = None, 
-              x_target: Union[pd.Series, np.ndarray] = None, 
-              y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None,
+              y_start_date: Optional[str] = None, 
               **kwargs
     ) -> 'ArimaModel':
         """
@@ -51,69 +78,101 @@ class ArimaModel(BaseModel):
         
         Args:
             y_context: Past target values - training data
-            x_context: Past exogenous variables - used during training
+            y_target: Future target values (not used in training, for compatibility)
+            y_start_date: Start date for y_context (not used in ARIMA)
+            **kwargs: Additional keyword arguments
+            
         Returns:
             self: The fitted model instance
+            
+        Note:
+            ARIMA models only use y_context for training.
+            y_target is ignored to prevent data leakage.
         """
-        # Use y_context as the endogenous variable (training data)
+        # Convert y_context to numpy array if needed
         if isinstance(y_context, pd.Series):
             endog = y_context.values
         else:
             endog = y_context
         
-        # Handle exogenous variables if provided (only x_context)
+        # No exogenous variables supported
         exog = None
-        if x_context is not None:
-            if isinstance(x_context, (pd.Series, pd.DataFrame)):
-                exog = x_context.values
-            else:
-                exog = x_context
         
         # Use seasonal_order only if seasonal period is greater than 1
         if self.s > 1:
-            model = ARIMA(endog=endog, order=(self.p, self.d, self.q), seasonal_order=(0, 0, 0, self.s), exog=exog)
+            model = ARIMA(
+                endog=endog, 
+                order=(self.p, self.d, self.q), 
+                seasonal_order=(0, 0, 0, self.s), 
+                exog=exog
+            )
         else:
             # Non-seasonal ARIMA
             model = ARIMA(endog=endog, order=(self.p, self.d, self.q), exog=exog)
+        
         self.model_ = model.fit()
         self.is_fitted = True
         return self
         
-    def predict(self, y_context, y_target=None, x_context=None, x_target=None, y_start_date=None, x_start_date=None, **kwargs):
+    def predict(self, 
+                y_context: Union[pd.Series, np.ndarray] = None,
+                y_target: Union[pd.Series, np.ndarray] = None, 
+                y_start_date: Optional[str] = None, 
+                forecast_horizon: Optional[int] = None,
+                **kwargs
+    ) -> np.ndarray:
         """
         Make predictions using the trained ARIMA model.
         
         Args:
-            y_target: Used to determine the number of steps to forecast
-            x_target: Future exogenous variables for prediction (optional)
+            y_context: Recent target values (not used in ARIMA prediction)
+            y_target: Target values to predict (used to determine forecast length)
+            y_start_date: Start date for y_context (not used)
+            forecast_horizon: Number of steps to forecast (overrides y_target length if provided)
+            **kwargs: Additional keyword arguments
         
         Returns:
             np.ndarray: Model predictions with shape (1, forecast_horizon)
+            
+        Raises:
+            ValueError: If model is not fitted or forecast length cannot be determined
         """
         if not self.is_fitted:
-            raise ValueError("Model not initialized. Call train first.")
+            raise ValueError("Model not fitted. Call train() first.")
         
+        # Determine forecast length from y_target
         if y_target is None:
-            raise ValueError("y_target must be provided to determine prediction length.")
-        
-        # Handle exogenous variables for prediction (only x_target)
-        exog = None
-        if x_target is not None:
-            if isinstance(x_target, (pd.Series, pd.DataFrame)):
-                exog = x_target.values
-            else:
-                exog = x_target
+            raise ValueError("y_target is required to determine prediction length. No forecast_horizon fallback allowed.")
         
         forecast_steps = len(y_target)
+        
+        if forecast_steps <= 0:
+            raise ValueError("Forecast horizon must be positive.")
+        
+        # No exogenous variables supported
+        exog = None
+        
+        # Generate forecast
         forecast = self.model_.forecast(steps=forecast_steps, exog=exog)
         
         # Store predictions and true values for evaluation
-        self._last_y_pred = forecast.reshape(1, -1)
-        self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
+        # Convert forecast to numpy array and reshape
+        if hasattr(forecast, 'values'):
+            forecast_array = forecast.values
+        else:
+            forecast_array = np.array(forecast)
+        self._last_y_pred = forecast_array.reshape(1, -1)
+        if y_target is not None:
+            self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
         
         return self._last_y_pred
         
-    def rolling_predict(self, y_context, y_target=None, x_context=None, x_target=None, y_start_date=None, x_start_date=None, **kwargs):
+    def rolling_predict(self, 
+                       y_context: Union[pd.Series, np.ndarray], 
+                       y_target: Union[pd.Series, np.ndarray] = None, 
+                       y_start_date: Optional[str] = None, 
+                       **kwargs
+    ) -> np.ndarray:
         """
         Perform rolling window predictions for time series forecasting.
         This method retrains the model at each step with updated data.
@@ -121,36 +180,28 @@ class ArimaModel(BaseModel):
         Args:
             y_context: Initial training data
             y_target: Target values to predict
-            x_context: Exogenous variables for training (optional)
-            x_target: Future exogenous variables (optional)
+            y_start_date: Start date for y_context (not used)
+            **kwargs: Additional keyword arguments
             
         Returns:
             np.ndarray: Rolling predictions with shape (1, len(y_target))
+            
+        Raises:
+            ValueError: If y_target is not provided
         """
         if y_target is None:
             raise ValueError("y_target must be provided for rolling predictions.")
         
         predictions = []
         current_context = y_context.copy()
-        current_x_context = x_context.copy() if x_context is not None else None
         
         # Perform rolling predictions
         for i in range(len(y_target)):
             # Train model on current context
-            if current_x_context is not None:
-                # Update exogenous variables if provided
-                if x_target is not None and i < len(x_target):
-                    current_x_context = np.append(current_x_context, x_target[i:i+1], axis=0)
-                
-                self.train(y_context=current_context, x_context=current_x_context)
-            else:
-                self.train(y_context=current_context)
+            self.train(y_context=current_context)
             
             # Make one-step prediction
-            if current_x_context is not None and x_target is not None and i < len(x_target):
-                pred = self.predict(y_context=current_context, y_target=y_target[i:i+1], x_target=x_target[i:i+1])
-            else:
-                pred = self.predict(y_context=current_context, y_target=y_target[i:i+1])
+            pred = self.predict(y_target=y_target[i:i+1])
             
             predictions.append(pred[0, 0])  # Extract single prediction value
             
@@ -161,7 +212,12 @@ class ArimaModel(BaseModel):
         
         # Store final predictions and true values
         self._last_y_pred = np.array(predictions).reshape(1, -1)
-        self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
+        # Convert y_target to numpy array and reshape
+        if hasattr(y_target, 'values'):
+            y_target_array = y_target.values
+        else:
+            y_target_array = np.array(y_target)
+        self._last_y_true = y_target_array.reshape(1, -1)
         
         return self._last_y_pred
         
@@ -176,13 +232,13 @@ class ArimaModel(BaseModel):
             'p': self.p,
             'd': self.d,
             'q': self.q,
-            'target_cols': self.target_cols,
-            'loss_function': self.loss_function,
+            's': self.s,
+            'loss_function': self.training_loss,
             'forecast_horizon': self.forecast_horizon,
             'is_fitted': self.is_fitted
         }
         
-    def set_params(self, **params: Dict[str, Any]) -> 'ARIMAModel':
+    def set_params(self, **params: Dict[str, Any]) -> 'ArimaModel':
         """
         Set model parameters.
         
@@ -196,7 +252,10 @@ class ArimaModel(BaseModel):
         model_params_changed = False
         
         for key, value in params.items():
-            if hasattr(self, key):
+            if key in ('dataset',):
+                # Skip dataset parameter - it's not an ARIMA model parameter
+                continue
+            elif hasattr(self, key):
                 # Check if this is a model parameter that requires refitting
                 if key in ['p', 'd', 'q', 's'] and getattr(self, key) != value:
                     model_params_changed = True
@@ -218,6 +277,10 @@ class ArimaModel(BaseModel):
         
         Args:
             path: Path to save the model
+            
+        Raises:
+            ValueError: If model is not fitted
+            RuntimeError: If saving fails
         """
         if not self.is_fitted:
             raise ValueError("Cannot save an unfitted model. Call train() first.")
@@ -246,6 +309,10 @@ class ArimaModel(BaseModel):
         
         Args:
             path: Path to load the model from
+            
+        Raises:
+            FileNotFoundError: If model file doesn't exist
+            RuntimeError: If loading fails
         """
         if not os.path.exists(path):
             raise FileNotFoundError(f"No model found at {path}")
@@ -273,10 +340,10 @@ class ArimaModel(BaseModel):
         summary = {
             'model_type': 'ARIMA',
             'order': (self.p, self.d, self.q),
+            'seasonal_period': self.s,
             'is_fitted': self.is_fitted,
             'forecast_horizon': self.forecast_horizon,
-            'target_cols': self.target_cols,
-            'loss_function': self.loss_function
+            'loss_function': self.training_loss
         }
         
         if self.is_fitted and self.model_ is not None:

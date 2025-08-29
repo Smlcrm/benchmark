@@ -5,21 +5,14 @@ class FeatureExtractor:
     def __init__(self, config=None):
         """
         Initialize feature extractor with configuration.
-
+        
         Args:
             config (dict, optional): Configuration dictionary with feature extraction parameters.
-                                     Can include keys like 'target_col', 'lags', 'rolling_windows',
+                                     Can include keys like 'lags', 'rolling_windows',
                                      'datetime_features', 'exog_cols', 'model_type', etc.
                                      Defaults to None for basic operation.
         """
         self.config = config if config is not None else {}
-        # target_cols must be explicitly specified in dataset config - no defaults allowed
-        dataset_cfg = self.config.get('dataset', {})
-        self.target_cols = dataset_cfg.get('target_cols')
-        if not self.target_cols:
-            raise ValueError("target_cols must be defined in dataset configuration")
-        # For backward compatibility, use first target column as primary target
-        self.target_col = self.target_cols[0]
         self.datetime_col = self.config.get('datetime_col', None) # If None, assumes index is datetime
 
     def _create_lags(self, df, column_name, lags):
@@ -102,29 +95,26 @@ class FeatureExtractor:
         """
         Extracts features for tree-based, linear models, SVR, Quantile Regression.
         Assumes 'data' is a Pandas DataFrame.
+        All data is treated as multivariate where univariate is just num_targets == 1.
         """
         df = data.copy()
         
         # Get forecast_horizon from dataset configuration
         dataset_cfg = self.config.get('dataset', {})
         forecast_horizon = dataset_cfg.get('forecast_horizon', 1)
-        df['y_target'] = df[self.target_col].shift(-forecast_horizon)
-
-        # Target lags
-        target_lags = self.config.get('lags_target', [1, 7, 14])
-        if target_lags:
-            df = self._create_lags(df, self.target_col, lags=target_lags)
-
-        # Exogenous lags
-        exogenous_lags = self.config.get('lags_exogenous', [1, 7])
-        if exogenous_lags and self.config.get('exogenous_cols'):
-            for col in self.config.get('exogenous_cols'):
-                df = self._create_lags(df, col, lags=exogenous_lags)
-
-        # Rolling features
-        rolling_configs = self.config.get('rolling_features', [{'window': 7, 'aggs': ['mean', 'std']}])
-        if rolling_configs:
-            df = self._create_rolling_features(df, self.target_col, rolling_configs)
+        # Infer target column as the first column (multivariate approach)
+        target_column_name = df.columns[0]
+        df['y_target'] = df[target_column_name].shift(-forecast_horizon)
+        
+        # Get lag and rolling window configurations
+        target_lags = self.config.get('lags', [1, 2, 3, 7])
+        rolling_configs = self.config.get('rolling_windows', [{'window': 7, 'aggs': ['mean', 'std']}])
+        
+        # Create lag features
+        df = self._create_lags(df, target_column_name, lags=target_lags)
+        
+        # Create rolling window features
+        df = self._create_rolling_features(df, target_column_name, rolling_configs)
 
         # Datetime features
         df = self._create_datetime_features(df)
@@ -142,23 +132,26 @@ class FeatureExtractor:
         """
         Extracts features for sequence models like LSTM, GRU, Transformer.
         Assumes 'data' is a Pandas DataFrame.
+        All data is treated as multivariate where univariate is just num_targets == 1.
         """
         df = data.copy()
         
         # Get forecast_horizon from dataset configuration
         dataset_cfg = self.config.get('dataset', {})
         forecast_horizon = dataset_cfg.get('forecast_horizon', 1)
-        df['y_target'] = df[self.target_col].shift(-forecast_horizon)
+        # Infer target column as the first column (multivariate approach)
+        target_column_name = df.columns[0]
+        df['y_target'] = df[target_column_name].shift(-forecast_horizon)
 
         # Target lags
         target_lags = self.config.get('lags_target', [1, 7, 14])
         if target_lags:
-            df = self._create_lags(df, self.target_col, lags=target_lags)
+            df = self._create_lags(df, target_column_name, lags=target_lags)
 
         # Target rolling features
         target_rolling_configs = self.config.get('rolling_features_target', [{'window': 7, 'aggs': ['mean', 'std']}])
         if target_rolling_configs:
-            df = self._create_rolling_features(df, self.target_col, window_configs=target_rolling_configs)
+            df = self._create_rolling_features(df, target_column_name, window_configs=target_rolling_configs)
         
         # Datetime features
         if self.config.get('extract_datetime_features', True):
@@ -171,8 +164,7 @@ class FeatureExtractor:
             exog_rolling_configs = self.config.get('rolling_features_exog', {}) # e.g. {'exog1': [{'window':7, 'aggs':['mean']}]}
             for exog_col in exog_cols:
                 if exog_col not in df.columns:
-                    print(f"Warning: Exogenous column '{exog_col}' not found in data.")
-                    continue
+                    raise ValueError(f"Exogenous column '{exog_col}' not found in data. Please check your configuration.")
                 if exog_lags_config and exog_col in exog_lags_config:
                     df = self._create_lags(df, exog_col, lags=exog_lags_config[exog_col])
                 if exog_rolling_configs and exog_col in exog_rolling_configs:
@@ -186,7 +178,7 @@ class FeatureExtractor:
         y = df['y_target']
         
         # Columns to drop from X: original target, original exogs (if transformed), and y_target
-        cols_to_drop_from_X = ['y_target', self.target_col] + exog_cols
+        cols_to_drop_from_X = ['y_target', target_column_name] + exog_cols
         X = df.drop(columns=cols_to_drop_from_X, errors='ignore')
         
         return X, y
@@ -194,6 +186,7 @@ class FeatureExtractor:
     def extract_features_for_prophet(self, data):
         """
         Formats data for Prophet.
+        All data is treated as multivariate where univariate is just num_targets == 1.
         """
         df = data.copy()
         df_prophet = pd.DataFrame()
@@ -203,7 +196,12 @@ class FeatureExtractor:
         else:
             df_prophet['ds'] = pd.to_datetime(df.index)
             
-        df_prophet['y'] = df[self.target_col].values
+        # Get forecast_horizon from dataset configuration
+        dataset_cfg = self.config.get('dataset', {})
+        forecast_horizon = dataset_cfg.get('forecast_horizon', 1)
+        # Infer target column as the first column (multivariate approach)
+        target_column_name = df.columns[0]
+        df_prophet['y'] = df[target_column_name].shift(-forecast_horizon).values
 
         exog_cols_prophet = self.config.get('exog_cols_for_prophet', [])
         if exog_cols_prophet:
@@ -211,7 +209,7 @@ class FeatureExtractor:
                 if col in df.columns:
                     df_prophet[col] = df[col].values
                 else:
-                    print(f"Warning: Prophet regressor '{col}' not found in input DataFrame.")
+                    raise ValueError(f"Prophet regressor '{col}' not found in input DataFrame. Please check your configuration.")
         
         # holiday_df should be prepared separately and passed to Prophet model
         # self.config.get('holiday_df', None)
@@ -220,6 +218,7 @@ class FeatureExtractor:
     def extract_features(self, data):
         """
         Extract features from preprocessed data based on model_type in config.
+        All data is treated as multivariate where univariate is just num_targets == 1.
 
         Args:
             data: Preprocessed input data (Pandas DataFrame)
@@ -235,7 +234,8 @@ class FeatureExtractor:
             print("Specific preprocessing like differencing for ARIMA or windowing for NBEATS is typically handled by the model/library.")
             # For simplicity, we'll return the relevant columns.
             # Actual feature engineering for these is minimal from this class's perspective.
-            cols = [self.target_col] + self.config.get('exog_cols', [])
+            target_column_name = data.columns[0]  # Infer target column (multivariate approach)
+            cols = [target_column_name] + self.config.get('exog_cols', [])
             return data[cols].copy() # Return a copy to avoid modifying original
         
         elif model_type in ['xgboost', 'random_forest', 'ridge_regression', 'svr', 'quantile_regression']:
@@ -250,7 +250,8 @@ class FeatureExtractor:
         elif model_type == 'deepar':
             print("DeepAR feature extraction is highly specific to the library (e.g., GluonTS).")
             print("This class will return relevant columns for further processing by such a library.")
-            cols = [self.target_col] + \
+            target_column_name = data.columns[0]  # Infer target column (multivariate approach)
+            cols = [target_column_name] + \
                    self.config.get('dynamic_exog_cols', []) + \
                    self.config.get('static_cat_cols', [])
             # Ensure unique columns

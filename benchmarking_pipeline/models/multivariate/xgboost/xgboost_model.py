@@ -24,10 +24,8 @@ class MultivariateXGBoostModel(BaseModel):
             config: Configuration dictionary containing model parameters
                 - lookback_window: int, number of past timesteps to use as features
                 - forecast_horizon: int, number of future timesteps to predict
-                - target_cols: list of str, names of target columns (for multivariate)
                 - model_params: dict, parameters for the underlying XGBRegressor model
-                - loss_functions: List[str], list of loss function names to use
-                - primary_loss: str, primary loss function for training
+                - training_loss: str, primary loss function for training
             config_file: Path to a JSON configuration file
         """
         super().__init__(config, config_file)
@@ -35,8 +33,6 @@ class MultivariateXGBoostModel(BaseModel):
         # Extract model parameters from config
         self.lookback_window = self.config.get('lookback_window', 10)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        # target_cols is inherited from parent class (BaseModel/FoundationModel)
-        # n_targets will be calculated when needed: len(self.target_cols)
         
         self._build_model()
         
@@ -61,7 +57,7 @@ class MultivariateXGBoostModel(BaseModel):
         Create advanced multivariate time series features for XGBoost.
         
         Args:
-            y_series: Target time series with shape (timesteps, n_targets)
+            y_series: Target time series with shape (timesteps, num_targets)
             x_series: Exogenous variables (optional)
             
         Returns:
@@ -82,14 +78,14 @@ class MultivariateXGBoostModel(BaseModel):
             sample_features = []
             
             # Get lookback window for all targets
-            lookback_data = y_series[i:i + self.lookback_window]  # Shape: (lookback_window, n_targets)
+            lookback_data = y_series[i:i + self.lookback_window]  # Shape: (lookback_window, num_targets)
             
             # 1. Lag features for each target (flattened)
-            lag_features = lookback_data.flatten()  # Shape: (lookback_window * n_targets,)
+            lag_features = lookback_data.flatten()  # Shape: (lookback_window * num_targets,)
             sample_features.extend(lag_features)
             
             # 2. Rolling statistics for each target individually
-            for target_idx in range(self.n_targets):
+            for target_idx in range(self.num_targets):
                 target_data = lookback_data[:, target_idx]
                 
                 # Basic statistics
@@ -112,9 +108,9 @@ class MultivariateXGBoostModel(BaseModel):
                 ])
             
             # 3. Cross-correlation features between targets (if multivariate)
-            if self.n_targets > 1:
-                for i_target in range(self.n_targets):
-                    for j_target in range(i_target + 1, self.n_targets):
+            if self.num_targets > 1:
+                for i_target in range(self.num_targets):
+                    for j_target in range(i_target + 1, self.num_targets):
                         # Correlation between target pairs
                         corr = np.corrcoef(lookback_data[:, i_target], lookback_data[:, j_target])[0, 1]
                         if np.isnan(corr):
@@ -134,7 +130,7 @@ class MultivariateXGBoostModel(BaseModel):
             if self.lookback_window >= 7:
                 # Weekly patterns (last 7 values for each target)
                 recent_data = lookback_data[-7:]
-                for target_idx in range(self.n_targets):
+                for target_idx in range(self.num_targets):
                     recent_mean = np.mean(recent_data[:, target_idx])
                     sample_features.append(recent_mean)
             
@@ -147,11 +143,11 @@ class MultivariateXGBoostModel(BaseModel):
             
             # Create target: next forecast_horizon steps for all targets, flattened
             future_values = y_series[i + self.lookback_window:i + self.lookback_window + self.forecast_horizon]
-            targets.append(future_values.flatten())  # Shape: (forecast_horizon * n_targets,)
+            targets.append(future_values.flatten())  # Shape: (forecast_horizon * num_targets,)
         
         return np.array(features), np.array(targets)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame], y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None, **kwargs) -> 'MultivariateXGBoostModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame], y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, y_start_date: pd.Timestamp = None, **kwargs) -> 'MultivariateXGBoostModel':
         """
         Train the Multivariate XGBoost model for direct multi-output forecasting.
         
@@ -163,12 +159,9 @@ class MultivariateXGBoostModel(BaseModel):
         - Uses XGBoost's gradient boosting with MultiOutputRegressor for non-linear pattern learning
         
         Args:
-            y_context: Past target values (time series) - used for training (can be DataFrame for multivariate)
-            y_target: Future target values (optional, for extended training)
-            x_context: Past exogenous variables (optional)
-            x_target: Future exogenous variables (optional)
+            y_context: Past target values (DataFrame for multivariate)
+            y_target: Future target values (optional, for validation)
             y_start_date: The start date timestamp for y_context and y_target
-            x_start_date: The start date timestamp for x_context and x_target
             **kwargs: Additional keyword arguments
             
         Returns:
@@ -184,99 +177,83 @@ class MultivariateXGBoostModel(BaseModel):
         if isinstance(y_context, pd.DataFrame):
             # Multivariate case - use all columns
             y_data = y_context.values
-            # Update target_cols if not already set
-            # target_cols should already be set from config, validate consistency
-            if self.target_cols and len(y_context.columns) > 0:
-                expected_cols = set(self.target_cols)
-                actual_cols = set(y_context.columns)
-                if expected_cols != actual_cols:
-                    raise ValueError(f"Data columns {actual_cols} don't match configured target_cols {expected_cols}")
+            # Calculate num_targets from data shape
+            self.num_targets = y_data.shape[1]
         elif isinstance(y_context, pd.Series):
             # Univariate case - reshape to 2D
             y_data = y_context.values.reshape(-1, 1)
-            # For univariate case, validate against config
-            if len(self.target_cols) != 1:
-                raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
+            self.num_targets = 1
         else:
             # Numpy array case
             y_data = y_context
             if y_data.ndim == 1:
                 y_data = y_data.reshape(-1, 1)
+            self.num_targets = y_data.shape[1]
 
-        # Calculate n_targets from inherited target_cols
-        self.n_targets = len(self.target_cols)
+        # Store the raw target data for later use
+        self.y_context = y_data
         
         # Handle exogenous variables
-        if isinstance(x_context, (pd.Series, pd.DataFrame)):
-            x_data = x_context.values
+        if x_context is not None:
+            if isinstance(x_context, pd.DataFrame):
+                x_data = x_context.values
+            elif isinstance(x_context, pd.Series):
+                x_data = x_context.values.reshape(-1, 1)
+            else:
+                x_data = x_context
+                if x_data.ndim == 1:
+                    x_data = x_data.reshape(-1, 1)
+            self.x_context = x_data
         else:
-            x_data = x_context
-
-        # Combine context and target for full training series if y_target is provided
+            self.x_context = None
+        
+        # Store target data for later use
         if y_target is not None:
             if isinstance(y_target, pd.DataFrame):
-                y_target_vals = y_target.values
+                self.y_target = y_target.values
             elif isinstance(y_target, pd.Series):
-                y_target_vals = y_target.values.reshape(-1, 1)
+                self.y_target = y_target.values.reshape(-1, 1)
             else:
-                y_target_vals = y_target
-                if y_target_vals.ndim == 1:
-                    y_target_vals = y_target_vals.reshape(-1, 1)
-            
-            y_data = np.concatenate([y_data, y_target_vals], axis=0)
-
-        # Create features and targets
-        X, y = self._create_multivariate_features(y_data, x_data)
+                self.y_target = y_target
+                if self.y_target.ndim == 1:
+                    self.y_target = self.y_target.reshape(-1, 1)
+        else:
+            self.y_target = None
         
-        print(f"[DEBUG][MultivariateXGBoost] Training X shape: {X.shape}, y shape: {y.shape}")
-        print(f"[DEBUG][MultivariateXGBoost] n_targets: {self.n_targets}, target_cols: {self.target_cols}")
-        print(f"Training Multivariate XGBoost model with {X.shape[0]} samples and {X.shape[1]} features...")
+        # Store timestamps
+        self.y_start_date = y_start_date
+        self.x_start_date = x_start_date
         
-        # Handle NaNs in training data
-        if np.isnan(X).any() or np.isnan(y).any():
-            print("[WARNING][MultivariateXGBoost] NaNs found in training data! Attempting to fix...")
-            X = np.nan_to_num(X, nan=0.0)
-            y = np.nan_to_num(y, nan=0.0)
+        # Prepare features for training
+        features = self._create_multivariate_features(y_data, self.x_context)
         
-        try:
-            # Train model
-            self.model.fit(X, y)
-            self.is_fitted = True
-            print("[INFO][MultivariateXGBoost] Training completed successfully")
-        except Exception as e:
-            print(f"[ERROR][MultivariateXGBoost] Training failed: {e}")
-            # Try with more conservative parameters
-            try:
-                print("[INFO][MultivariateXGBoost] Trying with conservative parameters...")
-                conservative_params = {
-                    'n_estimators': 50,
-                    'max_depth': 3,
-                    'learning_rate': 0.1,
-                    'random_state': 42
-                }
-                base_xgb = XGBRegressor(**conservative_params)
-                self.model = MultiOutputRegressor(base_xgb)
-                self.model.fit(X, y)
-                self.is_fitted = True
-                print("[INFO][MultivariateXGBoost] Training succeeded with fallback parameters")
-            except Exception as e2:
-                print(f"[ERROR][MultivariateXGBoost] Fallback training also failed: {e2}")
-                raise ValueError(f"Multivariate XGBoost training failed: {e}")
+        # Prepare targets for training
+        if self.y_target is not None:
+            targets = self.y_target
+        else:
+            # If no target provided, use the last forecast_horizon steps as target
+            targets = y_data[-self.forecast_horizon:]
+            features = features[:-self.forecast_horizon]
+        
+        # Train the model
+        self.model.fit(features, targets)
+        self.is_fitted = True
+        
+        print(f"[DEBUG][MultivariateXGBoost] num_targets: {self.num_targets}")
         
         return self
 
-    def rolling_predict(self, y_context: np.ndarray, y_target: Union[pd.Series, np.ndarray, pd.DataFrame], x_context: np.ndarray = None, **kwargs) -> np.ndarray:
+    def rolling_predict(self, y_context: np.ndarray, y_target: Union[pd.Series, np.ndarray, pd.DataFrame], **kwargs) -> np.ndarray:
         """
         Autoregressive rolling prediction for Multivariate XGBoost.
         Predicts the entire length of y_target by repeatedly using its own predictions as context.
         
         Args:
-            y_context: Historical context data with shape (timesteps, n_targets)
+            y_context: Historical context data with shape (timesteps, num_targets)
             y_target: Target data to determine prediction length
-            x_context: Exogenous context data (optional)
             
         Returns:
-            np.ndarray: Predictions with shape (forecast_steps, n_targets)
+            np.ndarray: Predictions with shape (forecast_steps, num_targets)
         """
         # Convert y_context to proper shape
         if isinstance(y_context, (pd.Series, pd.DataFrame)):
@@ -295,7 +272,7 @@ class MultivariateXGBoostModel(BaseModel):
         preds = []
         # Use the entire context, maintaining the multivariate structure
         context = y_context.copy()
-        total_steps = len(y_target) if hasattr(y_target, '__len__') else self.forecast_horizon
+        total_steps = len(y_target)
         steps_done = 0
         
         while steps_done < total_steps:
@@ -313,7 +290,7 @@ class MultivariateXGBoostModel(BaseModel):
                 sample_features.extend(lag_features)
                 
                 # 2. Rolling statistics for each target
-                for target_idx in range(self.n_targets):
+                for target_idx in range(self.num_targets):
                     target_data = current_window[:, target_idx]
                     
                     rolling_mean = np.mean(target_data)
@@ -331,9 +308,9 @@ class MultivariateXGBoostModel(BaseModel):
                     ])
                 
                 # 3. Cross-correlation features (if multivariate)
-                if self.n_targets > 1:
-                    for i_target in range(self.n_targets):
-                        for j_target in range(i_target + 1, self.n_targets):
+                if self.num_targets > 1:
+                    for i_target in range(self.num_targets):
+                        for j_target in range(i_target + 1, self.num_targets):
                             corr = np.corrcoef(current_window[:, i_target], current_window[:, j_target])[0, 1]
                             if np.isnan(corr):
                                 corr = 0.0
@@ -347,35 +324,27 @@ class MultivariateXGBoostModel(BaseModel):
                 # 4. Temporal features (if applicable)
                 if self.lookback_window >= 7:
                     recent_data = current_window[-7:]
-                    for target_idx in range(self.n_targets):
+                    for target_idx in range(self.num_targets):
                         recent_mean = np.mean(recent_data[:, target_idx])
                         sample_features.append(recent_mean)
                 
-                # 5. Handle exogenous features (simplified - use last available)
-                if x_context is not None:
-                    # For simplicity, repeat the last exogenous values
-                    if x_context.ndim == 1:
-                        sample_features.extend(x_context[-1:])
-                    else:
-                        sample_features.extend(x_context[-1].flatten())
+                # 5. No exogenous features (removed as per cleanup)
                 
                 # Convert to numpy array and predict
                 X_pred = np.array(sample_features).reshape(1, -1)
                 
-                # Check for NaNs and handle them
+                # Fail fast on NaN input - don't silently replace
                 if np.isnan(X_pred).any():
-                    print("[WARNING][MultivariateXGBoost] NaNs found in prediction features! Attempting to fix...")
-                    X_pred = np.nan_to_num(X_pred, nan=0.0)
+                    raise ValueError("Prediction features contain NaN values. This indicates data corruption.")
                 
                 pred_flat = self.model.predict(X_pred).flatten()
                 
-                # Check for NaNs in predictions and handle them
+                # Fail fast on NaN predictions - don't silently replace
                 if np.isnan(pred_flat).any():
-                    print("[WARNING][MultivariateXGBoost] NaNs in predictions! Replacing with last valid value")
-                    pred_flat = np.nan_to_num(pred_flat, nan=0.0)
+                    raise ValueError("Model produced NaN predictions. This indicates a training or data issue.")
                 
-                # Reshape predictions back to (forecast_horizon, n_targets)
-                pred_reshaped = pred_flat.reshape(self.forecast_horizon, self.n_targets)
+                # Reshape predictions back to (forecast_horizon, num_targets)
+                pred_reshaped = pred_flat.reshape(self.forecast_horizon, self.num_targets)
                 
                 print(f"[DEBUG][MultivariateXGBoost] Rolling predict X_pred shape: {X_pred.shape}, pred_reshaped shape: {pred_reshaped.shape}")
                 
@@ -386,20 +355,12 @@ class MultivariateXGBoostModel(BaseModel):
                 # Update context with new predictions
                 context = np.concatenate([context, pred_steps], axis=0)
                 steps_done += steps
-                
-            except Exception as e:
-                print(f"[ERROR][MultivariateXGBoost] Prediction failed: {e}")
-                # Fallback: use last values repeated
-                fallback_pred = np.tile(context[-1], (steps, 1))
-                preds.append(fallback_pred)
-                context = np.concatenate([context, fallback_pred], axis=0)
-                steps_done += steps
         
         # Concatenate all predictions
         result = np.concatenate(preds, axis=0)
         return result
 
-    def predict(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame] = None, y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, **kwargs) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame] = None, y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, **kwargs) -> np.ndarray:
         """
         Make predictions using the trained Multivariate XGBoost model.
         
@@ -412,11 +373,9 @@ class MultivariateXGBoostModel(BaseModel):
         Args:
             y_context: Historical context data
             y_target: Target data (used to determine prediction length)
-            x_context: Exogenous context data (optional)
-            x_target: Exogenous target data (optional)
             
         Returns:
-            np.ndarray: Model predictions with shape (forecast_steps, n_targets)
+            np.ndarray: Model predictions with shape (forecast_steps, num_targets)
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
@@ -433,86 +392,9 @@ class MultivariateXGBoostModel(BaseModel):
             if y_context_vals.ndim == 1:
                 y_context_vals = y_context_vals.reshape(-1, 1)
 
-        # Convert x_context if provided
-        x_context_vals = None
-        if x_context is not None:
-            if isinstance(x_context, (pd.Series, pd.DataFrame)):
-                x_context_vals = x_context.values
-            else:
-                x_context_vals = x_context
-
-        if y_target is not None:
-            # Use rolling prediction to cover the full test set
-            preds = self.rolling_predict(y_context_vals, y_target, x_context_vals)
-            print(f"[DEBUG][MultivariateXGBoost] Final rolling preds shape: {preds.shape}")
-            return preds
-        
-        # Single prediction case (forecast_horizon steps)
-        if len(y_context_vals) < self.lookback_window:
-            raise ValueError(f"y_context too short for prediction: {len(y_context_vals)} < {self.lookback_window}")
-        
-        # Use last lookback_window values for single prediction
-        current_window = y_context_vals[-self.lookback_window:]
-        
-        # Create features (same logic as in rolling_predict)
-        sample_features = []
-        
-        # Lag features
-        lag_features = current_window.flatten()
-        sample_features.extend(lag_features)
-        
-        # Rolling statistics for each target
-        for target_idx in range(self.n_targets):
-            target_data = current_window[:, target_idx]
-            
-            rolling_mean = np.mean(target_data)
-            rolling_std = np.std(target_data)
-            rolling_min = np.min(target_data)
-            rolling_max = np.max(target_data)
-            rolling_median = np.median(target_data)
-            trend = np.polyfit(range(self.lookback_window), target_data, 1)[0]
-            rolling_range = rolling_max - rolling_min
-            rolling_iqr = np.percentile(target_data, 75) - np.percentile(target_data, 25)
-            
-            sample_features.extend([
-                rolling_mean, rolling_std, rolling_min, rolling_max, rolling_median,
-                trend, rolling_range, rolling_iqr
-            ])
-        
-        # Cross-correlation features
-        if self.n_targets > 1:
-            for i_target in range(self.n_targets):
-                for j_target in range(i_target + 1, self.n_targets):
-                    corr = np.corrcoef(current_window[:, i_target], current_window[:, j_target])[0, 1]
-                    if np.isnan(corr):
-                        corr = 0.0
-                    sample_features.append(corr)
-                    
-                    mean_i = np.mean(current_window[:, i_target])
-                    mean_j = np.mean(current_window[:, j_target])
-                    ratio = mean_i / mean_j if mean_j != 0 else 0.0
-                    sample_features.append(ratio)
-        
-        # Temporal features
-        if self.lookback_window >= 7:
-            recent_data = current_window[-7:]
-            for target_idx in range(self.n_targets):
-                recent_mean = np.mean(recent_data[:, target_idx])
-                sample_features.append(recent_mean)
-        
-        # Exogenous features
-        if x_context_vals is not None:
-            if x_context_vals.ndim == 1:
-                sample_features.extend(x_context_vals[-1:])
-            else:
-                sample_features.extend(x_context_vals[-1].flatten())
-        
-        X_pred = np.array(sample_features).reshape(1, -1)
-        preds_flat = self.model.predict(X_pred).flatten()
-        
-        # Reshape to (forecast_horizon, n_targets)
-        preds = preds_flat.reshape(self.forecast_horizon, self.n_targets)
-        print(f"[DEBUG][MultivariateXGBoost] Single predict X_pred shape: {X_pred.shape}, preds shape: {preds.shape}")
+        # Use rolling prediction to cover the full test set (no exogenous variables)
+        preds = self.rolling_predict(y_context_vals, y_target, None)
+        print(f"[DEBUG][MultivariateXGBoost] Final rolling preds shape: {preds.shape}")
         return preds
 
     def get_params(self) -> Dict[str, Any]:
@@ -522,24 +404,22 @@ class MultivariateXGBoostModel(BaseModel):
         Returns:
             Dict[str, Any]: Dictionary of model parameters
         """
-        params = {
-            'lookback_window': self.lookback_window,
-            'forecast_horizon': self.forecast_horizon,
-            'target_cols': self.target_cols,
-            'n_targets': self.n_targets,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss
+        return {
+            'n_estimators': self.n_estimators,
+            'max_depth': self.max_depth,
+            'learning_rate': self.learning_rate,
+            'subsample': self.subsample,
+            'colsample_bytree': self.colsample_bytree,
+            'random_state': self.random_state,
+            'n_jobs': self.n_jobs,
+            'num_targets': self.num_targets,
+            'training_loss': self.training_loss,
+            'forecast_horizon': self.forecast_horizon
         }
         
-        if self.model:
-            params.update(self.model.get_params())
-            
-        return params
-
     def set_params(self, **params: Dict[str, Any]) -> 'MultivariateXGBoostModel':
         """
-        Set model parameters. This will update the model instance with new parameters.
-        Handles MultiOutputRegressor by prefixing XGBoost params with 'estimator__'.
+        Set model parameters.
         
         Args:
             **params: Model parameters to set
@@ -547,43 +427,18 @@ class MultivariateXGBoostModel(BaseModel):
         Returns:
             self: The model instance with updated parameters
         """
-        # Handle model-level params
-        model_level_keys = ['lookback_window', 'forecast_horizon']
-        for k in model_level_keys:
-            if k in params:
-                setattr(self, k, params[k])
-        
-        # Note: target_cols is inherited from parent class and shouldn't be modified
-        
-        # Prepare params for underlying XGBRegressor
-        xgb_param_names = XGBRegressor().get_params().keys()
-        mo_params = {}
-        config_params = {}
-        
-        for k, v in params.items():
-            if k in xgb_param_names:
-                mo_params[f'estimator__{k}'] = v
-                config_params[k] = v
-            elif k == 'n_jobs':
-                mo_params[k] = v
-                config_params[k] = v
-                
-        if hasattr(self, 'model') and isinstance(self.model, MultiOutputRegressor):
-            self.model.set_params(**mo_params)
-        elif hasattr(self, 'model') and self.model is not None:
-            # Fallback for single XGBRegressor
-            single_params = {k: v for k, v in params.items() if k in xgb_param_names or k == 'n_jobs'}
-            self.model.set_params(**single_params)
-            
-        # Update config as well
-        if 'model_params' not in self.config:
-            self.config['model_params'] = {}
-        self.config['model_params'].update(config_params)
-        
-        for k in model_level_keys:
-            if k in params:
-                self.config[k] = params[k]
-                
+        for key, value in params.items():
+            if hasattr(self, key):
+                # Ensure proper type conversion for numeric parameters
+                if key in ['n_estimators', 'max_depth', 'forecast_horizon']:
+                    value = int(value)
+                elif key in ['learning_rate', 'subsample', 'colsample_bytree']:
+                    value = float(value)
+                elif key in ['random_state']:
+                    value = int(value)
+                elif key in ['n_jobs']:
+                    value = int(value)
+                setattr(self, key, value)
         return self
 
     def save(self, path: str) -> None:
@@ -600,16 +455,18 @@ class MultivariateXGBoostModel(BaseModel):
         if dir_name:
             os.makedirs(dir_name, exist_ok=True)
         
+        # Save model state
         model_state = {
             'config': self.config,
             'is_fitted': self.is_fitted,
-            'lookback_window': self.lookback_window,
-            'forecast_horizon': self.forecast_horizon,
-            'target_cols': self.target_cols,
-            'n_targets': self.n_targets,
-            'model': self.model
+            'params': self.get_params(),
+            'fitted_model': self.model,
+            'y_context': self.y_context,
+            'x_context': self.x_context,
+            'y_target': self.y_target
         }
         
+        # Save model state to file
         with open(path, 'wb') as f:
             pickle.dump(model_state, f)
             
@@ -626,16 +483,18 @@ class MultivariateXGBoostModel(BaseModel):
         if not os.path.exists(path):
             raise FileNotFoundError(f"No model found at {path}")
             
+        # Load model state from file
         with open(path, 'rb') as f:
             model_state = pickle.load(f)
-        
+            
+        # Restore model state
         self.config = model_state['config']
         self.is_fitted = model_state['is_fitted']
-        self.lookback_window = model_state['lookback_window']
-        self.forecast_horizon = model_state['forecast_horizon']
-        self.target_cols = model_state['target_cols']
-        self.n_targets = model_state['n_targets']
-        self.model = model_state['model']
+        self.model = model_state['fitted_model']
+        self.y_context = model_state['y_context']
+        self.x_context = model_state['x_context']
+        self.y_target = model_state['y_target']
+        self.set_params(**model_state['params'])
         
         return self
 
@@ -644,9 +503,9 @@ class MultivariateXGBoostModel(BaseModel):
         Compute all loss metrics between true and predicted values using the Evaluator class.
         
         Args:
-            y_true: True target values with shape (timesteps, n_targets)
-            y_pred: Predicted values with shape (timesteps, n_targets)
-            loss_function: Name of the loss function to use (defaults to primary_loss)
+            y_true: True target values with shape (timesteps, num_targets)
+            y_pred: Predicted values with shape (timesteps, num_targets)
+            loss_function: Name of the loss function to use (defaults to training_loss)
             
         Returns:
             Dict[str, float]: Dictionary of computed loss metrics

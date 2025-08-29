@@ -8,7 +8,7 @@ from benchmarking_pipeline.models.foundation_model import FoundationModel
 class TimesFMModel(FoundationModel):
     def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
         super().__init__(config, config_file)
-        self.model_path = "timesfm-1.0-50m"  # Try without google/ prefix
+        self.model_path = "google/timesfm-1.0-300m"  # public HF repo id
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.per_core_batch_size = self.config.get("per_core_batch_size", 2)
         # forecast_horizon is inherited from parent class (FoundationModel)
@@ -83,3 +83,30 @@ class TimesFMModel(FoundationModel):
             return np.array(list(results.values())[0])
         else:
             return np.array(list(results.values()))
+
+    def train(
+        self,
+        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_target: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_start_date: Optional[str] = None,
+        **kwargs,
+    ) -> 'TimesFMModel':
+        """
+        Foundation model: no training needed. Mark as fitted and return self.
+        """
+        self.is_fitted = True
+        return self
+
+    def get_params(self) -> Dict[str, Any]:
+        """
+        Return model configuration parameters used by this instance.
+        """
+        return {
+            'model_path': self.model_path,
+            'device': self.device,
+            'per_core_batch_size': self.per_core_batch_size,
+            'forecast_horizon': self.forecast_horizon,
+            'num_layers': self.num_layers,
+            'context_len': self.context_len,
+            'use_positional_embedding': self.use_positional_embedding,
+        }

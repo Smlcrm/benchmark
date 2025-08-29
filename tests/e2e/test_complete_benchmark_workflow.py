@@ -49,8 +49,8 @@ class TestCompleteBenchmarkWorkflow:
         
         # Step 2: Model Routing
         model_router = ModelRouter()
-        router_config = {'dataset': {'target_cols': ['y']}}  # Univariate - target_cols under dataset
-        folder_path, file_name, class_name = model_router.get_model_path('seasonal_naive', router_config)
+        router_config = {'dataset': {}}  
+        folder_path, file_name, class_name = model_router.get_model_path_with_auto_detection('seasonal_naive', router_config)
         assert folder_path is not None
         assert 'univariate/seasonal_naive' in folder_path
         
@@ -84,7 +84,6 @@ class TestCompleteBenchmarkWorkflow:
         config = mock_config.copy()
         config["dataset"]["path"] = test_data_dir
         # Remove old model.type and model.name - use new structure
-        config["dataset"]["target_cols"] = ["y"]  # Use univariate for now since test_data_dir has univariate metadata
         
         # Step 1: Data Loading
         data_loader = DataLoader(config)
@@ -97,8 +96,8 @@ class TestCompleteBenchmarkWorkflow:
         
         # Step 2: Model Routing
         model_router = ModelRouter()
-        router_config = {'dataset': {'target_cols': ['y']}}  # Multivariate with 2 targets - target_cols under dataset
-        folder_path, file_name, class_name = model_router.get_model_path('lstm', router_config)
+        router_config = {'dataset': {}}  
+        folder_path, file_name, class_name = model_router.get_model_path_with_auto_detection('lstm', router_config)
         assert folder_path is not None
         assert 'univariate/lstm' in folder_path  # Should route to univariate since we only have 'y'
         
@@ -143,9 +142,10 @@ class TestCompleteBenchmarkWorkflow:
         # Test processing multiple chunks
         model_router = ModelRouter()
         for i, chunk in enumerate(chunks):
-            router_config = {'dataset': {'target_cols': ['y']}}  # target_cols under dataset
-            folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
+            router_config = {'dataset': {}}  
+            folder_path, file_name, class_name = model_router.get_model_path_with_auto_detection('arima', router_config)
             assert folder_path is not None
+            assert 'univariate/arima' in folder_path
     
     @pytest.mark.e2e
     def test_workflow_error_handling(self, mock_config):
@@ -187,9 +187,10 @@ class TestCompleteBenchmarkWorkflow:
         
         # Test ModelRouter functionality
         model_router = ModelRouter()
-        router_config = {'dataset': {'target_cols': ['y']}}  # target_cols under dataset
-        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
+        router_config = {'dataset': {}}  
+        folder_path, file_name, class_name = model_router.get_model_path_with_auto_detection('arima', router_config)
         assert folder_path is not None
+        assert 'univariate/arima' in folder_path
         
         # Verify that the workflow components are properly configured
         # for performance evaluation

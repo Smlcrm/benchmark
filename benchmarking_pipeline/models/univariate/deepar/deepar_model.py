@@ -37,10 +37,8 @@ class DeepARModel(BaseModel):
                 - dropout: float, dropout rate in DeepAR RNN layers
                 - learning_rate: float, learning rate for the DeepAR model
                 - batch_size: int, batch size for training
-                - target_col: str, name of target column
                 - feature_cols: list of str, names of feature columns
-                - loss_functions: List[str], list of loss function names to use
-                - primary_loss: str, primary loss function for training
+                - training_loss: str, primary loss function for training
                 - forecast_horizon: int, number of steps to forecast ahead
                 - max_encoder_length: int, number of steps to use as input data during autoregressive training
                 - max_prediction_length: int, number of steps to use as output data during autoregressive training
@@ -55,7 +53,6 @@ class DeepARModel(BaseModel):
         self.dropout = self.config.get('dropout', 0.1)
         self.learning_rate = self.config.get('learning_rate', 0.001)
         self.batch_size = self.config.get('batch_size', 16)
-        # Remove target_col - use target_cols from parent class instead
         self.feature_cols = self.config.get('feature_cols', None)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
         self.max_encoder_length = self.config.get('max_encoder_length', 6)
@@ -126,10 +123,7 @@ class DeepARModel(BaseModel):
     def train(self, 
               y_context: Union[pd.Series, np.ndarray], 
               y_target: Union[pd.Series, np.ndarray] = None, 
-              x_context: Union[pd.Series, np.ndarray] = None, 
-              x_target: Union[pd.Series, np.ndarray] = None, 
-              y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None,
+              y_start_date: Optional[str] = None, 
               **kwargs
     ) -> 'DeepARModel':
         training_dataset = self._series_to_TimeSeriesDataset(y_context)
@@ -163,8 +157,6 @@ class DeepARModel(BaseModel):
         self,
         y_context: Optional[Union[pd.Series, np.ndarray]] = None,
         y_target: Union[pd.Series, np.ndarray] = None,
-        x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-        x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
         forecast_horizon: Optional[int] = None,
         **kwargs
     ) -> np.ndarray:
@@ -174,8 +166,6 @@ class DeepARModel(BaseModel):
         Args:
             y_context: Recent/past target values 
             y_target: Future target values (used to determine forecast length)
-            x_context: Recent/past exogenous variables 
-            x_target: Future exogenous variables for the forecast horizon 
             forecast_horizon: Number of steps to forecast (defaults to model config if not provided)
             
         Returns:
@@ -272,7 +262,6 @@ class DeepARModel(BaseModel):
         "dropout" : self.dropout,
         "learning_rate" : self.learning_rate,
         "batch_size" : self.batch_size,
-        "target_cols" : self.target_cols,
         "feature_cols" : self.feature_cols,
         "forecast_horizon" : self.forecast_horizon,
         "max_encoder_length" : self.max_encoder_length,

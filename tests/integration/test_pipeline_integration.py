@@ -47,8 +47,9 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Test ModelRouter functionality
-        router_config = {'dataset': {'target_cols': ['y']}}  # target_cols under dataset
-        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
+        router_config = {'dataset': {}}  
+        # For testing, we'll use a known number of targets (1 for univariate)
+        folder_path, file_name, class_name = model_router.get_model_path_by_target_count('arima', 1)
         assert folder_path is not None
         assert file_name is not None
         assert class_name is not None
@@ -61,7 +62,6 @@ class TestPipelineIntegration:
         config = mock_config.copy()
         config["dataset"]["path"] = test_data_dir
         # Remove old model.type and model.name - use new structure
-        config["dataset"]["target_cols"] = ["y"]  # Use univariate for now since test_data_dir has univariate metadata
         
         # Create test data with the correct format
         data = pd.DataFrame({
@@ -87,8 +87,9 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Test ModelRouter with univariate model (since we only have 'y' in metadata)
-        router_config = {'dataset': {'target_cols': ['y']}}
-        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
+        router_config = {'dataset': {}}
+        # For testing, we'll use a known number of targets (1 for univariate)
+        folder_path, file_name, class_name = model_router.get_model_path_by_target_count('arima', 1)
         assert folder_path is not None
         assert 'univariate/arima' in folder_path  # Should route to univariate since we only have 'y'
     
@@ -155,8 +156,8 @@ class TestPipelineIntegration:
         assert len(chunk.test.targets) == expected_test_length
         
         # Verify ModelRouter still works with different split ratios
-        router_config = {'dataset': {'target_cols': ['y']}}
-        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
+        router_config = {'dataset': {}}
+        folder_path, file_name, class_name = model_router.get_model_path_with_auto_detection('arima', router_config)
         assert folder_path is not None
     
     @pytest.mark.integration
@@ -201,8 +202,8 @@ class TestPipelineIntegration:
         assert chunk.test is not None
         
         # Verify that the same data can be processed by ModelRouter
-        router_config = {'dataset': {'target_cols': ['y']}}
-        folder_path, file_name, class_name = model_router.get_model_path('arima', router_config)
+        router_config = {'dataset': {}}
+        folder_path, file_name, class_name = model_router.get_model_path_with_auto_detection('arima', router_config)
         assert folder_path is not None
         
         # Verify data integrity

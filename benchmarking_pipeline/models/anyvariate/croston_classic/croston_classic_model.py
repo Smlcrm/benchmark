@@ -16,12 +16,12 @@ class CrostonClassicModel(BaseModel):
         Initialize the Croston's Classic model with a given configuration.
         
         Args:
-            config: Configuration dictionary containing model parameters
-                - alpha: float, smoothing factor for SES (Simple Exponential Smoothing). Default is 0.1.
-                - target_col: str, name of the target column.
-                - loss_functions: List[str], list of loss function names to use.
-                - primary_loss: str, primary loss function for training.
-                - forecast_horizon: int, number of steps to forecast ahead.
+            config: Configuration dictionary containing model parameters.
+                - alpha: float, smoothing parameter for demand level (0 < alpha < 1)
+                - gamma: float, smoothing parameter for interval level (0 < gamma < 1)
+                - phi: float, trend damping parameter (0 < phi < 1)
+                - forecast_horizon: int, number of steps to forecast ahead
+                - training_loss: str, primary loss function for training
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
@@ -31,16 +31,14 @@ class CrostonClassicModel(BaseModel):
         self.gamma = self.config.get('gamma', 0.1)
         self.phi = self.config.get('phi', 0.9)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        # Remove target_col - use target_cols from parent class instead
+        
         self.is_fitted = False
-        self.loss_functions = self.config.get('loss_functions', ['mae'])
-        self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
         
         # Fitted parameters, initialized to None
         self.demand_level_ = None
         self.interval_level_ = None
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'CrostonClassicModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'CrostonClassicModel':
         print(f"[Croston train] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
         """
         Train the Croston's Classic model on the given time series data.
@@ -51,7 +49,7 @@ class CrostonClassicModel(BaseModel):
         
         Args:
             y_context: Past target values - the training data for the time series.
-            y_target, x_context, x_target: Not used by the Croston's Classic model, but included for compatibility with the base class.
+            y_target: Not used by the Croston's Classic model, but included for compatibility with the base class.
             
         Returns:
             self: The fitted model instance.
@@ -139,9 +137,7 @@ class CrostonClassicModel(BaseModel):
         """
         return {
             'alpha': self.alpha,
-            'target_cols': self.target_cols,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss,
+            'training_loss': self.training_loss,
             'forecast_horizon': self.forecast_horizon,
             'is_fitted': self.is_fitted
         }
@@ -233,7 +229,6 @@ class CrostonClassicModel(BaseModel):
             'model_type': 'CrostonClassic',
             'alpha': self.alpha,
             'is_fitted': self.is_fitted,
-            'target_cols': self.target_cols,
             'forecast_horizon': self.forecast_horizon,
         }
         

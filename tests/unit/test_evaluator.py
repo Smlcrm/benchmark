@@ -71,7 +71,7 @@ class TestCRPSScore:
         y_pred = np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
         
         # Create simple samples manually to avoid numpy broadcasting issues
-        # Shape: (n_timesteps, n_targets, n_samples)
+        # Shape: (n_timesteps, num_targets, n_samples)
         y_pred_dist_samples = np.zeros((3, 2, 100))
         for i in range(3):
             for j in range(2):

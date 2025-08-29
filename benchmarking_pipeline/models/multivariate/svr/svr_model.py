@@ -26,10 +26,8 @@ class MultivariateSVRModel(BaseModel):
             config: Configuration dictionary containing model parameters
                 - lookback_window: int, number of past timesteps to use as features
                 - forecast_horizon: int, number of future timesteps to predict
-                - target_cols: list of str, names of target columns (for multivariate)
                 - model_params: dict, parameters for the underlying SVR model
-                - loss_functions: List[str], list of loss function names to use
-                - primary_loss: str, primary loss function for training
+                - training_loss: str, primary loss function for training
             config_file: Path to a JSON configuration file
         """
         super().__init__(config, config_file)
@@ -38,8 +36,7 @@ class MultivariateSVRModel(BaseModel):
         # Extract model parameters from config
         self.lookback_window = self.config.get('lookback_window', 10)
         self.forecast_horizon = self.config.get('forecast_horizon', 1)
-        # target_cols is inherited from parent class (BaseModel/FoundationModel)
-        # n_targets will be calculated when needed: len(self.target_cols)
+        # num_targets will be calculated from data during training
         
         self._build_model()
 
@@ -60,7 +57,7 @@ class MultivariateSVRModel(BaseModel):
         the next forecast_horizon values for all targets as targets.
         
         Args:
-            y_series: Input time series data with shape (timesteps, n_targets)
+            y_series: Input time series data with shape (timesteps, num_targets)
             lookback_window: Number of past timesteps to use as features
             forecast_horizon: Number of future timesteps to predict
             
@@ -73,26 +70,23 @@ class MultivariateSVRModel(BaseModel):
         X, y = [], []
         for i in range(len(y_series) - lookback_window - forecast_horizon + 1):
             # Features: flatten the lookback window across all targets
-            # Shape: (lookback_window * n_targets,)
+            # Shape: (lookback_window * num_targets,)
             X.append(y_series[i:i+lookback_window].flatten())
             
             # Targets: flatten the forecast horizon across all targets
-            # Shape: (forecast_horizon * n_targets,)
+            # Shape: (forecast_horizon * num_targets,)
             y.append(y_series[i+lookback_window:i+lookback_window+forecast_horizon].flatten())
             
         return np.array(X), np.array(y)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame], y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None, **kwargs) -> 'MultivariateSVRModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame], y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, y_start_date: pd.Timestamp = None, **kwargs) -> 'MultivariateSVRModel':
         """
         Train the Multivariate SVR model for direct multi-output forecasting using MultiOutputRegressor.
         
         Args:
             y_context: Past target values (time series) - used for training (can be DataFrame for multivariate)
             y_target: Future target values (optional, for extended training)
-            x_context: Past exogenous variables (optional, ignored for now)
-            x_target: Future exogenous variables (optional, ignored for now)
             y_start_date: The start date timestamp for y_context and y_target
-            x_start_date: The start date timestamp for x_context and x_target
             **kwargs: Additional keyword arguments
             
         Returns:
@@ -108,27 +102,17 @@ class MultivariateSVRModel(BaseModel):
         if isinstance(y_context, pd.DataFrame):
             # Multivariate case - use all columns
             y_series = y_context.values
-            # Update target_cols if not already set
-            # target_cols should already be set from config, validate consistency
-            if self.target_cols and len(y_context.columns) > 0:
-                expected_cols = set(self.target_cols)
-                actual_cols = set(y_context.columns)
-                if expected_cols != actual_cols:
-                    raise ValueError(f"Data columns {actual_cols} don't match configured target_cols {expected_cols}")
         elif isinstance(y_context, pd.Series):
             # Univariate case - reshape to 2D
             y_series = y_context.values.reshape(-1, 1)
-            # For univariate case, validate against config
-            if len(self.target_cols) != 1:
-                raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
         else:
             # Numpy array case
             y_series = y_context
             if y_series.ndim == 1:
                 y_series = y_series.reshape(-1, 1)
 
-        # Calculate n_targets from inherited target_cols
-        self.n_targets = len(self.target_cols)
+        # Calculate num_targets from data
+        self.num_targets = y_series.shape[1]
         
         # Combine context and target for full training series if y_target is provided
         if y_target is not None:
@@ -145,36 +129,18 @@ class MultivariateSVRModel(BaseModel):
 
         X, y = self._create_features_targets(y_series, self.lookback_window, self.forecast_horizon)
         print(f"[DEBUG][MultivariateSVR] Training X shape: {X.shape}, y shape: {y.shape}")
-        print(f"[DEBUG][MultivariateSVR] n_targets: {self.n_targets}, target_cols: {self.target_cols}")
+        print(f"[DEBUG][MultivariateSVR] num_targets: {self.num_targets}")
         
-        # Handle NaNs in training data
+        # Fail fast on NaN data - don't silently replace
         if np.isnan(X).any() or np.isnan(y).any():
-            print("[WARNING][MultivariateSVR] NaNs found in training data! Attempting to fix...")
-            X = np.nan_to_num(X, nan=0.0)
-            y = np.nan_to_num(y, nan=0.0)
+            raise ValueError("Training data contains NaN values. Please clean your data before training.")
         
-        try:
-            # Scale features (flattened lookback window values)
-            self.scaler.fit(X)
-            X_scaled = self.scaler.transform(X)
-            self.model.fit(X_scaled, y)
-            self.is_fitted = True
-            print("[INFO][MultivariateSVR] Training completed successfully")
-        except Exception as e:
-            print(f"[ERROR][MultivariateSVR] Training failed: {e}")
-            # Try with more robust parameters
-            try:
-                # Use more conservative SVR parameters
-                base_svr = SVR(kernel='rbf', C=1.0, epsilon=0.1, gamma='scale')
-                self.model = MultiOutputRegressor(base_svr)
-                self.scaler.fit(X)
-                X_scaled = self.scaler.transform(X)
-                self.model.fit(X_scaled, y)
-                self.is_fitted = True
-                print("[INFO][MultivariateSVR] Training succeeded with fallback parameters")
-            except Exception as e2:
-                print(f"[ERROR][MultivariateSVR] Fallback training also failed: {e2}")
-                raise ValueError(f"Multivariate SVR training failed: {e}")
+        # Scale features (flattened lookback window values)
+        self.scaler.fit(X)
+        X_scaled = self.scaler.transform(X)
+        self.model.fit(X_scaled, y)
+        self.is_fitted = True
+        print("[INFO][MultivariateSVR] Training completed successfully")
         
         return self
 
@@ -184,11 +150,11 @@ class MultivariateSVRModel(BaseModel):
         Predicts the entire length of y_target by repeatedly using its own predictions as context.
         
         Args:
-            y_context: Historical context data with shape (timesteps, n_targets)
+            y_context: Historical context data with shape (timesteps, num_targets)
             y_target: Target data to determine prediction length
             
         Returns:
-            np.ndarray: Predictions with shape (forecast_steps, n_targets)
+            np.ndarray: Predictions with shape (forecast_steps, num_targets)
         """
         # Convert y_context to proper shape
         if isinstance(y_context, (pd.Series, pd.DataFrame)):
@@ -207,7 +173,7 @@ class MultivariateSVRModel(BaseModel):
         preds = []
         # Use the entire context, maintaining the multivariate structure
         context = y_context.copy()
-        total_steps = len(y_target) if hasattr(y_target, '__len__') else self.forecast_horizon
+        total_steps = len(y_target)
         steps_done = 0
         
         while steps_done < total_steps:
@@ -216,46 +182,35 @@ class MultivariateSVRModel(BaseModel):
             # Take the last lookback_window timesteps and flatten for SVR input
             X_pred = context[-self.lookback_window:].flatten().reshape(1, -1)
             
-            # Check for NaNs and handle them
+            # Fail fast on NaN input - don't silently replace
             if np.isnan(X_pred).any():
-                print("[WARNING][MultivariateSVR] NaNs found in prediction input! Attempting to fix...")
-                X_pred = np.nan_to_num(X_pred, nan=0.0)
+                raise ValueError("Prediction input contains NaN values. This indicates data corruption.")
             
-            try:
-                X_pred_scaled = self.scaler.transform(X_pred)
-                pred_flat = self.model.predict(X_pred_scaled).flatten()
-                
-                # Check for NaNs in predictions and handle them
-                if np.isnan(pred_flat).any():
-                    print("[WARNING][MultivariateSVR] NaNs in predictions! Replacing with last valid value or 0")
-                    pred_flat = np.nan_to_num(pred_flat, nan=0.0)
-                
-                # Reshape predictions back to (forecast_horizon, n_targets)
-                pred_reshaped = pred_flat.reshape(self.forecast_horizon, self.n_targets)
-                
-                print(f"[DEBUG][MultivariateSVR] Rolling predict X_pred shape: {X_pred.shape}, pred_reshaped shape: {pred_reshaped.shape}")
-                
-                # Only take as many steps as needed
-                pred_steps = pred_reshaped[:steps]
-                preds.append(pred_steps)
-                
-                # Update context with new predictions
-                context = np.concatenate([context, pred_steps], axis=0)
-                steps_done += steps
-                
-            except Exception as e:
-                print(f"[ERROR][MultivariateSVR] Prediction failed: {e}")
-                # Fallback: use last values repeated
-                fallback_pred = np.tile(context[-1], (steps, 1))
-                preds.append(fallback_pred)
-                context = np.concatenate([context, fallback_pred], axis=0)
-                steps_done += steps
+            X_pred_scaled = self.scaler.transform(X_pred)
+            pred_flat = self.model.predict(X_pred_scaled).flatten()
+            
+            # Fail fast on NaN predictions - don't silently replace
+            if np.isnan(pred_flat).any():
+                raise ValueError("Model produced NaN predictions. This indicates a training or data issue.")
+            
+            # Reshape predictions back to (forecast_horizon, num_targets)
+            pred_reshaped = pred_flat.reshape(self.forecast_horizon, self.num_targets)
+            
+            print(f"[DEBUG][MultivariateSVR] Rolling predict X_pred shape: {X_pred.shape}, pred_reshaped shape: {pred_reshaped.shape}")
+            
+            # Only take as many steps as needed
+            pred_steps = pred_reshaped[:steps]
+            preds.append(pred_steps)
+            
+            # Update context with new predictions
+            context = np.concatenate([context, pred_steps], axis=0)
+            steps_done += steps
         
         # Concatenate all predictions
         result = np.concatenate(preds, axis=0)
         return result
 
-    def predict(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame] = None, y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, **kwargs) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray, pd.DataFrame] = None, y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, **kwargs) -> np.ndarray:
         """
         Make direct multi-output predictions using the trained Multivariate SVR model.
         If y_target is provided, use rolling_predict to predict the entire length autoregressively.
@@ -267,12 +222,14 @@ class MultivariateSVRModel(BaseModel):
             x_target: Exogenous target data (optional, ignored for now)
             
         Returns:
-            np.ndarray: Model predictions with shape (forecast_steps, n_targets)
+            np.ndarray: Model predictions with shape (forecast_steps, num_targets)
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
         if y_context is None:
             raise ValueError("y_context must be provided to determine prediction context.")
+        if y_target is None:
+            raise ValueError("y_target is required to determine prediction length. No forecast_horizon fallback allowed.")
 
         # Convert y_context to proper format
         if isinstance(y_context, pd.DataFrame):
@@ -284,20 +241,9 @@ class MultivariateSVRModel(BaseModel):
             if y_context_vals.ndim == 1:
                 y_context_vals = y_context_vals.reshape(-1, 1)
 
-        if y_target is not None:
-            # Use rolling prediction to cover the full test set
-            preds = self.rolling_predict(y_context_vals, y_target)
-            print(f"[DEBUG][MultivariateSVR] Final rolling preds shape: {preds.shape}")
-            return preds
-        
-        # Use the last lookback_window values as features for a single multi-output prediction
-        X_pred = y_context_vals[-self.lookback_window:].flatten().reshape(1, -1)
-        X_pred_scaled = self.scaler.transform(X_pred)
-        preds_flat = self.model.predict(X_pred_scaled).flatten()
-        
-        # Reshape to (forecast_horizon, n_targets)
-        preds = preds_flat.reshape(self.forecast_horizon, self.n_targets)
-        print(f"[DEBUG][MultivariateSVR] Single predict X_pred shape: {X_pred.shape}, preds shape: {preds.shape}")
+        # Use rolling prediction to cover the full test set
+        preds = self.rolling_predict(y_context_vals, y_target)
+        print(f"[DEBUG][MultivariateSVR] Final rolling preds shape: {preds.shape}")
         return preds
 
     def get_params(self) -> Dict[str, Any]:
@@ -310,10 +256,8 @@ class MultivariateSVRModel(BaseModel):
         params = {
             'lookback_window': self.lookback_window,
             'forecast_horizon': self.forecast_horizon,
-            'target_cols': self.target_cols,
-            'n_targets': self.n_targets,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss
+            'num_targets': self.num_targets,
+            'training_loss': self.training_loss
         }
         
         if self.model:
@@ -325,7 +269,7 @@ class MultivariateSVRModel(BaseModel):
         """
         Set model parameters. This will rebuild the model instance with the new parameters.
         Handles MultiOutputRegressor by prefixing SVR params with 'estimator__'.
-        Model-level params (lookback_window, forecast_horizon, target_cols) are set as attributes.
+        Model-level params (lookback_window, forecast_horizon) are set as attributes.
         
         Args:
             **params: Model parameters to set
@@ -334,12 +278,10 @@ class MultivariateSVRModel(BaseModel):
             self: The model instance with updated parameters
         """
         # Handle model-level params
-        model_level_keys = ['lookback_window', 'forecast_horizon', 'target_cols']
+        model_level_keys = ['lookback_window', 'forecast_horizon']
         for k in model_level_keys:
             if k in params:
                 setattr(self, k, params[k])
-        
-        # Note: target_cols is inherited from parent class and shouldn't be modified
         
         # Convert parameter types for scikit-learn compatibility
         converted_params = {}
@@ -433,7 +375,7 @@ class MultivariateSVRModel(BaseModel):
         
         # Restore attributes
         saved_params = model_state['params']
-        for key in ['lookback_window', 'forecast_horizon', 'target_cols', 'n_targets']:
+        for key in ['lookback_window', 'forecast_horizon', 'num_targets']:
             if key in saved_params:
                 setattr(self, key, saved_params[key])
                 
@@ -444,9 +386,9 @@ class MultivariateSVRModel(BaseModel):
         Compute all loss metrics between true and predicted values using the Evaluator class.
         
         Args:
-            y_true: True target values with shape (timesteps, n_targets)
-            y_pred: Predicted values with shape (timesteps, n_targets)
-            loss_function: Name of the loss function to use (defaults to primary_loss)
+            y_true: True target values with shape (timesteps, num_targets)
+            y_pred: Predicted values with shape (timesteps, num_targets)
+            loss_function: Name of the loss function to use (defaults to training_loss)
             
         Returns:
             Dict[str, float]: Dictionary of computed loss metrics

@@ -65,25 +65,6 @@ class TestForecastHorizonSmoke:
             assert value > 0, f"forecast_horizon value {value} should be positive"
     
     @pytest.mark.smoke
-    def test_target_cols_is_defined_in_dataset(self):
-        """Smoke test: Verify that target_cols is defined in dataset configuration."""
-        config_path = Path(__file__).parent.parent.parent / 'benchmarking_pipeline/configs/all_model_univariate.yaml'
-        
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        
-        dataset_cfg = config.get('dataset', {})
-        target_cols = dataset_cfg.get('target_cols')
-        
-        assert target_cols is not None, "target_cols should be defined in dataset config"
-        assert isinstance(target_cols, list), "target_cols should be a list"
-        assert len(target_cols) > 0, "target_cols list should not be empty"
-        
-        # Verify all values are strings
-        for value in target_cols:
-            assert isinstance(value, str), f"target_cols value {value} should be a string"
-    
-    @pytest.mark.smoke
     def test_model_section_structure(self):
         """Smoke test: Verify that model section has correct structure."""
         config_path = Path(__file__).parent.parent.parent / 'benchmarking_pipeline/configs/all_model_univariate.yaml'

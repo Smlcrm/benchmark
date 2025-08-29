@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 import pandas as pd
 import numpy as np
+import io
 
 # Configure TensorFlow threading before import
 os.environ.setdefault('TF_NUM_INTEROP_THREADS', '1')
@@ -117,6 +118,35 @@ class Logger:
         # Log key metrics to console in verbose mode
         if self.verbose and metrics:
             self.log_progress(f"Metrics logged to TensorBoard: {list(metrics.keys())}")
+
+    def log_figure(self, figure, tag: str, step: int):
+        """
+        Log a Matplotlib figure to TensorBoard.
+        """
+        import matplotlib.pyplot as plt
+        buf = io.BytesIO()
+        figure.savefig(buf, format='png')
+        buf.seek(0)
+        image = tf.image.decode_png(buf.getvalue(), channels=4)
+        image = tf.expand_dims(image, 0)
+        with self.writer.as_default():
+            tf.summary.image(tag, image, step=step)
+        self.writer.flush()
+
+    def log_image_file(self, image_path: str, tag: str, step: int):
+        """
+        Log an image from disk to TensorBoard.
+        """
+        try:
+            with open(image_path, 'rb') as f:
+                data = f.read()
+            image = tf.image.decode_image(data, channels=4)
+            image = tf.expand_dims(image, 0)
+            with self.writer.as_default():
+                tf.summary.image(tag, image, step=step)
+            self.writer.flush()
+        except Exception as e:
+            self.log_error(f"Failed to log image file '{image_path}': {e}")
 
     def log_training_progress(self, model_name, epoch, loss, val_loss=None, step=None):
         """

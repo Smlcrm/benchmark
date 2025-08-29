@@ -31,48 +31,35 @@ class FoundationModelTuner:
     else:
         raise ValueError(f"Invalid frequency string: {freq_str}")
 
-  def _get_target_data(self, dataset_split, target_col):
+  def _get_target_data(self, dataset_split, target_index=0):
     """
-    Get target data from either features or targets, handling cases where features is None.
+    Get target data from targets, handling raw target arrays.
     
     Args:
         dataset_split: Train, validation, or test split from dataset
-        target_col: Target column name or index
+        target_index: Target index (0 for univariate, 0-N for multivariate)
         
     Returns:
         Target data as numpy array
     """
-    if dataset_split.features is not None:
-        # Dataset has exogenous features - use features with target column
-        if isinstance(target_col, str):
-            return dataset_split.features[target_col].values
-        else:
-            return dataset_split.features.iloc[:, target_col].values
-    else:
-        # Dataset has no exogenous features - use targets directly
-        if dataset_split.targets is not None:
-            if isinstance(target_col, str):
-                # For multivariate targets, extract specific target column
-                if hasattr(dataset_split.targets, 'shape') and len(dataset_split.targets.shape) > 1:
-                    if target_col == 'target_0':
-                        return dataset_split.targets.iloc[:, 0].values
-                    elif target_col == 'target_1':
-                        return dataset_split.targets.iloc[:, 1].values
-                    else:
-                        # Default to first column if target_col not recognized
-                        return dataset_split.targets.iloc[:, 0].values
+    if dataset_split.targets is not None:
+        # Handle raw target arrays (no column names)
+        if isinstance(dataset_split.targets, list):
+            # targets is a list of arrays, each array represents a time series
+            if len(dataset_split.targets) > 0:
+                target_array = dataset_split.targets[0]  # Get first target series
+                if isinstance(target_array, list):
+                    # Convert list to numpy array
+                    return np.array(target_array)
                 else:
-                    # Univariate case - convert to numpy array
-                    return dataset_split.targets.values if hasattr(dataset_split.targets, 'values') else dataset_split.targets
+                    return target_array
             else:
-                # Integer index for target column
-                if hasattr(dataset_split.targets, 'shape') and len(dataset_split.targets.shape) > 1:
-                    return dataset_split.targets.iloc[:, target_col].values
-                else:
-                    # Convert to numpy array if it's a pandas object
-                    return dataset_split.targets.values if hasattr(dataset_split.targets, 'values') else dataset_split.targets
+                raise ValueError("No target data available")
         else:
-            raise ValueError("Both features and targets are None - no data available")
+            # Handle case where targets might be a different format
+            return dataset_split.targets
+    else:
+        raise ValueError("No targets available in dataset split")
 
   def hyperparameter_grid_search_several_time_series(self, list_of_time_series_datasets):
     """
@@ -120,10 +107,9 @@ class FoundationModelTuner:
             print(f"DEBUG: train.features is None, using train.targets")
             print(f"DEBUG: train.targets shape: {time_series_dataset.train.targets.shape if time_series_dataset.train.targets is not None else 'None'}")
         
-        print(f"DEBUG: self.model_class.target_cols: {self.model_class.target_cols}")
-        
-        target = self._get_target_data(time_series_dataset.train, self.model_class.target_cols[0])
-        validation_series = self._get_target_data(time_series_dataset.validation, self.model_class.target_cols[0])
+        # Get target data from raw arrays (no column names needed)
+        target = self._get_target_data(time_series_dataset.train)
+        validation_series = self._get_target_data(time_series_dataset.validation)
         
         start_date = time_series_dataset.metadata["start"]
         freq_str = time_series_dataset.metadata["freq"]
@@ -136,21 +122,29 @@ class FoundationModelTuner:
         y_context_timestamps = time_series_dataset.train.timestamps
         y_target_timestamps = time_series_dataset.validation.timestamps
         
+        # For foundation models, we need to call train() to initialize the model
         trained_model = self.model_class
+        trained_model.train(y_context=target, y_target=validation_series, y_start_date=y_start_date)
+        
         # Get validation losses over every chunk
         current_train_loss = 0
         for time_series_dataset_from_all in list_of_time_series_datasets:
-          target = self._get_target_data(time_series_dataset_from_all.train, self.model_class.target_cols[0])
-          validation_series = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_cols[0])
+          target = self._get_target_data(time_series_dataset_from_all.train)
+          validation_series = self._get_target_data(time_series_dataset_from_all.validation)
           #print(f"Time series dataset from all datasets\n\n:{time_series_dataset_from_all.metadata}")
           # Handle different model types with different predict method signatures
           
           model_predictions = trained_model.predict(y_context=target, y_target=validation_series, y_context_timestamps=time_series_dataset_from_all.train.timestamps, y_target_timestamps=time_series_dataset_from_all.validation.timestamps)
           
           # Get validation targets for loss computation
-          validation_targets = self._get_target_data(time_series_dataset_from_all.validation, self.model_class.target_cols[0])
-          train_loss = trained_model.compute_loss(validation_targets, model_predictions)
-          current_train_loss += train_loss[self.model_class.primary_loss]
+          validationum_targets = self._get_target_data(time_series_dataset_from_all.validation)
+          train_targets = self._get_target_data(time_series_dataset_from_all.train)
+          train_loss = trained_model.compute_loss(validationum_targets, model_predictions, y_train=train_targets)
+          loss_val = train_loss[self.model_class.training_loss]
+          # Aggregate per-target arrays to scalar
+          if isinstance(loss_val, np.ndarray):
+            loss_val = float(np.mean(loss_val))
+          current_train_loss += loss_val
         # Average validation losses over the chunks
         current_train_loss /= len(list_of_time_series_datasets)
         if current_train_loss < lowest_train_loss:
@@ -192,12 +186,13 @@ class FoundationModelTuner:
     results_dict = None
     for time_series_dataset in list_of_time_series_datasets:
       # Get train and validation data using helper method
-      train_data = self._get_target_data(time_series_dataset.train, self.model_class.target_cols[0])
-      validation_data = self._get_target_data(time_series_dataset.validation, self.model_class.target_cols[0])
+      train_data = self._get_target_data(time_series_dataset.train)
+      validation_data = self._get_target_data(time_series_dataset.validation)
       
       train_val_split = np.concatenate([train_data, validation_data])
-      target = train_val_split.flatten() if hasattr(train_val_split, 'flatten') else train_val_split
-      y_target_start_date = time_series_dataset.test.timestamps[0]
+      # Preserve 2D shape: rows=time steps, columns=targets
+      target = train_val_split
+      y_start_date = time_series_dataset.test.timestamps[0]
       # Combine train and validation timestamps for context
       train_val_timestamps = np.concatenate([
             time_series_dataset.train.timestamps,
@@ -205,17 +200,26 @@ class FoundationModelTuner:
         ])
       # Handle different model types with different train method signatures
       trained_model = self.model_class
+      # For foundation models, we need to call train() to initialize the model
+      trained_model.train(y_context=target, y_target=validation_data, y_start_date=y_start_date)
             
       # Handle different model types with different predict method signatures
-      test_targets = self._get_target_data(time_series_dataset.test, self.model_class.target_cols[0])
+      test_targets = self._get_target_data(time_series_dataset.test)
       predictions = trained_model.predict(y_context=target, y_target=test_targets, y_context_timestamps=train_val_timestamps, y_target_timestamps=time_series_dataset.test.timestamps)
 
-      train_loss_dict = trained_model.compute_loss(test_targets, predictions)
+      train_loss_dict = trained_model.compute_loss(test_targets, predictions, y_train=train_data)
       if results_dict is None:
-        results_dict = train_loss_dict
+        # Reduce arrays to scalars via mean for consistent aggregation
+        results_dict = {k: (float(np.mean(v)) if isinstance(v, np.ndarray) else float(v)) for k, v in train_loss_dict.items()}
       else:
-        # aggregates dict
-        results_dict = {key: results_dict[key] + train_loss_dict[key] for key in results_dict}
+        # aggregates dict with reduction of arrays
+        for key in results_dict:
+          val = train_loss_dict[key]
+          if isinstance(val, np.ndarray):
+            val = float(np.mean(val))
+          else:
+            val = float(val)
+          results_dict[key] += val
 
     results_dict = {key: float(results_dict[key]/len(list_of_time_series_datasets)) for key in results_dict}
     return results_dict

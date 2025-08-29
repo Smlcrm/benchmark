@@ -90,6 +90,37 @@ class MomentModel(FoundationModel):
         self.model = self.model.to(self.device)
         print("MOMENT model loaded successfully!")
 
+    def train(self, 
+              y_context: Optional[Union[pd.Series, np.ndarray]], 
+              y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
+              y_start_date: Optional[str] = None
+    ) -> 'MomentModel':
+        """
+        Train/fine-tune the MOMENT model on given data.
+        
+        Args:
+            y_context: Past target values
+            y_target: Future target values (not used for MOMENT)
+            y_start_date: Start date timestamp (not used for MOMENT)
+            
+        Returns:
+            self: The fitted model instance
+        """
+        if y_context is None:
+            raise ValueError("y_context is required for MOMENT")
+        
+        # Convert to DataFrame format
+        if isinstance(y_context, np.ndarray):
+            if y_context.ndim == 1:
+                df = pd.DataFrame({'series': y_context})
+            else:
+                df = pd.DataFrame(y_context.T)
+        else:
+            df = y_context
+        
+        # Use the existing fit method
+        return self.fit(df, self.forecast_horizon, verbose=True)
+
     def fit(self, df: pd.DataFrame, forecast_horizon: int, verbose: bool = True):
         self._load_model(forecast_horizon)
         data = df.values.T  # Shape: [n_series, time_steps]
@@ -130,67 +161,98 @@ class MomentModel(FoundationModel):
         self.is_fitted = True
         #print("MOMENT fine-tuning completed!")
 
-    def predict(self,
-            y_context: Optional[Union[pd.Series, np.ndarray]] = None,
-            y_target: Union[pd.Series, np.ndarray] = None,
-            y_context_timestamps = None,
-            y_target_timestamps = None,
-            **kwargs) -> Union[np.ndarray, Dict[str, List[float]]]:
-        if y_context is None and y_target is not None:
-            y_context = y_target
+    def predict(
+        self,
+        y_context: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_target: Optional[Union[pd.Series, np.ndarray]] = None,
+        y_context_timestamps=None,
+        y_target_timestamps=None,
+        forecast_horizon: Optional[int] = None,
+        **kwargs
+    ) -> np.ndarray:
+        """
+        Make predictions using the trained MOMENT model.
+        
+        Args:
+            y_context: Recent/past target values
+            y_target: Future target values (not used for MOMENT)
+            y_context_timestamps: Timestamps for context data (not used for MOMENT)
+            y_target_timestamps: Timestamps for target data (not used for MOMENT)
+            forecast_horizon: Number of steps to forecast (defaults to model config if not provided)
+            **kwargs: Additional arguments (ignored)
+            
+        Returns:
+            np.ndarray: Model predictions with shape (forecast_horizon,)
+        """
         if y_context is None:
-            raise ValueError("y_context or y_target must be provided.")
-        if y_context_timestamps is not None:
-            if len(y_context.shape) == 1:
-                columns = ['1']
+            raise ValueError("y_context is required for prediction")
+        
+        horizon = forecast_horizon or self.forecast_horizon
+        
+        # Convert to DataFrame format
+        if isinstance(y_context, np.ndarray):
+            if y_context.ndim == 1:
+                df = pd.DataFrame({'series': y_context})
             else:
-                columns = list(range(y_context.shape[0]))
-            df = pd.DataFrame(y_context, index=y_context_timestamps, columns=columns)
+                df = pd.DataFrame(y_context.T)
         else:
-            if len(y_context.shape) == 1:
-                columns = ['1']
-                df = pd.DataFrame({columns[0]: y_context})
-            else:
-                columns = list(range(y_context.shape[0]))
-                df = pd.DataFrame(y_context.T, columns=columns)
-        forecast_horizon = self.forecast_horizon
-        forecast_horizon = int(forecast_horizon)
-        results = self._sub_predict(df, forecast_horizon)
-        if len(list(results.keys())) == 1:
-            return np.array(results[columns[0]])
+            df = y_context
+        
+        # Ensure we have a fitted model
+        if not self.is_fitted:
+            self.train(y_context)
+        
+        # Use the internal prediction method
+        results = self._sub_predict(df, horizon)
+        
+        # Return as numpy array for single series
+        if 'series' in results:
+            return np.array(results['series'])
+        elif len(results) == 1:
+            # Return first series as numpy array
+            first_series = list(results.values())[0]
+            return np.array(first_series)
         else:
-            multivariate_values = []
-            for key in results.keys():
-                multivariate_values.append(results[key])
-            return np.array(multivariate_values)
+            # Fallback: return zeros
+            return np.zeros(horizon)
 
     def _sub_predict(self, df: pd.DataFrame, forecast_horizon: int) -> Dict[str, List[float]]:
         if not self.is_fitted:
             self.fit(df, forecast_horizon, verbose=True)
-        """if self.model.model.forecast_horizon != forecast_horizon:
-            warnings.warn(
-                f"Model was fitted for forecast_horizon={self.model.model.forecast_horizon}, "
-                f"but predict() called with forecast_horizon={forecast_horizon}. "
-                "Re-fitting model for new horizon.")
-            self.fit(df, forecast_horizon, verbose=False)"""
-        # Use the fitted model to make predictions
+        
+        self.model.eval()
         results = {}
-        for col in df.columns:
-            series_data = df[col].values.reshape(1, -1)
-            # Ensure we have enough context
-            if len(series_data[0]) < self.context_length:
-                raise ValueError(f"Series {col} too short. Need at least {self.context_length} timesteps.")
-            
-            # Get the last context_length timesteps
-            context = series_data[0][-self.context_length:]
-            # Create proper 3D tensor: [batch_size=1, sequence_length, features=1]
-            context_tensor = torch.FloatTensor(context).unsqueeze(0).unsqueeze(-1).to(self.device)
-            
-            with torch.no_grad():
-                output = self.model(x_enc=context_tensor)
-                forecast = output.forecast.cpu().numpy()[0]
-            
-            results[col] = forecast.tolist()
+        with torch.no_grad():
+            for col in df.columns:
+                series_data = df[col].values
+                if len(series_data) >= self.context_length:
+                    context = series_data[-self.context_length:]
+                else:
+                    padding = np.zeros(self.context_length - len(series_data))
+                    context = np.concatenate([padding, series_data])
+                    warnings.warn(
+                        f"Series '{col}' is shorter than context_length {self.context_length}. "
+                        "Padded with zeros.",
+                        UserWarning
+                    )
+                
+                # Scale the context data using the fitted scaler
+                context_scaled = self.scaler.transform(context.reshape(-1, 1)).flatten()
+                
+                # Create proper 3D tensor: [batch_size=1, sequence_length=1, features=1]
+                context_tensor = torch.FloatTensor(context_scaled).unsqueeze(0).unsqueeze(0).to(self.device)
+                
+                # Create input mask
+                input_mask = torch.ones(1, self.context_length).to(self.device)
+                
+                # Get prediction
+                output = self.model(x_enc=context_tensor, input_mask=input_mask)
+                
+                # Inverse scale the forecast
+                forecast_scaled = output.forecast.cpu().numpy().flatten()
+                forecast = self.scaler.inverse_transform(forecast_scaled.reshape(-1, 1)).flatten()
+                
+                results[col] = forecast.tolist()
         
         return results
 
@@ -255,7 +317,7 @@ if __name__ == "__main__":
     test_df = pd.DataFrame(test_data.T, columns=[f'series_{i}' for i in range(n_series)])
     
     # Initialize and test the model
-    config = {'dataset': {'target_cols': ['series_0', 'series_1', 'series_2'], 'forecast_horizon': 24}}
+    config = {'dataset': {'forecast_horizon': 24}}
     model = MomentModel(config)
     
     print("Testing MOMENT model...")

@@ -10,7 +10,6 @@ dataset:
   normalize: false
   handle_missing: interpolate
   chunks: 2
-  target_cols: ['australian_electricity_demand']
 
 model:
   seasonal_naive:

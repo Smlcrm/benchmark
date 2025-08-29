@@ -1,20 +1,25 @@
 import pandas as pd
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 import pandas as pd
+from gluonts.dataset.pandas import PandasDataset
+from gluonts.dataset.split import split
+from huggingface_hub import hf_hub_download
+
+from uni2ts.eval_util.plot import plot_single
 from uni2ts.model.moirai import MoiraiForecast, MoiraiModule
 from uni2ts.model.moirai_moe import MoiraiMoEForecast, MoiraiMoEModule
 from typing import Dict, Any
 from benchmarking_pipeline.models.foundation_model import FoundationModel
 from typing import Optional, List, Union
-from einops import rearrange
 
 class MoiraiMoeModel(FoundationModel):
 
   def __init__(self, config: Dict[str, Any] = None, config_file: str = None):
     """
     Args:
-      model_name: the type of moirai model you want to use - choose from {'moirai', 'moirai_moe'}
+      model_name: the type of moirai model you want to use - choose from {'moirai', 'moirai-moe'}
       size: the model size - choose from {'small', 'base', 'large'}
       pdt: prediction length - any positive integer
       ctz: context length - any positive integer
@@ -27,18 +32,62 @@ class MoiraiMoeModel(FoundationModel):
     super().__init__(config, config_file)
     self.model_name = self.config.get('model_name', 'moirai_moe')
     self.size = self.config.get('size', 'small')
-    # forecast_horizon is inherited from parent class (FoundationModel)
-    self.psz = self.config.get('psz', 32)
-    self.bsz = self.config.get('bsz', 8)
-    self.num_samples = self.config.get('num_samples', 5)
-    # Remove target_col - use target_cols from parent class instead
-    self.is_fitted = False
+    self.pdt = int(self.config.get('pdt', '4'))
+    self.ctx = int(self.config.get('ctx', '10'))
+    self.psz = int(self.config.get('psz', '8'))
+    self.bsz = int(self.config.get('bsz', '8'))
+    self.test = int(self.config.get('test', '8'))
+    self.num_samples = int(self.config.get('num_samples', '5'))
+    self.target_col = self.config.get('target_col', 'y')
   
   def set_params(self, **params: Dict[str, Any]) -> 'MoiraiMoeModel':
     for key, value in params.items():
       if hasattr(self, key):
         setattr(self, key, value)
     return self
+
+  def train(self, 
+            y_context: Optional[Union[pd.Series, np.ndarray]], 
+            y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
+            y_start_date: Optional[str] = None
+  ) -> 'MoiraiMoeModel':
+    """
+    Initialize the Moirai MoE model (no training required for foundation models).
+    
+    Args:
+        y_context: Past target values (not used for training, for compatibility)
+        y_target: Future target values (not used for training, for compatibility)
+        y_start_date: Start date for y_context (not used)
+        
+    Returns:
+        self: The model instance
+        
+    Note:
+        Moirai MoE is a pre-trained foundation model that doesn't require training.
+        This method initializes the model for inference.
+    """
+    # Mark as fitted since Moirai MoE is pre-trained
+    self.is_fitted = True
+    return self
+         
+  def get_params(self) -> Dict[str, Any]:
+    """
+    Get the current model parameters.
+    
+    Returns:
+        Dict[str, Any]: Dictionary of model parameters
+    """
+    return {
+        'model_name': self.model_name,
+        'size': self.size,
+        'pdt': self.pdt,
+        'ctx': self.ctx,
+        'psz': self.psz,
+        'bsz': self.bsz,
+        'test': self.test,
+        'num_samples': self.num_samples,
+        'forecast_horizon': self.forecast_horizon
+    }
          
   def predict(self,
         y_context: Optional[Union[pd.Series, np.ndarray]] = None,
@@ -52,6 +101,12 @@ class MoiraiMoeModel(FoundationModel):
     #print(y_target_timestamps[0].strftime('%Y-%m-%d %X'))
     #raise Exception("UNgas")
     #timestamp_strings = [ts.strftime('%Y-%m-%d %X') for ts in y_target_timestamps]
+
+    # Convert timestamps to datetime if they're integers
+    if y_context_timestamps is not None and not isinstance(y_context_timestamps[0], pd.Timestamp):
+        # Convert integer timestamps to datetime
+        start_date = pd.Timestamp('2021-01-01')  # Use a reasonable start date
+        y_context_timestamps = [start_date + pd.Timedelta(minutes=30*i) for i in range(len(y_context_timestamps))]
     
     # Construct DataFrame
     if len(y_context.shape) == 1:
@@ -60,6 +115,7 @@ class MoiraiMoeModel(FoundationModel):
       columns = list(range(y_context.shape[0])) 
     df = pd.DataFrame(y_context, index=y_context_timestamps, columns=columns)
     self.ctx = len(df)
+
     results = self._sub_predict(df)
     if len(list(results.keys())) == 1:
       return np.array(results["1"])
@@ -90,11 +146,11 @@ class MoiraiMoeModel(FoundationModel):
     else:
       past_target_data = dataframe[all_time_series_names].to_numpy().T
 
-    # Create either a Moirai or Moirai_MoE model.
+    # Create either a Moirai or Moirai-MoE model.
     if self.model_name == "moirai":
       model = MoiraiForecast(
             module=MoiraiModule.from_pretrained(f"Salesforce/moirai-1.1-R-{self.size}"),
-            prediction_length=self.forecast_horizon,
+            prediction_length=self.pdt,
             context_length=self.ctx,
             patch_size=self.psz,
             num_samples=self.num_samples,
@@ -105,26 +161,29 @@ class MoiraiMoeModel(FoundationModel):
     elif self.model_name == "moirai_moe":
       model = MoiraiMoEForecast(
             module=MoiraiMoEModule.from_pretrained(f"Salesforce/moirai-moe-1.0-R-{self.size}"),
-            prediction_length=self.forecast_horizon,
+            prediction_length=self.pdt,
             context_length=self.ctx,
             patch_size=self.psz,
-            batch_size=self.bsz,
-            num_parallel_samples=self.num_samples,
+            num_samples=self.num_samples,
+            target_dim=1,
+            feat_dynamic_real_dim=0,
+            past_feat_dynamic_real_dim=0,
         )
     else:
       raise ValueError("self.model_name must have the value 'moirai' or 'moirai_moe'.")
 
-    past_target = rearrange(
-    torch.as_tensor(past_target_data, dtype=torch.float32), "t -> 1 t 1"
-    )
+    # Convert to torch tensor and reshape
+    past_target = torch.as_tensor(past_target_data, dtype=torch.float32)
+    if len(past_target.shape) == 1:
+        past_target = past_target.unsqueeze(0).unsqueeze(-1)  # (1, time, 1)
+    else:
+        past_target = past_target.unsqueeze(0)  # (1, time, features)
+    
     # 1s if the value is observed, 0s otherwise. Shape: (batch, time, variate)
     past_observed_target = torch.ones_like(past_target, dtype=torch.bool)
     # 1s if the value is padding, 0s otherwise. Shape: (batch, time)
     past_is_pad = torch.zeros_like(past_target, dtype=torch.bool).squeeze(-1)
 
-    #print("past_target.shape:", past_target.shape)
-    #print("past_observed_target.shape:", past_observed_target.shape)
-    #print("past_is_pad.shape:", past_is_pad.shape)
     forecast = model(
         past_target=past_target,
         past_observed_target=past_observed_target,
@@ -140,7 +199,6 @@ class MoiraiMoeModel(FoundationModel):
     if len(forecasted_values.shape) == 1:
       results_dict[all_time_series_names[0]].extend(forecasted_values)
     else:
-
       # This is just an index that tracks which forecast we want to add to which mapping in our results dict.
       current_forecasted_timeseries_idx = 0
       while current_forecasted_timeseries_idx < len(all_time_series_names):

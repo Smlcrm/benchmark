@@ -31,9 +31,49 @@ class MoiraiModel(FoundationModel):
     self.psz = self.config.get('psz', 32)
     self.bsz = self.config.get('bsz', 8)
     self.num_samples = self.config.get('num_samples', 5)
-    # Remove target_col - use target_cols from parent class instead
+    
     self.is_fitted = False
   
+  def train(self, 
+            y_context: Optional[Union[pd.Series, np.ndarray]], 
+            y_target: Optional[Union[pd.Series, np.ndarray]] = None, 
+            y_start_date: Optional[str] = None
+  ) -> 'MoiraiModel':
+    """
+    Initialize the Moirai model (no training required for foundation models).
+    
+    Args:
+        y_context: Past target values (not used for training, for compatibility)
+        y_target: Future target values (not used for training, for compatibility)
+        y_start_date: Start date for y_context (not used)
+        
+    Returns:
+        self: The model instance
+        
+    Note:
+        Moirai is a pre-trained foundation model that doesn't require training.
+        This method initializes the model for inference.
+    """
+    # Mark as fitted since Moirai is pre-trained
+    self.is_fitted = True
+    return self
+         
+  def get_params(self) -> Dict[str, Any]:
+    """
+    Get the current model parameters.
+    
+    Returns:
+        Dict[str, Any]: Dictionary of model parameters
+    """
+    return {
+        'model_name': self.model_name,
+        'size': self.size,
+        'psz': self.psz,
+        'bsz': self.bsz,
+        'num_samples': self.num_samples,
+        'forecast_horizon': self.forecast_horizon
+    }
+         
   def set_params(self, **params: Dict[str, Any]) -> 'MoiraiModel':
     for key, value in params.items():
       if hasattr(self, key):
@@ -43,7 +83,6 @@ class MoiraiModel(FoundationModel):
   def predict(self,
         y_context: Optional[Union[pd.Series, np.ndarray]] = None,
         y_target: Union[pd.Series, np.ndarray] = None,
-        y_context_timestamps = None,
         y_target_timestamps = None,
         **kwargs):
     #print("HUH")
@@ -58,7 +97,7 @@ class MoiraiModel(FoundationModel):
       columns = ['1']
     else:
       columns = list(range(y_context.shape[0])) 
-    df = pd.DataFrame(y_context, index=y_context_timestamps, columns=columns)
+    df = pd.DataFrame(y_context, index=y_target_timestamps, columns=columns)
     self.ctx = len(df)
     results = self._sub_predict(df)
     if len(list(results.keys())) == 1:
