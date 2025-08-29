@@ -12,10 +12,10 @@ dataset:
 
 model:
   arima:
-    p: [1, 2, 3, 4]
-    d: [0, 1, 2]
-    q: [1, 2, 3, 4]
-    s: [1, 24, 48]  # Try different seasonality periods to capture cycles
+    p: [0, 1, 2]      # Working univariate config from 3 days ago
+    d: [0, 1]         # Working univariate config from 3 days ago  
+    q: [0, 1, 2]      # Working univariate config from 3 days ago
+    s: [2, 4]         # Working univariate config from 3 days ago
     training_loss: ["mae"]
     forecast_horizon: [10]
 
