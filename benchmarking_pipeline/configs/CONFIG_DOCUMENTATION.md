@@ -1,331 +1,466 @@
-# Configuration File Documentation
+# Configuration Documentation
 
-This document explains the configuration file format used in the benchmarking pipeline. The configuration files control all aspects of data processing, model training, and evaluation.
+This document provides comprehensive documentation for the benchmarking pipeline configuration system.
 
 ## Overview
 
-The benchmarking pipeline now uses a **consolidated configuration approach** with a single configuration file (`all_model_test.yaml`) that contains all model parameters and settings. This eliminates the need for multiple configuration files and ensures consistency across all models.
+The benchmarking pipeline uses YAML configuration files to control all aspects of the benchmarking process, including:
+- Dataset selection and preprocessing
+- Model selection and hyperparameters
+- Evaluation metrics and validation strategies
+- Training parameters and optimization settings
 
-## Configuration File Structure
+## Configuration Structure
 
-### Root Level Parameters
+### Top-Level Configuration
 
-#### `test_type` *(string, required)*
-- **Description**: Specifies the type of time series test being conducted
-- **Possible values**: `"univariate"`, `"multivariate"`, `"additive"`, `"multiplicative"`, `"deterministic"`, `"probabilistic"`, `"irregular"`, `"regular"`
-- **Used in**: Pipeline orchestration, model selection, result logging
-- **Example**: `test_type: deterministic`
+```yaml
+test_type: deterministic          # Type of test (deterministic, probabilistic)
+tensorboard: true                # Enable TensorBoard logging
+dataset:                         # Dataset configuration
+  # ... dataset settings
+model:                          # Model configuration
+  # ... model settings
+evaluation:                     # Evaluation configuration
+  # ... evaluation settings
+```
 
----
+### Dataset Configuration
 
-## `dataset` Section
+```yaml
+dataset:
+  name: china_air_quality       # Dataset name (for reference)
+  path: benchmarking_pipeline/datasets/china_air_quality  # Path to dataset
+  frequency: H                   # Data frequency (H=hourly, D=daily, M=monthly)
+  forecast_horizon: [10, 25, 50] # Forecast horizons to test
+  split_ratio: [0.8, 0.1, 0.1]  # Train/validation/test split ratios
+  normalize: false               # Whether to normalize data
+  handle_missing: interpolate    # Missing value strategy (interpolate, delete, forward_fill)
+  validate_ranges: false         # Enable additional data range validation (optional)
+  chunks: 2                      # Number of data chunks to load
+```
 
-Controls data loading and preprocessing parameters.
+#### Frequency Options
 
-#### `name` *(string, required)*
-- **Description**: Name/identifier of the dataset
-- **Used in**: Data loading, result metadata, output file naming
-- **Example**: `name: australian_electricity_demand`
+- `H`: Hourly
+- `D`: Daily
+- `W`: Weekly
+- `M`: Monthly
+- `Q`: Quarterly
+- `Y`: Yearly
+- `15T`: 15 minutes
+- `30T`: 30 minutes
 
-#### `path` *(string, required)*
-- **Description**: Path to the dataset files (relative to project root)
-- **Used in**: DataLoader module
-- **Example**: `path: benchmarking_pipeline/datasets/australian_electricity_demand`
+#### Missing Value Strategies
 
-#### `frequency` *(string, required)*
-- **Description**: Time series frequency following pandas frequency codes
-- **Possible values**: `"H"` (hourly), `"D"` (daily), `"W"` (weekly), `"M"` (monthly), `"30T"` (30 minutes), etc.
-- **Used in**: Data validation, feature engineering, model configuration
-- **Example**: `frequency: D`
+- `interpolate`: Linear interpolation between known values
+- `delete`: Remove rows with missing values
+- `forward_fill`: Use previous value to fill missing values
+- `backward_fill`: Use next value to fill missing values
+- `mean`: Fill with mean of the series
+- `median`: Fill with median of the series
 
-#### `forecast_horizon` *(integer, required)*
-- **Description**: Number of time steps to forecast ahead
-- **Used in**: Feature engineering, model training, evaluation
-- **Example**: `forecast_horizon: 5`
+#### Data Quality Validation
 
-#### `split_ratio` *(list of floats, required)*
-- **Description**: Proportions for train/validation/test splits (must sum to 1.0)
-- **Format**: `[train_ratio, validation_ratio, test_ratio]`
-- **Used in**: DataLoader for splitting time series data
-- **Example**: `split_ratio: [0.8, 0.1, 0.1]`
+The pipeline automatically validates data quality before passing it to models:
 
-#### `normalize` *(boolean, required)*
-- **Description**: Whether to normalize/standardize features
-- **Used in**: Preprocessor module for feature scaling
-- **Example**: `normalize: false`
+- **NaN Detection**: Ensures no NaN values remain after preprocessing
+- **Infinite Values**: Checks for division by zero or overflow issues
+- **Data Types**: Verifies all target data is numeric
+- **Empty Data**: Prevents empty datasets from reaching models
+- **Constant Data**: Detects columns with no variance (forecasting issues)
+- **Range Validation**: Optional additional validation for data ranges and variance
 
-#### `handle_missing` *(string, required)*
-- **Description**: Strategy for handling missing values
-- **Possible values**: 
-  - `"interpolate"`: Linear interpolation
-  - `"mean"`: Fill with column mean
-  - `"median"`: Fill with column median
-  - `"drop"`: Remove rows with missing values
-  - `"forward_fill"`: Forward fill (use last valid value)
-  - `"backward_fill"`: Backward fill (use next valid value)
-- **Used in**: Preprocessor module
-- **Example**: `handle_missing: interpolate`
+This enforces the contract: "no NaNs or inconsistencies when data gets to models".
 
-#### `chunks` *(integer, optional)*
-- **Description**: Number of dataset chunks to process
-- **Used in**: DataLoader for processing large datasets in chunks
-- **Default**: `1`
-- **Example**: `chunks: 2`
+### Model Configuration
 
----
+The model configuration section supports both traditional models and foundation models. Each model type has its own configuration block.
 
-## `model` Section
+#### Foundation Models
 
-Controls model selection and configuration.
+Foundation models are large pre-trained models that can be fine-tuned for specific tasks.
 
-#### `name` *(list of strings, required)*
-- **Description**: List of models to train and evaluate
-- **Current supported models**: `["arima", "theta", "moirai", "moirai_moe", "croston_classic", "seasonal_naive", "toto", "exponential_smoothing", "lstm", "xgboost", "prophet", "random_forest", "svr", "tabpfn", "chronos", "moment", "lagllama", "timesfm", "deepar", "foundation_model", "base_model"]`
-- **Used in**: Model factory for instantiating models
-- **Example**: `name: ["arima", "theta", "moirai"]`
+##### Chronos
 
-#### `parameters` *(object, required)*
-- **Description**: Model-specific parameter configurations
-- **Structure**: Each model has its own parameter section with specific hyperparameters
-- **Used in**: Model instantiation and training
+```yaml
+chronos:
+  model_size: ['small', 'base', 'large']  # Model size options
+  context_length: [8, 16, 32]            # Number of past time steps for context
+  num_samples: [5, 10, 20]               # Number of predictive samples
+  batch_size: [8, 16]                    # Batch size for inference
+  learning_rate: [0.0001, 0.00001]       # Learning rate for fine-tuning
+  fine_tune_epochs: [0, 1, 2]            # Number of fine-tuning epochs
+```
 
-##### Model Parameter Examples:
+**Model Sizes**: `tiny`, `mini`, `small`, `base`, `large`
 
-**ARIMA Model:**
+##### LagLlama
+
+```yaml
+lagllama:
+  context_length: [4, 8, 16]             # Context length for the model
+  num_samples: [5, 10, 20]               # Number of samples to generate
+  batch_size: [4, 8, 16]                 # Batch size for processing
+```
+
+##### Moirai
+
+```yaml
+moirai:
+  size: ["small", "base", "large"]        # Model size
+  psz: [16, 32, 64]                      # Patch size
+  bsz: [8, 16, 32]                       # Batch size
+  num_samples: [5, 10, 20]               # Number of samples
+```
+
+##### TimesFM
+
+```yaml
+timesfm:
+  per_core_batch_size: [2, 4]            # Batch size per core
+  horizon_len: [20, 40]                  # Forecast horizon length
+  num_layers: [2, 4]                     # Number of layers
+  context_len: [2, 4]                    # Context length
+  use_positional_embedding: [False, True] # Whether to use positional embeddings
+```
+
+##### Toto
+
+```yaml
+toto:
+  num_samples: [20, 40, 80]              # Number of samples
+  samples_per_batch: [20, 40, 80]        # Samples per batch
+```
+
+#### Traditional Models
+
+Traditional models are statistical and machine learning models that require training from scratch.
+
+##### ARIMA
+
 ```yaml
 arima:
-  p: [0, 1]                    # AR order
-  d: [0, 1]                    # Differencing order
-  q: [0, 1]                    # MA order
-  s: [2, 4]                    # Seasonal period
-  target_col: ["y"]            # Target column name
-  loss_functions: ["mae"]      # Loss functions to use
-  primary_loss: ["mae"]        # Primary loss function
-  forecast_horizon: [2]        # Forecast horizon
+  p: [0, 1, 2]                           # AR order (autoregressive)
+  d: [0, 1]                              # Differencing order (integration)
+  q: [0, 1, 2]                           # MA order (moving average)
+  s: [2, 4, 12]                          # Seasonality period
+  maxlags: [10, 20]                      # Maximum lags for auto-selection
+  training_loss: ["mae", "mse"]           # Loss function for training
 ```
 
-**LSTM Model:**
+##### LSTM
+
 ```yaml
 lstm:
-  units: [2]                   # Number of LSTM units
-  layers: [1]                  # Number of LSTM layers
-  dropout: [0.1]               # Dropout rate
-  learning_rate: [0.01]        # Learning rate
-  batch_size: [8]              # Batch size
-  epochs: [1]                  # Number of training epochs
-  sequence_length: [20]        # Input sequence length
-  target_col: ["y"]            # Target column name
-  loss_functions: ["mae"]      # Loss functions to use
-  primary_loss: ["mae"]        # Primary loss function
-  forecast_horizon: [10]       # Forecast horizon
+  units: [32, 64, 128]                   # Number of LSTM units
+  layers: [1, 2, 3]                      # Number of LSTM layers
+  dropout: [0.1, 0.2, 0.3]              # Dropout rate
+  learning_rate: [0.01, 0.001, 0.0001]   # Learning rate
+  batch_size: [16, 32, 64]               # Batch size
+  epochs: [20, 50, 100]                  # Training epochs
+  sequence_length: [10, 20, 50]          # Input sequence length
+  training_loss: ["mae", "mse"]           # Loss function
 ```
 
-**XGBoost Model:**
+##### XGBoost
+
 ```yaml
 xgboost:
-  lookback_window: [10]        # Number of past values to use as features
-  forecast_horizon: [10]       # Number of future values to predict
-  n_estimators: [10]           # Number of boosting rounds
-  max_depth: [5]               # Maximum tree depth
-  learning_rate: [0.1]         # Learning rate
-  random_state: [42]           # Random seed
-  n_jobs: [-1]                 # Number of parallel jobs
+  lookback_window: [50, 100, 200]        # Number of past values to use as features
+  n_estimators: [50, 100, 200]           # Number of boosting rounds
+  max_depth: [5, 6, 10]                  # Maximum tree depth
+  learning_rate: [0.1, 0.3, 0.5]        # Learning rate
+  subsample: [0.8, 1.0]                  # Subsample ratio
+  colsample_bytree: [0.8, 1.0]           # Column subsample ratio
+  random_state: [42]                      # Random seed
+  n_jobs: [-1]                           # Number of parallel jobs (-1 for all)
 ```
 
-**Foundation Models (MOMENT, Chronos, etc.):**
+##### SVR (Support Vector Regression)
+
 ```yaml
-moment:
-  model_path: ['AutonLab/MOMENT-1-large']  # Pre-trained model path
-  context_length: [512]                     # Input context length
-  fine_tune_epochs: [0]                     # Fine-tuning epochs
-  batch_size: [8]                           # Batch size
-  learning_rate: [0.0001]                   # Learning rate
-  prediction_length: [40]                   # Prediction length
-
-chronos:
-  model_size: ['small']                     # Model size variant
-  context_length: [8]                       # Input context length
-  num_samples: [5]                          # Number of prediction samples
-  prediction_length: [40]                   # Prediction length
+svr:
+  kernel: ["rbf", "linear", "poly"]       # Kernel function
+  C: [0.1, 1.0, 10.0]                   # Regularization parameter
+  epsilon: [0.01, 0.1, 0.2]              # Epsilon in epsilon-SVR
+  gamma: ["scale", "auto"]                # Kernel coefficient
+  lookback_window: [50, 100, 200]        # Number of past values to use as features
+  max_iter: [1000, 2000]                 # Maximum iterations
+  random_state: [42]                      # Random seed
 ```
 
----
+##### Prophet
 
-## `evaluation` Section
+```yaml
+prophet:
+  changepoint_prior_scale: [0.001, 0.01, 0.1]  # Flexibility of trend
+  seasonality_prior_scale: [0.01, 0.1, 1.0]    # Flexibility of seasonality
+  holidays_prior_scale: [0.01, 0.1, 1.0]       # Flexibility of holidays
+  seasonality_mode: ["additive", "multiplicative"] # Seasonality mode
+  changepoint_range: [0.8, 0.9]                 # Range of changepoints
+```
 
-Controls model evaluation and metrics.
+##### Random Forest
 
-#### `type` *(string, required)*
-- **Description**: Type of evaluation to perform
-- **Possible values**: `"deterministic"`, `"probabilistic"`
-- **Used in**: Evaluator module for selecting appropriate metrics
-- **Example**: `type: deterministic`
+```yaml
+random_forest:
+  n_estimators: [50, 100, 200]           # Number of trees
+  max_depth: [5, 10, None]                # Maximum tree depth
+  min_samples_split: [2, 5, 10]           # Minimum samples to split
+  min_samples_leaf: [1, 2, 4]             # Minimum samples per leaf
+  lookback_window: [50, 100, 200]         # Number of past values to use as features
+  random_state: [42]                      # Random seed
+  n_jobs: [-1]                            # Number of parallel jobs
+```
 
-#### `metrics` *(list of strings, required)*
-- **Description**: Metrics to calculate for model evaluation
-- **Possible values**: 
-  - For deterministic: `"mae"`, `"rmse"`, `"mape"`, `"smape"`, `"mase"`
-  - For probabilistic: `"crps"`, `"quantile_loss"`, `"interval_score"`
-- **Used in**: Evaluator module for metric calculation
-- **Example**: `metrics: [mae, rmse]`
+##### Theta
 
----
+```yaml
+theta:
+  theta: [1.0, 2.0, 3.0]                 # Theta parameter
+  seasonality: [1, 2, 4, 12]             # Seasonality period
+  deseasonalize: [True, False]            # Whether to deseasonalize
+  training_loss: ["mae", "mse"]           # Loss function
+```
+
+##### DeepAR
+
+```yaml
+deepar:
+  hidden_size: [32, 64, 128]              # Hidden layer size
+  num_layers: [1, 2, 3]                   # Number of layers
+  dropout: [0.1, 0.2, 0.3]               # Dropout rate
+  learning_rate: [0.001, 0.0001]          # Learning rate
+  batch_size: [16, 32, 64]                # Batch size
+  epochs: [20, 50, 100]                   # Training epochs
+  context_length: [10, 20, 50]            # Context length
+```
+
+##### TabPFN
+
+```yaml
+tabpfn:
+  N_ensemble_configurations: [16, 32, 64] # Number of ensemble configurations
+  device: ["cpu", "cuda"]                  # Device to use
+  random_state: [42]                       # Random seed
+```
+
+### Evaluation Configuration
+
+```yaml
+evaluation:
+  type: deterministic                      # Evaluation type (deterministic, probabilistic)
+  metrics: [mae, rmse, mape, smape]       # Metrics to compute
+  validation_strategy: "holdout"           # Validation strategy
+  cross_validation_folds: 5                # Number of CV folds (if applicable)
+  test_size: 0.2                           # Test set size (if applicable)
+```
+
+#### Available Metrics
+
+**Point Forecast Metrics:**
+- `mae`: Mean Absolute Error
+- `rmse`: Root Mean Square Error
+- `mape`: Mean Absolute Percentage Error
+- `smape`: Symmetric Mean Absolute Percentage Error
+- `mase`: Mean Absolute Scaled Error
+
+**Probabilistic Metrics:**
+- `crps`: Continuous Ranked Probability Score
+- `interval_score`: Interval score for prediction intervals
+- `quantile_loss`: Quantile loss for quantile forecasts
+
+**Distribution Metrics:**
+- `log_loss`: Log loss for probabilistic forecasts
+- `brier_score`: Brier score for probabilistic forecasts
 
 ## Configuration Examples
 
-### Current Consolidated Configuration
-The main configuration file (`all_model_test.yaml`) contains all models and their parameters:
-
-```yaml
-test_type: deterministic
-dataset:
-  name: australian_electricity_demand
-  path: benchmarking_pipeline/datasets/australian_electricity_demand
-  frequency: D
-  forecast_horizon: 5
-  split_ratio: [0.8, 0.1, 0.1]
-  normalize: false
-  handle_missing: interpolate
-  chunks: 2
-
-model:
-  name: ["arima", "theta", "moirai", "moirai_moe", "croston_classic", 
-          "seasonal_naive", "toto", "exponential_smoothing", "lstm", 
-          "xgboost", "prophet", "random_forest", "svr", "tabpfn", 
-          "chronos", "moment", "lagllama", "timesfm", "deepar", 
-          "foundation_model", "base_model"]
-  
-  parameters:
-    arima:
-      p: [0, 1]
-      d: [0, 1]
-      q: [0, 1]
-      s: [2, 4]
-      target_col: ["y"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [2]
-    
-    lstm:
-      units: [2]
-      layers: [1]
-      dropout: [0.1]
-      learning_rate: [0.01]
-      batch_size: [8]
-      epochs: [1]
-      sequence_length: [20]
-      target_col: ["y"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [10]
-
-evaluation:
-  type: deterministic
-  metrics: [mae, rmse]
-```
-
 ### Minimal Configuration
-For testing a subset of models:
 
 ```yaml
 test_type: deterministic
 dataset:
-  name: australian_electricity_demand
-  path: benchmarking_pipeline/datasets/australian_electricity_demand
+  name: test_dataset
+  path: datasets/test
   frequency: D
-  forecast_horizon: 5
+  forecast_horizon: 10
   split_ratio: [0.8, 0.1, 0.1]
-  normalize: false
-  handle_missing: interpolate
   chunks: 1
 
 model:
-  name: ["arima", "lstm"]
+  arima:
+    p: [1]
+    d: [1]
+    q: [1]
+
+evaluation:
+  type: deterministic
+  metrics: [mae, mase, rmse]
+```
+
+### Comprehensive Configuration
+
+```yaml
+test_type: deterministic
+tensorboard: true
+
+dataset:
+  name: china_air_quality
+  path: benchmarking_pipeline/datasets/china_air_quality
+  frequency: H
+  forecast_horizon: [10, 25, 50]
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: false
+  handle_missing: interpolate
+  chunks: 3
+
+model:
+  # Foundation models
+  chronos:
+    model_size: ['small', 'base']
+    context_length: [8, 16]
+    num_samples: [5, 10]
+    batch_size: [8, 16]
+    learning_rate: [0.0001, 0.00001]
+    fine_tune_epochs: [0, 1]
   
-  parameters:
+  lagllama:
+    context_length: [4, 8]
+    num_samples: [5, 10]
+    batch_size: [4, 8]
+  
+  # Traditional models
+  arima:
+    p: [0, 1, 2]
+    d: [0, 1]
+    q: [0, 1, 2]
+    s: [2, 4, 12]
+    maxlags: [10, 20]
+    training_loss: ["mae", "mse"]
+  
+  lstm:
+    units: [32, 64]
+    layers: [1, 2]
+    dropout: [0.1, 0.2]
+    learning_rate: [0.01, 0.001]
+    batch_size: [32, 64]
+    epochs: [20, 50]
+    sequence_length: [10, 20]
+    training_loss: ["mae", "mse"]
+  
+  xgboost:
+    lookback_window: [50, 100]
+    n_estimators: [50, 100]
+    max_depth: [5, 6, 10]
+    learning_rate: [0.1, 0.3]
+    subsample: [0.8, 1.0]
+    colsample_bytree: [0.8, 1.0]
+    random_state: [42]
+    n_jobs: [-1]
+
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse, mape, smape]
+  validation_strategy: "holdout"
+  test_size: 0.2
+```
+
+## Configuration Best Practices
+
+### 1. Model Selection
+
+- **Start simple**: Begin with basic models (ARIMA, Seasonal Naive) to establish baselines
+- **Progressive complexity**: Add more sophisticated models (LSTM, XGBoost) incrementally
+- **Foundation models**: Use foundation models for comparison, but be aware of computational costs
+
+### 2. Hyperparameter Tuning
+
+- **Grid search**: Use small grids initially to identify promising regions
+- **Random search**: For high-dimensional spaces, random search often outperforms grid search
+- **Bayesian optimization**: Consider advanced optimization for expensive models
+
+### 3. Data Configuration
+
+- **Forecast horizons**: Test multiple horizons to understand model performance across different time scales
+- **Split ratios**: Use appropriate ratios (typically 0.8/0.1/0.1 for train/val/test)
+- **Chunks**: Start with few chunks for development, increase for final evaluation
+
+### 4. Evaluation Strategy
+
+- **Multiple metrics**: Use several metrics to get a comprehensive view of performance
+- **Validation strategy**: Choose appropriate validation strategy based on data characteristics
+- **Statistical significance**: Consider statistical tests for comparing model performance
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Memory errors**: Reduce batch sizes or number of chunks
+2. **Long training times**: Start with smaller hyperparameter grids
+3. **Poor performance**: Check data preprocessing and model assumptions
+4. **Configuration errors**: Validate YAML syntax and parameter names
+
+### Validation
+
+The configuration system includes validation to catch common errors:
+- Parameter type checking
+- Valid value ranges
+- Required parameter validation
+- Cross-parameter consistency checks
+
+## Advanced Configuration
+
+### Conditional Configuration
+
+```yaml
+model:
+  arima:
+    p: [0, 1, 2]
+    d: [0, 1]
+    q: [0, 1, 2]
+    # Conditional parameters based on d
+    s: [2, 4]  # Only used when d > 0
+```
+
+### Environment-Specific Configuration
+
+```yaml
+# Development configuration
+development:
+  dataset:
+    chunks: 1
+  model:
     arima:
       p: [1]
       d: [1]
       q: [1]
-      s: [7]
-      target_col: ["y"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [5]
-    
-    lstm:
-      units: [10]
-      layers: [2]
-      dropout: [0.2]
-      learning_rate: [0.001]
-      batch_size: [16]
-      epochs: [10]
-      sequence_length: [20]
-      target_col: ["y"]
-      loss_functions: ["mae"]
-      primary_loss: ["mae"]
-      forecast_horizon: [5]
 
-evaluation:
-  type: deterministic
-  metrics: [mae, rmse]
-```
-
----
-
-## Where Each Section is Used
-
-| Configuration Section | Used In Module | Purpose |
-|----------------------|----------------|---------|
-| `test_type` | Pipeline orchestrator | Test categorization and routing |
-| `dataset.*` | DataLoader, Preprocessor | Data loading and preprocessing |
-| `model.name` | ModelFactory | Model selection and instantiation |
-| `model.parameters.*` | Individual models | Model-specific hyperparameters |
-| `evaluation.*` | Evaluator | Performance evaluation |
-
----
-
-## Benefits of Consolidated Configuration
-
-1. **Single Source of Truth**: All model configurations in one place
-2. **Consistency**: Same dataset and evaluation settings for all models
-3. **Maintainability**: Easier to update and manage parameters
-4. **Reproducibility**: Consistent experimental setup across all models
-5. **Scalability**: Easy to add new models or modify existing parameters
-
----
-
-## Adding New Models
-
-To add a new model to the configuration:
-
-1. Add the model name to the `model.name` list
-2. Add a new parameter section under `model.parameters`
-3. Define the model-specific hyperparameters
-4. Ensure the model implementation exists in the `models/` directory
-
-Example:
-```yaml
-model:
-  name: ["arima", "new_model"]
-  
-  parameters:
+# Production configuration
+production:
+  dataset:
+    chunks: 10
+  model:
     arima:
-      # ... existing parameters ...
-    
-    new_model:
-      param1: [value1, value2]
-      param2: [value3]
-      target_col: ["y"]
-      forecast_horizon: [10]
+      p: [0, 1, 2]
+      d: [0, 1]
+      q: [0, 1, 2]
 ```
 
----
+### Dynamic Configuration
 
-## Notes
+```yaml
+# Use environment variables
+model:
+  chronos:
+    batch_size: ${CHRONOS_BATCH_SIZE:-8}
+    learning_rate: ${CHRONOS_LR:-0.0001}
+```
 
-- **Parameter Lists**: Most parameters use lists to enable hyperparameter tuning and grid search
-- **Default Values**: Models have sensible defaults for parameters not specified in config
-- **Model Dependencies**: Some models require specific packages (see individual model requirements.txt files)
-- **Memory Considerations**: Large models (like MOMENT, Chronos) may require significant memory
-- **GPU Support**: Some models (LSTM, DeepAR, foundation models) support GPU acceleration 
+## References
+
+- [YAML Specification](https://yaml.org/spec/)
+- [Hyperparameter Tuning Best Practices](https://arxiv.org/abs/2103.07545)
+- [Time Series Forecasting Evaluation](https://robjhyndman.com/papers/forecasting.pdf)
+- [Foundation Models for Time Series](https://arxiv.org/abs/2310.13525) 
