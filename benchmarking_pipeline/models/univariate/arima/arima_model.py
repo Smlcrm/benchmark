@@ -102,8 +102,7 @@ class ArimaModel(BaseModel):
         if self.s > 1:
             model = ARIMA(
                 endog=endog, 
-                order=(self.p, self.d, self.q), 
-                seasonal_order=(0, 0, 0, self.s), 
+                seasonal_order=(self.p, self.d, self.q, self.s), 
                 exog=exog
             )
         else:
@@ -156,11 +155,13 @@ class ArimaModel(BaseModel):
         forecast = self.model_.forecast(steps=forecast_steps, exog=exog)
         
         # Store predictions and true values for evaluation
-        # Convert forecast to numpy array and reshape
+        # Convert forecast to numpy array and reshape (simplified like working version)
         if hasattr(forecast, 'values'):
             forecast_array = forecast.values
         else:
             forecast_array = np.array(forecast)
+        
+        # Store predictions and true values for evaluation (simplified)
         self._last_y_pred = forecast_array.reshape(1, -1)
         if y_target is not None:
             self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
