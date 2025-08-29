@@ -4,48 +4,55 @@ dataset:
   name: china_air_quality
   path: benchmarking_pipeline/datasets/china_air_quality
   frequency: H
-  forecast_horizon: [10, 25, 50]  # Vector of forecast horizons to test
   split_ratio: [0.8, 0.1, 0.1]
   normalize: false
   handle_missing: interpolate
   chunks: 2
-  target_cols: ['PM2.5', 'PM10', 'O3', 'NO2', 'CO', 'SO2']
+
 
 model:
   # Foundation models that support multivariate forecasting
-  # moment:
-  #   model_path: ['AutonLab/MOMENT-1-large']
-  #   context_length: [512]
-  #   fine_tune_epochs: [0]
-  #   batch_size: [8]
-  #   learning_rate: [0.0001]
-  # lagllama:
-  #   context_length: [4]
-  #   num_samples: [5]
-  #   batch_size: [4]
-  # timesfm:
-  #   per_core_batch_size: [2]
-  #   horizon_len: [40]
-  #   num_layers: [2]
-  #   context_len: [2]
-  #   use_positional_embedding: [False]
-  # chronos:
-  #   model_size: ['small']
-  #   context_length: [8]
-  #   num_samples: [5]
-  # moirai:
-  #   size: ["small"]
-  #   psz: [32]
-  #   bsz: [8]
-  #   num_samples: [5]
-  # moirai_moe:
-  #   size: ["small"]
-  #   psz: [32]
-  #   bsz: [8]
-  #   num_samples: [5]
-  # toto:
-  #   num_samples: [40]
-  #   samples_per_batch: [40]
+  tiny_time_mixer:
+    forecast_horizon: [10]
+  moment:
+    model_path: ['AutonLab/MOMENT-1-large']
+    context_length: [512]
+    fine_tune_epochs: [0]
+    batch_size: [8]
+    learning_rate: [0.0001]
+    prediction_length: [10]
+  lagllama:
+    context_length: [4]
+    num_samples: [5]
+    batch_size: [4]
+    prediction_length: [10]
+  timesfm:
+    per_core_batch_size: [2]
+    horizon_len: [10]
+    num_layers: [2]
+    context_len: [2]
+    use_positional_embedding: [False]
+  chronos:
+    model_size: ['small']
+    context_length: [8]
+    num_samples: [5]
+    prediction_length: [10]
+  moirai:
+    size: ["small"]
+    psz: [32]
+    bsz: [8]
+    num_samples: [5]
+    pdt: [10]
+  moirai_moe:
+    size: ["small"]
+    psz: [32]
+    bsz: [8]
+    num_samples: [5]
+    pdt: [10]
+  toto:
+    num_samples: [40]
+    samples_per_batch: [40]
+    prediction_length: [10]
   
   # Traditional multivariate models
   xgboost:
@@ -57,6 +64,7 @@ model:
     colsample_bytree: [0.8, 1.0]
     random_state: [42]
     n_jobs: [-1]
+    forecast_horizon: [10]
   lstm:
     units: [32]
     layers: [1]
@@ -65,8 +73,8 @@ model:
     batch_size: [32]
     epochs: [20]
     sequence_length: [10]
-    loss_functions: ["mae"]
-    primary_loss: ["mae"]
+    training_loss: ["mae"]
+    forecast_horizon: [10]
   svr:
     kernel: ["rbf", "linear"]
     C: [0.1, 1.0, 10.0]
@@ -75,15 +83,16 @@ model:
     lookback_window: [50, 100]
     max_iter: [1000]
     random_state: [42]
+    forecast_horizon: [10]
   arima:
     p: [0, 1, 2]
     d: [0, 1]
     q: [0, 1, 2]
     s: [2, 4]
     maxlags: [10]
-    loss_functions: ["mae"]
-    primary_loss: ["mae"]
+    training_loss: ["mae"]
+    forecast_horizon: [10]
 
 evaluation:
   type: deterministic
-  metrics: [mae, rmse] 
+  metrics: [mae, mase, rmse] 

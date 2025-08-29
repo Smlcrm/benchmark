@@ -3,38 +3,41 @@ dataset:
   name: australian_electricity_demand
   path: benchmarking_pipeline/datasets/australian_electricity_demand
   frequency: D
-  forecast_horizon: [10, 25, 50]  # Vector of forecast horizons to test
   split_ratio: [0.8, 0.1, 0.1]
   normalize: false
   handle_missing: interpolate
   chunks: 2
-  target_cols: ['australian_electricity_demand']
 
 model:
   tiny_time_mixer:
+    forecast_horizon: [10]
   moment:
     model_path: ['AutonLab/MOMENT-1-large']
     context_length: [512]
     fine_tune_epochs: [0]
     batch_size: [8]
     learning_rate: [0.0001]
+    prediction_length: [10]
   lagllama:
     context_length: [4]
     num_samples: [5]
     batch_size: [4]
+    prediction_length: [10]
   timesfm:
     per_core_batch_size: [2]
-    horizon_len: [40]
+    horizon_len: [10]
     num_layers: [2]
     context_len: [2]
     use_positional_embedding: [False]
   tabpfn:
     allow_large_cpu_dataset: [True]
     max_sequence_length: [32]
+    prediction_length: [10]
   chronos:
     model_size: ['small']
     context_length: [8]
     num_samples: [5]
+    prediction_length: [10]
   xgboost:
     lookback_window: [10]
     n_estimators: [10]
@@ -42,6 +45,7 @@ model:
     learning_rate: [0.1]
     random_state: [42]
     n_jobs: [-1]
+    forecast_horizon: [10]
   prophet:
     seasonality_mode: ["additive"]
     changepoint_prior_scale: [0.05]
@@ -57,18 +61,21 @@ model:
     batch_size: [32]
     epochs: [20]
     sequence_length: [10]
-    loss_function: ["mae"]
+    training_loss: ["mae"]
+    forecast_horizon: [10]
   random_forest:
     lookback_window: [50, 100]
     n_estimators: [10, 50]
     max_depth: [3, 7]
     random_state: [42]
     n_jobs: [-1]
+    forecast_horizon: [10]
   exponential_smoothing:
     trend: ["none", "add"]
     seasonal: ["none", "add", "mul"]
     seasonal_periods: [7]
     damped_trend: [false]
+    forecast_horizon: [10]
   svr:
     kernel: ["rbf", "linear"]
     C: [0.1, 1.0, 10.0]
@@ -76,37 +83,44 @@ model:
     gamma: ["scale", "auto"]
     lookback_window: [50, 100]
     random_state: [42]
+    forecast_horizon: [10]
   arima:
     p: [0, 1, 2]
     d: [0, 1]
     q: [0, 1, 2]
     s: [2, 4]
-    loss_function: ["mae"]
+    training_loss: ["mae"]
+    forecast_horizon: [10]
   theta:
     sp: [1, 2, 3]
-    loss_function: ["mae"]
+    forecast_horizon: [10]
   moirai:
     size: ["small"]
     psz: [32]
     bsz: [8]
     num_samples: [5]
+    pdt: [10]
   moirai_moe:
     size: ["small"]
     psz: [32]
     bsz: [8]
     num_samples: [5]
+    pdt: [10]
   toto:
     num_samples: [40]
     samples_per_batch: [40]
+    prediction_length: [10]
   seasonal_naive:
     sp: [7, 14]
+    forecast_horizon: [10]
   deepar:
     context_length: [20]
     num_samples: [5]
     batch_size: [8]
     epochs: [1]
     learning_rate: [0.001]
+    max_prediction_length: [10]
 
 evaluation:
   type: deterministic
-  metrics: [mae, rmse]
+  metrics: [mae, mase, rmse]
