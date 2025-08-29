@@ -84,7 +84,7 @@ class XgboostModel(BaseModel):
         
         return np.array(features), np.array(targets)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None, **kwargs) -> 'XgboostModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, **kwargs) -> 'XgboostModel':
         """
         Train the XGBoost model on given data.
         
@@ -92,14 +92,11 @@ class XgboostModel(BaseModel):
         - Creates lag features from historical target values
         - Adds rolling statistics (mean, std, min, max)
         - Includes trend features using linear regression
-        - Incorporates current exogenous variables if available
         - Uses XGBoost's gradient boosting for non-linear pattern learning
         
         Args:
             y_context: Past target values (time series) - used for training
             y_target: Future target values (optional, for validation)
-            x_context: Past exogenous variables (optional)
-            x_target: Future exogenous variables (optional)
         
         Returns:
             self: The fitted model instance.
@@ -113,17 +110,12 @@ class XgboostModel(BaseModel):
         else:
             y_data = y_context
             
-        if isinstance(x_context, (pd.Series, pd.DataFrame)):
-            x_data = x_context.values
-        else:
-            x_data = x_context
-        
         # Ensure y_data is 1D
         if y_data.ndim > 1:
             y_data = y_data.flatten()
         
-        # Create features and targets
-        X, y = self._create_features(y_data, x_data)
+        # Create features and targets (no exogenous variables)
+        X, y = self._create_features(y_data, None)
         
         print(f"Training XGBoost model with {X.shape[0]} samples and {X.shape[1]} features...")
         
@@ -134,7 +126,7 @@ class XgboostModel(BaseModel):
         print("Training complete.")
         return self
         
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, **kwargs) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> np.ndarray:
         """
         Make predictions using the trained XGBoost model.
         
@@ -147,9 +139,7 @@ class XgboostModel(BaseModel):
         Args:
             y_context: Past target values (time series) - used for prediction
             y_target: Future target values - used to determine prediction length
-            x_context: Past exogenous variables (optional)
-            x_target: Future exogenous variables (optional)
-            
+        
         Returns:
             np.ndarray: Model predictions with shape (1, forecast_steps)
         """
@@ -169,16 +159,8 @@ class XgboostModel(BaseModel):
         if y_data.ndim > 1:
             y_data = y_data.flatten()
         
-        if x_context is not None and isinstance(x_context, (pd.Series, pd.DataFrame)):
-            x_data = x_context.values
-        else:
-            x_data = x_context
-        
         predictions = []
         window = list(y_data[-self.lookback_window:])
-        x_covariates = None
-        if x_data is not None:
-            x_covariates = x_data[-self.lookback_window:] if len(x_data) >= self.lookback_window else None
         
         steps_remaining = forecast_steps
         while len(predictions) < forecast_steps:
@@ -190,10 +172,6 @@ class XgboostModel(BaseModel):
             rolling_max = np.max(lag_features)
             trend = np.polyfit(range(self.lookback_window), lag_features, 1)[0]
             sample_features = list(lag_features) + [rolling_mean, rolling_std, rolling_min, rolling_max, trend]
-            # Add current exogenous features if available
-            if x_covariates is not None and len(x_covariates) == self.lookback_window:
-                current_x = x_covariates[-1]
-                sample_features.extend(current_x.flatten())
             X_last = np.array(sample_features).reshape(1, -1)
             # Predict up to forecast_horizon steps
             pred = self.model.predict(X_last)[0]
@@ -205,9 +183,6 @@ class XgboostModel(BaseModel):
             predictions.extend(pred[:steps_to_take])
             # Update window for next prediction
             window = window[steps_to_take:] + list(pred[:steps_to_take])
-            if x_covariates is not None:
-                # For exogenous, just repeat the last value (or you could advance if you have x_target)
-                x_covariates = np.vstack([x_covariates[steps_to_take:], x_covariates[-1:]]) if x_covariates.shape[0] > 0 else x_covariates
             steps_remaining -= steps_to_take
         return np.array(predictions[:forecast_steps]).reshape(1, -1)
 

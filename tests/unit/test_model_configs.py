@@ -56,29 +56,29 @@ class TestModelConfigs:
     
     @pytest.mark.unit
     def test_get_model_path(self):
-        """Test getting model paths."""
+        """Test getting model paths by inferred target count."""
         router = ModelRouter()
         
         # Test univariate model
-        folder_path, file_name, class_name = router.get_model_path('arima', {'dataset': {'target_cols': ['y']}})
+        folder_path, file_name, class_name = router.get_model_path_by_target_count('arima', 1)
         assert 'univariate' in folder_path
         assert file_name == 'arima_model'
         assert class_name == 'ArimaModel'
         
         # Test multivariate model
-        folder_path, file_name, class_name = router.get_model_path('arima', {'dataset': {'target_cols': ['y', 'z']}})
+        folder_path, file_name, class_name = router.get_model_path_by_target_count('arima', 2)
         assert 'multivariate' in folder_path
         assert file_name == 'arima_model'
-        assert class_name == 'ArimaModel'
+        assert class_name == 'MultivariateARIMAModel'
         
         # Test anyvariate model
-        folder_path, file_name, class_name = router.get_model_path('chronos', {'dataset': {'target_cols': ['y']}})
+        folder_path, file_name, class_name = router.get_model_path_by_target_count('chronos', 1)
         assert 'anyvariate' in folder_path
         assert file_name == 'chronos_model'
         assert class_name == 'ChronosModel'
         
         # Test anyvariate model with multiple targets
-        folder_path, file_name, class_name = router.get_model_path('chronos', {'dataset': {'target_cols': ['y', 'z']}})
+        folder_path, file_name, class_name = router.get_model_path_by_target_count('chronos', 2)
         assert 'anyvariate' in folder_path
         assert file_name == 'chronos_model'
         assert class_name == 'ChronosModel'
@@ -102,20 +102,20 @@ class TestModelConfigs:
     
     @pytest.mark.unit
     def test_get_model_path_with_auto_detection(self):
-        """Test getting model path with automatic variant detection."""
+        """Test getting model path with automatic variant detection by num_targets."""
         router = ModelRouter()
         
         # Test auto-detection for anyvariate model
-        folder_path, file_name, class_name = router.get_model_path_with_auto_detection('chronos', {'dataset': {'target_cols': ['y']}})
+        folder_path, file_name, class_name = router.get_model_path_with_auto_detection('chronos', 1)
         assert 'anyvariate' in folder_path
         assert file_name == 'chronos_model'
         assert class_name == 'ChronosModel'
         
         # Test auto-detection for multivariate model
-        folder_path, file_name, class_name = router.get_model_path_with_auto_detection('arima', {'dataset': {'target_cols': ['y', 'z']}})
+        folder_path, file_name, class_name = router.get_model_path_with_auto_detection('arima', 2)
         assert 'multivariate' in folder_path
         assert file_name == 'arima_model'
-        assert class_name == 'ArimaModel'
+        assert class_name == 'MultivariateARIMAModel'
     
     @pytest.mark.unit
     def test_invalid_model_names(self):
@@ -124,11 +124,7 @@ class TestModelConfigs:
         
         # Test with non-existent model
         with pytest.raises(ValueError):
-            router.get_model_path('non_existent_model', {'target_cols': ['y']})
-        
-        # Test with missing target_cols
-        with pytest.raises(ValueError):
-            router.get_model_path('arima', {})  # Missing target_cols
+            router.get_model_path_by_target_count('non_existent_model', 1)
     
     @pytest.mark.unit
     def test_global_router_instance(self):

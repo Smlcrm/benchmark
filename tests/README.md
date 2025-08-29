@@ -1,240 +1,479 @@
-# Benchmarking Pipeline Test Suite
+# Testing Framework Documentation
 
-This directory contains the comprehensive test suite for the benchmarking pipeline, organized following Python testing best practices.
+This document describes the testing framework for the benchmarking pipeline project.
+
+## Overview
+
+The testing framework is organized into multiple categories to ensure comprehensive coverage of the codebase:
+
+- **Unit Tests**: Test individual components in isolation
+- **Integration Tests**: Test interactions between components
+- **End-to-End Tests**: Test complete workflows
+- **Smoke Tests**: Quick health checks for critical functionality
+- **Fixtures**: Reusable test data and configurations
 
 ## Test Structure
 
 ```
 tests/
-├── conftest.py              # Pytest configuration and shared fixtures
-├── unit/                    # Unit tests for individual components
-│   ├── test_data_loader.py
-│   ├── test_evaluator.py
-│   └── test_model_configs.py
-├── integration/             # Integration tests for component interactions
-│   └── test_pipeline_integration.py
-├── e2e/                    # End-to-end tests for complete workflows
-│   └── test_complete_benchmark_workflow.py
-├── fixtures/                # Test data and utilities
-│   └── test_data.py
-└── README.md               # This file
+├── __init__.py                           # Package initialization
+├── conftest.py                           # Shared pytest fixtures
+├── unit/                                 # Unit tests
+│   ├── __init__.py
+│   ├── test_basic_functionality.py      # Basic functionality tests
+│   ├── test_config_validator.py         # Configuration validation tests
+│   └── ... (other unit tests)
+├── integration/                          # Integration tests
+│   ├── __init__.py
+│   ├── test_forecast_horizon_integration.py  # Forecast horizon tests
+│   ├── test_pipeline_integration.py          # Pipeline integration tests
+│   └── ... (other integration tests)
+├── e2e/                                 # End-to-end tests
+│   ├── __init__.py
+│   ├── test_complete_benchmark_workflow.py   # Complete workflow tests
+│   ├── test_forecast_horizon_e2e.py          # E2E forecast horizon tests
+│   └── ... (other e2e tests)
+├── smoke/                               # Smoke tests
+│   ├── __init__.py
+│   ├── test_forecast_horizon_smoke.py        # Quick forecast tests
+│   ├── test_system_health.py                 # System health checks
+│   └── ... (other smoke tests)
+└── fixtures/                            # Test fixtures
+    ├── __init__.py
+    ├── test_data.py                     # Test data generation
+    ├── test_simple_forecast.yaml         # Simple test configuration
+    └── ... (other fixtures)
 ```
 
 ## Test Categories
 
-### Unit Tests (`tests/unit/`)
-- **Purpose**: Test individual functions, methods, and classes in isolation
-- **Scope**: Single component functionality
-- **Speed**: Fast execution
-- **Dependencies**: Minimal external dependencies, mostly mocked
+### 1. Unit Tests (`tests/unit/`)
 
-### Integration Tests (`tests/integration/`)
-- **Purpose**: Test how different components work together
-- **Scope**: Component interactions and data flow
-- **Speed**: Medium execution time
-- **Dependencies**: Multiple components, some real data
+Unit tests focus on testing individual components in isolation. They should:
+- Test a single function or method
+- Use mocks for external dependencies
+- Be fast and deterministic
+- Have clear, descriptive names
 
-### End-to-End Tests (`tests/e2e/`)
-- **Purpose**: Test complete workflows from start to finish
-- **Scope**: Full pipeline execution
-- **Speed**: Slower execution (marked with `@pytest.mark.slow`)
-- **Dependencies**: Full system, real data processing
+**Example Unit Test:**
+```python
+def test_arima_model_initialization():
+    """Test ARIMA model initialization with valid parameters."""
+    config = {
+        'p': 1,
+        'd': 1,
+        'q': 1,
+        's': 12,
+        'forecast_horizon': 10
+    }
+    
+    model = ArimaModel(config)
+    assert model.p == 1
+    assert model.d == 1
+    assert model.q == 1
+    assert model.s == 12
+    assert model.forecast_horizon == 10
+    assert not model.is_fitted
+```
+
+**Coverage Areas:**
+- Model initialization and parameter validation
+- Configuration parsing and validation
+- Utility functions
+- Data structure operations
+- Metric calculations
+
+### 2. Integration Tests (`tests/integration/`)
+
+Integration tests verify that components work together correctly. They should:
+- Test interactions between multiple components
+- Use real data structures (not mocks)
+- Test data flow through the pipeline
+- Verify component interfaces
+
+**Example Integration Test:**
+```python
+def test_data_loader_with_preprocessor():
+    """Test that DataLoader and Preprocessor work together correctly."""
+    config = load_test_config()
+    
+    # Load data
+    data_loader = DataLoader(config)
+    dataset = data_loader.load_single_chunk(1)
+    
+    # Preprocess data
+    preprocessor = Preprocessor(config)
+    preprocessed = preprocessor.preprocess(dataset)
+    
+    # Verify data flow
+    assert preprocessed.data.train.targets is not None
+    assert preprocessed.data.validation.targets is not None
+    assert preprocessed.data.test.targets is not None
+    assert len(preprocessed.preprocessing_info) > 0
+```
+
+**Coverage Areas:**
+- Data loading and preprocessing pipeline
+- Model training and evaluation workflow
+- Configuration system integration
+- Metric computation and logging
+- File I/O operations
+
+### 3. End-to-End Tests (`tests/e2e/`)
+
+End-to-end tests verify complete workflows from start to finish. They should:
+- Test the entire pipeline
+- Use realistic data and configurations
+- Verify end-to-end results
+- Test error handling and edge cases
+
+**Example E2E Test:**
+```python
+def test_complete_benchmark_workflow():
+    """Test the complete benchmarking workflow with a simple configuration."""
+    config = load_simple_test_config()
+    
+    # Run complete benchmark
+    results = run_benchmark_pipeline(config)
+    
+    # Verify results structure
+    assert 'models' in results
+    assert 'datasets' in results
+    assert 'metrics' in results
+    
+    # Verify specific results
+    assert len(results['models']) > 0
+    assert all('performance' in model for model in results['models'])
+    assert all('hyperparameters' in model for model in results['models'])
+```
+
+**Coverage Areas:**
+- Complete benchmark execution
+- Result generation and storage
+- Error handling and recovery
+- Performance under realistic conditions
+- Configuration validation end-to-end
+
+### 4. Smoke Tests (`tests/smoke/`)
+
+Smoke tests provide quick health checks for critical functionality. They should:
+- Be very fast (seconds, not minutes)
+- Test core functionality only
+- Catch obvious failures quickly
+- Be run frequently (e.g., on every commit)
+
+**Example Smoke Test:**
+```python
+def test_system_health():
+    """Quick health check for critical system components."""
+    # Test imports
+    from benchmarking_pipeline import model_router
+    from benchmarking_pipeline.pipeline import DataLoader
+    
+    # Test basic functionality
+    available_models = model_router.get_available_models()
+    assert isinstance(available_models, dict)
+    assert 'anyvariate' in available_models
+    assert 'multivariate' in available_models
+    assert 'univariate_only' in available_models
+    
+    # Test configuration loading
+    config = load_minimal_test_config()
+    assert config is not None
+    assert 'dataset' in config
+    assert 'model' in config
+```
+
+**Coverage Areas:**
+- Critical imports and dependencies
+- Basic configuration loading
+- Core data structures
+- Essential model routing
+- System availability
+
+### 5. Test Fixtures (`tests/fixtures/`)
+
+Test fixtures provide reusable test data and configurations. They should:
+- Be lightweight and fast to generate
+- Cover common test scenarios
+- Be deterministic and reproducible
+- Support multiple test types
+
+**Example Fixture:**
+```python
+@pytest.fixture
+def simple_forecast_config():
+    """Provide a simple configuration for forecasting tests."""
+    return {
+        'test_type': 'deterministic',
+        'dataset': {
+            'name': 'test_dataset',
+            'path': 'tests/fixtures/test_data',
+            'frequency': 'D',
+            'forecast_horizon': 5,
+            'split_ratio': [0.8, 0.1, 0.1],
+            'chunks': 1
+        },
+        'model': {
+            'arima': {
+                'p': [1],
+                'd': [1],
+                'q': [1]
+            }
+        },
+        'evaluation': {
+            'type': 'deterministic',
+            'metrics': ['mae', 'rmse']
+        }
+    }
+```
 
 ## Running Tests
 
-### Prerequisites
-```bash
-pip install pytest pytest-cov pytest-xdist
-```
-
 ### Basic Test Execution
+
 ```bash
 # Run all tests
-python -m pytest
+pytest
 
-# Run with coverage
-python -m pytest --cov=benchmarking_pipeline --cov-report=html
+# Run tests with verbose output
+pytest -v
 
-# Run specific test file
-python -m pytest tests/unit/test_data_loader.py
+# Run tests with coverage
+pytest --cov=benchmarking_pipeline
 
-# Run specific test function
-python -m pytest tests/unit/test_data_loader.py::TestDataLoader::test_load_single_chunk
+# Run tests and generate HTML coverage report
+pytest --cov=benchmarking_pipeline --cov-report=html
 ```
 
-### Using the Test Runner Script
-```bash
-# Run all tests
-python run_tests.py
+### Running Specific Test Categories
 
-# Run only unit tests
-python run_tests.py --type unit
-
-# Run with coverage
-python run_tests.py --coverage
-
-# Skip slow tests
-python run_tests.py --fast
-
-# Run in parallel
-python run_tests.py --parallel
-```
-
-### Test Markers
 ```bash
 # Run only unit tests
-python -m pytest -m unit
+pytest tests/unit/
 
 # Run only integration tests
-python -m pytest -m integration
+pytest tests/integration/
 
 # Run only end-to-end tests
-python -m pytest -m e2e
+pytest tests/e2e/
 
-# Skip slow tests
-python -m pytest -m "not slow"
-
-# Run smoke tests only
-python -m pytest -m smoke
+# Run only smoke tests
+pytest tests/smoke/
 ```
 
-## Test Configuration
+### Running Specific Tests
 
-### pytest.ini
-- Configures test discovery patterns
-- Sets up test markers
-- Configures coverage reporting
-- Sets warning filters
+```bash
+# Run tests matching a pattern
+pytest -k "test_arima"
 
-### conftest.py
-- Provides shared fixtures across all tests
-- Configures pytest hooks
-- Sets up test data and utilities
+# Run tests in a specific file
+pytest tests/unit/test_basic_functionality.py
 
-## Test Fixtures
+# Run a specific test function
+pytest tests/unit/test_basic_functionality.py::test_arima_model_initialization
+```
 
-### Available Fixtures
-- `test_data_dir`: Temporary directory for test data
-- `sample_csv_data`: Sample univariate time series data
-- `sample_multivariate_data`: Sample multivariate time series data
-- `mock_config`: Mock configuration for testing
-- `beijing_dataset_sample`: Sample Beijing dataset structure
+### Test Configuration
 
-### Custom Test Data
-The `tests/fixtures/test_data.py` module provides functions to create various types of test data:
-- Univariate time series with trend and seasonality
-- Multivariate time series with multiple targets and features
-- Data with missing values
-- Irregular timestamp data
-- Long-horizon forecasting data
-- Categorical and external regressor data
-- Anomaly data
+The test configuration is controlled by `pytest.ini`:
 
-## Writing Tests
+```ini
+[tool:pytest]
+testpaths = tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+addopts = 
+    -v
+    --tb=short
+    --strict-markers
+    --disable-warnings
+markers =
+    unit: Unit tests
+    integration: Integration tests
+    e2e: End-to-end tests
+    smoke: Smoke tests
+    slow: Slow running tests
+```
 
-### Test Naming Convention
-- Test files: `test_*.py`
-- Test classes: `Test*`
-- Test methods: `test_*`
+## Test Data Management
 
-### Test Structure
+### Test Data Sources
+
+1. **Synthetic Data**: Generated programmatically for controlled testing
+2. **Small Real Datasets**: Minimal versions of real datasets for realistic testing
+3. **Mock Data**: Simulated data structures for unit testing
+
+### Test Data Generation
+
 ```python
-class TestComponentName:
-    """Test cases for ComponentName functionality."""
-    
-    def test_specific_functionality(self, fixture_name):
-        """Test description."""
-        # Arrange
-        # Act
-        # Assert
+def generate_test_time_series(length=100, frequency='D'):
+    """Generate synthetic time series data for testing."""
+    dates = pd.date_range(start='2020-01-01', periods=length, freq=frequency)
+    values = np.random.randn(length).cumsum() + 100  # Random walk
+    return pd.Series(values, index=dates)
+
+def generate_test_dataset(num_chunks=3, chunk_length=100):
+    """Generate a complete test dataset with multiple chunks."""
+    datasets = []
+    for i in range(num_chunks):
+        data = generate_test_time_series(chunk_length)
+        # Create chunk file structure
+        # ... implementation details
+        datasets.append(data)
+    return datasets
 ```
 
-### Using Fixtures
+### Test Data Cleanup
+
 ```python
-def test_example(self, sample_csv_data, mock_config):
-    """Example test using fixtures."""
-    # Use the fixtures
-    data = sample_csv_data
-    config = mock_config
-    
-    # Test logic here
-    assert len(data) > 0
+@pytest.fixture(autouse=True)
+def cleanup_test_files():
+    """Automatically clean up test files after each test."""
+    yield
+    # Cleanup code here
+    cleanup_test_outputs()
+    cleanup_test_logs()
 ```
-
-### Test Markers
-```python
-@pytest.mark.unit
-def test_unit_functionality(self):
-    """Unit test."""
-    pass
-
-@pytest.mark.integration
-def test_integration_functionality(self):
-    """Integration test."""
-    pass
-
-@pytest.mark.e2e
-@pytest.mark.slow
-def test_end_to_end_workflow(self):
-    """End-to-end test."""
-    pass
-```
-
-## Coverage Requirements
-
-- **Minimum Coverage**: 80%
-- **Coverage Reports**: HTML, XML, and terminal output
-- **Coverage Location**: `htmlcov/` directory
 
 ## Best Practices
 
-1. **Test Isolation**: Each test should be independent and not affect others
-2. **Descriptive Names**: Test names should clearly describe what is being tested
-3. **Arrange-Act-Assert**: Structure tests with clear setup, execution, and verification
-4. **Fixture Usage**: Use fixtures for common setup and teardown
-5. **Mocking**: Mock external dependencies to isolate the unit under test
-6. **Edge Cases**: Test boundary conditions and error scenarios
-7. **Performance**: Mark slow tests appropriately
+### 1. Test Organization
 
-## Debugging Tests
+- **Group related tests** in the same test class or file
+- **Use descriptive test names** that explain what is being tested
+- **Follow the Arrange-Act-Assert pattern** for test structure
+- **Keep tests independent** - no test should depend on another
 
-### Verbose Output
-```bash
-python -m pytest -v
-```
+### 2. Test Data
 
-### Stop on First Failure
-```bash
-python -m pytest -x
-```
+- **Use minimal test data** - only what's needed for the test
+- **Make test data deterministic** - avoid random data when possible
+- **Clean up test data** after tests complete
+- **Use fixtures** for commonly used test data
 
-### Debug Mode
-```bash
-python -m pytest --pdb
-```
+### 3. Test Coverage
 
-### Show Local Variables
-```bash
-python -m pytest -l
-```
+- **Aim for high coverage** but focus on critical paths
+- **Test edge cases** and error conditions
+- **Test both success and failure scenarios**
+- **Cover configuration validation** thoroughly
+
+### 4. Performance
+
+- **Keep tests fast** - aim for seconds, not minutes
+- **Use appropriate test categories** for different performance requirements
+- **Mock expensive operations** in unit tests
+- **Use parallel execution** when possible
+
+### 5. Maintenance
+
+- **Update tests** when code changes
+- **Refactor tests** to reduce duplication
+- **Document complex test scenarios**
+- **Review test failures** carefully
 
 ## Continuous Integration
 
-The test suite is designed to work with CI/CD pipelines:
-- Fast execution for unit tests
-- Comprehensive coverage reporting
-- Clear test categorization
-- Parallel execution support
+### GitHub Actions
+
+The project includes GitHub Actions workflows for automated testing:
+
+```yaml
+name: Tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pytest pytest-cov
+      - name: Run tests
+        run: pytest --cov=benchmarking_pipeline --cov-report=xml
+      - name: Upload coverage
+        uses: codecov/codecov-action@v1
+```
+
+### Pre-commit Hooks
+
+Consider using pre-commit hooks for local testing:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+```
 
 ## Troubleshooting
 
 ### Common Issues
-1. **Import Errors**: Ensure the benchmarking_pipeline package is installed or in PYTHONPATH
-2. **Fixture Errors**: Check that fixtures are properly defined in conftest.py
-3. **Coverage Issues**: Verify that the coverage package is installed
-4. **Slow Tests**: Use `--fast` flag to skip slow tests during development
 
-### Getting Help
-- Check pytest documentation: https://docs.pytest.org/
-- Review existing test examples in the codebase
-- Use `python -m pytest --help` for command-line options
+1. **Import Errors**: Ensure the package is installed in development mode
+2. **Test Data Issues**: Check that test data files exist and are accessible
+3. **Configuration Problems**: Verify test configuration files are valid
+4. **Performance Issues**: Use appropriate test categories for different scenarios
+
+### Debugging Tests
+
+```bash
+# Run tests with debug output
+pytest -s
+
+# Run tests with maximum verbosity
+pytest -vvv
+
+# Run tests and stop on first failure
+pytest -x
+
+# Run tests and show local variables on failure
+pytest -l
+```
+
+### Test Isolation
+
+```python
+@pytest.fixture(autouse=True)
+def isolate_test_environment():
+    """Ensure each test runs in isolation."""
+    # Setup
+    original_env = os.environ.copy()
+    
+    yield
+    
+    # Teardown
+    os.environ.clear()
+    os.environ.update(original_env)
+```
+
+## Contributing
+
+When adding new tests:
+
+1. **Follow the existing structure** and naming conventions
+2. **Add appropriate markers** for test categorization
+3. **Include docstrings** explaining what is being tested
+4. **Update this documentation** if adding new test categories
+5. **Ensure tests pass** before submitting changes
+
+## References
+
+- [pytest Documentation](https://docs.pytest.org/)
+- [Testing Best Practices](https://realpython.com/python-testing/)
+- [Test-Driven Development](https://en.wikipedia.org/wiki/Test-driven_development)
+- [Continuous Integration](https://en.wikipedia.org/wiki/Continuous_integration)

@@ -32,7 +32,6 @@ class LstmModel(BaseModel):
                 - batch_size: int, batch size for training
                 - epochs: int, number of training epochs
                 - sequence_length: int, length of input sequences
-                - target_col: str, name of target column
                 - feature_cols: list of str, names of feature columns
                 - loss_function: str, loss function for training
                 - forecast_horizon: int, number of steps to forecast ahead
@@ -46,10 +45,8 @@ class LstmModel(BaseModel):
         self.batch_size = self.config.get('batch_size', 32)
         self.epochs = self.config.get('epochs', 100)
         self.sequence_length = self.config.get('sequence_length', 10)
-        # Remove target_col - use target_cols from parent class instead
         self.feature_cols = self.config.get('feature_cols', None)
-        self.loss_function = self.config.get('loss_function', 'mae')
-        # forecast_horizon is inherited from parent class (BaseModel)
+        self.training_loss = self.config.get('training_loss', 'mae')
         self.model = None
         
     def _build_model(self, input_shape: Tuple[int, int]) -> None:
@@ -78,7 +75,7 @@ class LstmModel(BaseModel):
         # Compile model
         self.model.compile(
             optimizer=Adam(learning_rate=self.learning_rate),
-            loss=self.loss_function
+            loss=self.training_loss
         )
         
     def _prepare_sequences(self, X: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -101,7 +98,7 @@ class LstmModel(BaseModel):
             y_seq.append(X[i + self.sequence_length:i + self.sequence_length + self.forecast_horizon, 0])
         return np.array(X_seq), np.array(y_seq)
         
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None, **kwargs) -> 'LstmModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, **kwargs) -> 'LstmModel':
         """
         Train the LSTM model on given data.
         
@@ -115,10 +112,7 @@ class LstmModel(BaseModel):
         Args:
             y_context: Past target values (time series) - used for training
             y_target: Future target values (optional, for validation)
-            x_context: Past exogenous variables (optional, ignored for now)
-            x_target: Future exogenous variables (optional, ignored for now)
             y_start_date: The start date timestamp for y_context and y_target in string form
-            x_start_date: The start date timestamp for x_context and x_target in string form
             **kwargs: Additional keyword arguments
 
             
@@ -149,7 +143,7 @@ class LstmModel(BaseModel):
         self.is_fitted = True
         return self
         
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, **kwargs) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> np.ndarray:
         """
         Make predictions using the trained LSTM model.
         Predicts len(y_target) steps ahead using non-overlapping windows.
@@ -217,9 +211,8 @@ class LstmModel(BaseModel):
             'batch_size': self.batch_size,
             'epochs': self.epochs,
             'sequence_length': self.sequence_length,
-            'target_cols': self.target_cols,
             'feature_cols': self.feature_cols,
-            'loss_function': self.loss_function,
+            'loss_function': self.training_loss,
             'forecast_horizon': self.forecast_horizon
         }
         
@@ -234,7 +227,10 @@ class LstmModel(BaseModel):
             self: The model instance with updated parameters
         """
         for key, value in params.items():
-            if hasattr(self, key):
+            if key == 'dataset':
+                # Skip dataset parameter - it's not an LSTM model parameter
+                continue
+            elif hasattr(self, key):
                 setattr(self, key, value)
         return self
         

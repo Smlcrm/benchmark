@@ -41,10 +41,30 @@ class ProphetModel(BaseModel):
         # Create a new Prophet model instance for each training
         self.model = Prophet(**self.config.get('model_params', {}))
         # Use the provided timestamps to create a DatetimeIndex for y_context
-        y_context = pd.Series(
-            y_context.values if hasattr(y_context, 'values') else y_context,
-            index=y_context_timestamps
-        )
+        # Ensure 1D series indexed by provided timestamps
+        y_vals = y_context.values if hasattr(y_context, 'values') else y_context
+        if isinstance(y_vals, np.ndarray) and y_vals.ndim > 1:
+            y_vals = y_vals.flatten()
+        
+        # Convert timestamps to datetime if they're not already
+        if not isinstance(y_context_timestamps, pd.DatetimeIndex):
+            # Handle different timestamp formats
+            if isinstance(y_context_timestamps[0], (int, np.integer)):
+                # Convert from nanoseconds to datetime
+                if y_context_timestamps[0] > 1e18:  # Likely nanoseconds
+                    timestamps = pd.to_datetime(y_context_timestamps, unit='ns')
+                elif y_context_timestamps[0] > 1e15:  # Likely microseconds
+                    timestamps = pd.to_datetime(y_context_timestamps, unit='us')
+                elif y_context_timestamps[0] > 1e12:  # Likely milliseconds
+                    timestamps = pd.to_datetime(y_context_timestamps, unit='ms')
+                else:  # Likely seconds
+                    timestamps = pd.to_datetime(y_context_timestamps, unit='s')
+            else:
+                timestamps = pd.to_datetime(y_context_timestamps)
+        else:
+            timestamps = y_context_timestamps
+            
+        y_context = pd.Series(y_vals, index=timestamps)
         train_df = pd.DataFrame({'ds': y_context.index, 'y': y_context.values})
         if x_context is not None:
             if not isinstance(x_context, pd.DataFrame):
@@ -85,7 +105,7 @@ class ProphetModel(BaseModel):
         """
         Get the current model parameters from the configuration.
         """
-        # Prophet model attributes are set at initialization, so we return those.
+        # Return Prophet model parameters
         return self.config.get('model_params', {})
 
     def set_params(self, **params: Dict[str, Any]) -> 'ProphetModel':
@@ -94,9 +114,29 @@ class ProphetModel(BaseModel):
         """
         if 'model_params' not in self.config:
             self.config['model_params'] = {}
-        self.config['model_params'].update(params)
         
-        # Re-build the model with the new parameters
+        # Filter out non-Prophet parameters
+        valid_prophet_params = {}
+        
+        for key, value in params.items():
+            if key in ['forecast_horizon', 'dataset']:
+                # Skip these parameters - they're not for Prophet constructor
+                continue
+            elif key in ['seasonality_mode', 'changepoint_prior_scale', 'seasonality_prior_scale', 
+                        'yearly_seasonality', 'weekly_seasonality', 'daily_seasonality',
+                        'holidays', 'holidays_prior_scale', 'changepoint_range']:
+                # These are valid Prophet parameters
+                valid_prophet_params[key] = value
+            else:
+                # Raise error for unknown parameters to catch configuration mistakes
+                raise ValueError(f"Unknown parameter '{key}' for Prophet model. Valid parameters are: "
+                               f"seasonality_mode, changepoint_prior_scale, seasonality_prior_scale, "
+                               f"yearly_seasonality, weekly_seasonality, daily_seasonality, "
+                               f"holidays, holidays_prior_scale, changepoint_range")
+        
+        self.config['model_params'].update(valid_prophet_params)
+        
+        # Re-build the model with the valid parameters only
         self.model = Prophet(**self.config['model_params'])
         self.is_fitted = False
         return self

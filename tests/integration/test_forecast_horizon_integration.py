@@ -136,12 +136,6 @@ class TestForecastHorizonIntegration:
         assert forecast_horizon is not None, "Pipeline components should be able to access dataset forecast_horizon"
         assert isinstance(forecast_horizon, list), "Dataset forecast_horizon should be a list"
         assert len(forecast_horizon) > 0, "Dataset forecast_horizon should not be empty"
-        
-        # Test that components can access target_cols from dataset config
-        target_cols = dataset_cfg.get('target_cols')
-        assert target_cols is not None, "Pipeline components should be able to access dataset target_cols"
-        assert isinstance(target_cols, list), "Dataset target_cols should be a list"
-        assert len(target_cols) > 0, "Dataset target_cols should not be empty"
     
     @pytest.mark.integration
     def test_hyperparameter_grid_consistency_across_models(self, univariate_config):
@@ -186,7 +180,7 @@ class TestForecastHorizonIntegration:
         mult_dataset_keys = set(multivariate_config['dataset'].keys())
         
         # Core dataset keys should be present in both
-        core_keys = {'name', 'path', 'forecast_horizon', 'target_cols'}
+        core_keys = {'name', 'path', 'forecast_horizon'}
         for key in core_keys:
             assert key in univ_dataset_keys, f"Univariate config should have dataset.{key}"
             assert key in mult_dataset_keys, f"Multivariate config should have dataset.{key}"

@@ -93,7 +93,10 @@ class RandomForestModel(BaseModel):
                 future_timestamps = timestamps[i + self.lookback_window:i + self.lookback_window + self.forecast_horizon]
                 
                 # Convert timestamps to numerical features
-                if isinstance(current_timestamp, (pd.Timestamp, np.datetime64)):
+                # Convert numpy.datetime64 to pandas Timestamp
+                if isinstance(current_timestamp, np.datetime64):
+                    current_timestamp = pd.to_datetime(current_timestamp)
+                if isinstance(current_timestamp, pd.Timestamp):
                     current_time_features = [
                         current_timestamp.year,
                         current_timestamp.month,
@@ -109,7 +112,9 @@ class RandomForestModel(BaseModel):
                 # Add future timestamp features
                 future_time_features = []
                 for ts in future_timestamps:
-                    if isinstance(ts, (pd.Timestamp, np.datetime64)):
+                    if isinstance(ts, np.datetime64):
+                        ts = pd.to_datetime(ts)
+                    if isinstance(ts, pd.Timestamp):
                         future_time_features.extend([
                             ts.year, ts.month, ts.day, ts.hour, ts.dayofweek, ts.dayofyear
                         ])
@@ -129,7 +134,7 @@ class RandomForestModel(BaseModel):
         
         return np.array(features), np.array(targets)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, y_start_date: pd.Timestamp = None, x_start_date: pd.Timestamp = None, y_context_timestamps: np.ndarray = None, y_target_timestamps: np.ndarray = None, **kwargs) -> 'RandomForestModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, y_start_date: pd.Timestamp = None, y_context_timestamps: np.ndarray = None, y_target_timestamps: np.ndarray = None, **kwargs) -> 'RandomForestModel':
         """
         Train the Random Forest model on given data.
         
@@ -143,10 +148,7 @@ class RandomForestModel(BaseModel):
         Args:
             y_context: Past target values (time series) - used for training
             y_target: Future target values (optional, for validation)
-            x_context: Past exogenous variables (optional)
-            x_target: Future exogenous variables (optional)
             y_start_date: The start date timestamp for y_context and y_target in string form
-            x_start_date: The start date timestamp for x_context and x_target in string form
             y_context_timestamps: Timestamps for y_context (optional)
             y_target_timestamps: Timestamps for y_target (optional)
         
@@ -162,11 +164,6 @@ class RandomForestModel(BaseModel):
         else:
             y_data = y_context
             
-        if isinstance(x_context, (pd.Series, pd.DataFrame)):
-            x_data = x_context.values
-        else:
-            x_data = x_context
-        
         # Ensure y_data is 1D
         if y_data.ndim > 1:
             y_data = y_data.flatten()
@@ -190,8 +187,8 @@ class RandomForestModel(BaseModel):
         elif y_context_timestamps is not None:
             full_timestamps = y_context_timestamps
         
-        # Create features and targets
-        X, y = self._create_features(full_y_data, x_data, full_timestamps)
+        # Create features and targets (no exogenous variables)
+        X, y = self._create_features(full_y_data, None, full_timestamps)
         
         # y is shape (n_samples, forecast_horizon)
         self.model.fit(X, y)
@@ -210,8 +207,6 @@ class RandomForestModel(BaseModel):
         Args:
             y_context: Past target values (time series) - used for prediction
             y_target: Future target values - used to determine prediction length
-            x_context: Past exogenous variables (optional)
-            x_target: Future exogenous variables (optional)
             y_context_timestamps: Timestamps for y_context (optional)
             y_target_timestamps: Timestamps for y_target (optional)
             

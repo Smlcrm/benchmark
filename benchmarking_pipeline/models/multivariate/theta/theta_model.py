@@ -34,33 +34,30 @@ class MultivariateTheta(BaseModel):
                     Example Format:
                     {
                         'sp': 12,  # seasonal period
-                        'target_cols': ['target_0', 'target_1'],  # target column names
                         'use_reduced_rank': False,  # whether to use cointegration/reduced rank
                         'theta_method': 'least_squares'  # 'least_squares' or 'correlation_optimal'
                     }
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
-        self.sp = self.config.get('sp', 1)
-        # target_cols is inherited from parent class (BaseModel/FoundationModel)
+        # Extract model parameters from config
+        self.sp = self.config.get('sp', 1)  # Seasonality period
         self.use_reduced_rank = self.config.get('use_reduced_rank', False)
-        self.theta_method = self.config.get('theta_method', 'least_squares')
-        
-        # n_targets will be calculated when needed: len(self.target_cols)
-        self.theta_matrix = None  # The Θ parameter matrix
-        self.drift_vector = None  # μ drift parameters
-        self.univariate_models = {}  # Individual Theta models for each target
-        self.cross_models = {}  # Models for cross-dependencies
+        self.theta_method = self.config.get('theta_method', 'correlation_optimal')
+        self.univariate_models = {}
+        self.theta_matrix = None
+        self.drift_vector = None
+        self.is_fitted = False
         
     def _estimate_drift(self, y_context: np.ndarray) -> np.ndarray:
         """
         Estimate drift vector μ from first differences.
         
         Args:
-            y_context: Historical target data (T, n_targets)
+            y_context: Historical target data (T, num_targets)
             
         Returns:
-            np.ndarray: Drift vector of shape (n_targets,)
+            np.ndarray: Drift vector of shape (num_targets,)
         """
         # Calculate first differences
         diff_data = np.diff(y_context, axis=0)
@@ -72,8 +69,8 @@ class MultivariateTheta(BaseModel):
         Remove linear trend from data.
         
         Args:
-            y_context: Historical target data (T, n_targets)
-            drift_vector: Drift parameters (n_targets,)
+            y_context: Historical target data (T, num_targets)
+            drift_vector: Drift parameters (num_targets,)
             
         Returns:
             np.ndarray: Detrended data
@@ -88,19 +85,19 @@ class MultivariateTheta(BaseModel):
         Estimate Θ matrix using multivariate least squares.
         
         Args:
-            detrended_data: Detrended target data (T, n_targets)
+            detrended_data: Detrended target data (T, num_targets)
             
         Returns:
-            np.ndarray: Theta matrix (n_targets, n_targets)
+            np.ndarray: Theta matrix (num_targets, num_targets)
         """
         # For each target, regress its differences on all targets' levels
-        theta_matrix = np.zeros((self.n_targets, self.n_targets))
+        theta_matrix = np.zeros((self.num_targets, self.num_targets))
         
         # Calculate first differences of detrended data
-        diff_data = np.diff(detrended_data, axis=0)  # (T-1, n_targets)
-        lagged_data = detrended_data[:-1, :]  # (T-1, n_targets)
+        diff_data = np.diff(detrended_data, axis=0)  # (T-1, num_targets)
+        lagged_data = detrended_data[:-1, :]  # (T-1, num_targets)
         
-        for i in range(self.n_targets):
+        for i in range(self.num_targets):
             # Regress diff_i on all lagged levels
             y = diff_data[:, i]  # dependent variable
             X = lagged_data  # independent variables (all targets)
@@ -117,10 +114,10 @@ class MultivariateTheta(BaseModel):
         Estimate Θ matrix using correlation-optimal method from the paper.
         
         Args:
-            detrended_data: Detrended target data (T, n_targets)
+            detrended_data: Detrended target data (T, num_targets)
             
         Returns:
-            np.ndarray: Theta matrix (n_targets, n_targets)
+            np.ndarray: Theta matrix (num_targets, num_targets)
         """
         # Calculate first differences
         diff_data = np.diff(detrended_data, axis=0)
@@ -130,12 +127,12 @@ class MultivariateTheta(BaseModel):
         
         # For simplicity, use the correlation structure to set off-diagonals
         # In practice, this would involve more complex optimization as in the paper
-        theta_matrix = np.eye(self.n_targets)  # Start with identity
+        theta_matrix = np.eye(self.num_targets)  # Start with identity
         
         # Set off-diagonal elements based on correlations
         corr_matrix = np.corrcoef(diff_data.T)
-        for i in range(self.n_targets):
-            for j in range(self.n_targets):
+        for i in range(self.num_targets):
+            for j in range(self.num_targets):
                 if i != j:
                     # Use correlation as proxy for optimal theta (simplified)
                     theta_matrix[i, j] = 0.5 * corr_matrix[i, j]
@@ -147,24 +144,21 @@ class MultivariateTheta(BaseModel):
         Create multivariate θ-lines using the parameter matrix.
         
         Args:
-            detrended_data: Detrended target data (T, n_targets)
-            theta_matrix: Theta parameter matrix (n_targets, n_targets)
+            detrended_data: Detrended target data (T, num_targets)
+            theta_matrix: Theta parameter matrix (num_targets, num_targets)
             
         Returns:
-            np.ndarray: Theta-lines (T, n_targets)
+            np.ndarray: Theta-lines (T, num_targets)
         """
         # θ-line = Θ @ detrended_data.T
         # Each row of theta_matrix multiplied by each column of detrended_data.T
-        theta_lines = detrended_data @ theta_matrix.T  # (T, n_targets)
+        theta_lines = detrended_data @ theta_matrix.T  # (T, num_targets)
         return theta_lines
     
     def train(self, 
               y_context: Union[pd.Series, np.ndarray, pd.DataFrame], 
-              x_context: Union[pd.Series, np.ndarray] = None, 
               y_target: Union[pd.Series, np.ndarray, pd.DataFrame] = None, 
-              x_target: Union[pd.Series, np.ndarray] = None, 
               y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None,
               **kwargs
     ) -> 'MultivariateTheta':
         """
@@ -179,11 +173,8 @@ class MultivariateTheta(BaseModel):
         
         Args:
             y_context: Historical target values (DataFrame for multivariate, Series for univariate)
-            x_context: Historical exogenous features (ignored by this model)
             y_target: Target values for validation (ignored during training)
-            x_target: Future exogenous features (ignored during training)
             y_start_date: Start date for y_context (optional)
-            x_start_date: Start date for x_context (optional)
         
         Returns:
             self: The fitted model instance
@@ -191,29 +182,20 @@ class MultivariateTheta(BaseModel):
         # Convert input to numpy array
         if isinstance(y_context, pd.DataFrame):
             # Multivariate case - use all columns
-            target_data = y_context.values  # (T, n_targets)
-            # target_cols should already be set from config, validate consistency
-            if self.target_cols and len(y_context.columns) > 0:
-                expected_cols = set(self.target_cols)
-                actual_cols = set(y_context.columns)
-                if expected_cols != actual_cols:
-                    raise ValueError(f"Data columns {actual_cols} don't match configured target_cols {expected_cols}")
+            target_data = y_context.values  # (T, num_targets)
         elif isinstance(y_context, pd.Series):
             # Univariate case - reshape to 2D
             target_data = y_context.values.reshape(-1, 1)
-            # For univariate case, validate against config
-            if len(self.target_cols) != 1:
-                raise ValueError(f"Expected 1 target column for univariate data, but config has {len(self.target_cols)}: {self.target_cols}")
         else:
             # Numpy array case
             target_data = y_context
             if target_data.ndim == 1:
                 target_data = target_data.reshape(-1, 1)
         
-        # Calculate n_targets from inherited target_cols
-        self.n_targets = len(self.target_cols)
+        # Calculate num_targets from data
+        self.num_targets = target_data.shape[1]
         
-        print(f"Training Multivariate Theta with {self.n_targets} targets...")
+        print(f"Training Multivariate Theta with {self.num_targets} targets...")
         
         # Step 1: Estimate drift vector μ
         self.drift_vector = self._estimate_drift(target_data)
@@ -234,7 +216,7 @@ class MultivariateTheta(BaseModel):
         theta_lines = self._create_theta_lines(detrended_data, self.theta_matrix)
         
         # Step 5: Fit individual Theta models to each θ-line
-        for i in range(self.n_targets):
+        for i in range(self.num_targets):
             # Convert to pandas Series for sktime
             theta_line_series = pd.Series(theta_lines[:, i])
             
@@ -250,8 +232,6 @@ class MultivariateTheta(BaseModel):
         
     def predict(self, 
                 y_context: Optional[Union[pd.Series, np.ndarray, pd.DataFrame]] = None,
-                x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-                x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
                 forecast_horizon: Optional[int] = None) -> np.ndarray:
         """
         Make predictions using the trained Multivariate Theta model.
@@ -268,7 +248,7 @@ class MultivariateTheta(BaseModel):
             forecast_horizon: Number of steps to forecast
             
         Returns:
-            np.ndarray: Model predictions with shape (forecast_steps, n_targets)
+            np.ndarray: Model predictions with shape (forecast_steps, num_targets)
         """
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
@@ -284,9 +264,9 @@ class MultivariateTheta(BaseModel):
         forecast_steps = len(fh)
         
         # Get predictions from each individual Theta model
-        all_predictions = np.zeros((forecast_steps, self.n_targets))
+        all_predictions = np.zeros((forecast_steps, self.num_targets))
         
-        for i in range(self.n_targets):
+        for i in range(self.num_targets):
             # Get forecast from individual model
             theta_forecast = self.univariate_models[i].predict(fh=fh)
             
@@ -307,12 +287,10 @@ class MultivariateTheta(BaseModel):
         """
         params = {
             'sp': self.sp,
-            'target_cols': self.target_cols,
-            'n_targets': self.n_targets,
+            'num_targets': self.num_targets,
             'use_reduced_rank': self.use_reduced_rank,
             'theta_method': self.theta_method,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss,
+            'training_loss': self.training_loss,
             'forecast_horizon': self.forecast_horizon
         }
         
@@ -339,8 +317,6 @@ class MultivariateTheta(BaseModel):
             else:
                 # Update config if parameter not found in instance attributes
                 self.config[key] = value
-        
-        # Note: target_cols is inherited from parent class and shouldn't be modified
         
         # If model parameters changed, reset the fitted model
         if model_params_changed and self.is_fitted:
@@ -372,8 +348,7 @@ class MultivariateTheta(BaseModel):
             'theta_matrix': self.theta_matrix,
             'drift_vector': self.drift_vector,
             'univariate_models': self.univariate_models,
-            'target_cols': self.target_cols,
-            'n_targets': self.n_targets,
+            'num_targets': self.num_targets,
             'sp': self.sp,
             'use_reduced_rank': self.use_reduced_rank,
             'theta_method': self.theta_method
@@ -401,8 +376,7 @@ class MultivariateTheta(BaseModel):
         self.theta_matrix = model_data['theta_matrix']
         self.drift_vector = model_data['drift_vector']
         self.univariate_models = model_data['univariate_models']
-        self.target_cols = model_data['target_cols']
-        self.n_targets = model_data['n_targets']
+        self.num_targets = model_data['num_targets']
         self.sp = model_data['sp']
         self.use_reduced_rank = model_data['use_reduced_rank']
         self.theta_method = model_data['theta_method']
@@ -417,7 +391,7 @@ class MultivariateTheta(BaseModel):
         Args:
             y_true: True target values
             y_pred: Predicted values
-            loss_function: Name of the loss function to use (defaults to primary_loss)
+            loss_function: Name of the loss function to use (defaults to training_loss)
             
         Returns:
             Dict[str, float]: Dictionary of computed loss metrics
@@ -435,10 +409,10 @@ class MultivariateTheta(BaseModel):
         self._last_y_pred = y_pred
         
         # For multivariate data, compute loss for each target and average
-        if y_true.ndim == 2 and y_pred.ndim == 2 and self.n_targets > 1:
+        if y_true.ndim == 2 and y_pred.ndim == 2 and self.num_targets > 1:
             # Multivariate case - compute loss for each target and average
             all_metrics = {}
-            for i in range(min(y_true.shape[1], y_pred.shape[1], self.n_targets)):
+            for i in range(min(y_true.shape[1], y_pred.shape[1], self.num_targets)):
                 target_true = y_true[:, i]
                 target_pred = y_pred[:, i]
                 

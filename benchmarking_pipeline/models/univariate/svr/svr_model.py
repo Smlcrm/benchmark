@@ -46,7 +46,7 @@ class SvrModel(BaseModel):
             y.append(y_series[i+lookback_window:i+lookback_window+forecast_horizon])
         return np.array(X), np.array(y)
 
-    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'SvrModel':
+    def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'SvrModel':
         """
         Train the SVR model for direct multi-output forecasting using MultiOutputRegressor.
         """
@@ -55,42 +55,28 @@ class SvrModel(BaseModel):
         if y_context is None:
             raise ValueError("y_context (target series) must be provided for training.")
         # Combine context and target for full training series if y_target is provided
+        # Ensure both arrays are 1D before concatenation
+        if isinstance(y_context, (pd.Series, pd.DataFrame)):
+            y_context = y_context.values.flatten()
+        elif isinstance(y_context, np.ndarray) and y_context.ndim > 1:
+            y_context = y_context.flatten()
+            
         if y_target is not None:
             if isinstance(y_target, (pd.Series, pd.DataFrame)):
                 y_target = y_target.values.flatten()
+            elif isinstance(y_target, np.ndarray) and y_target.ndim > 1:
+                y_target = y_target.flatten()
             y_series = np.concatenate([y_context, y_target])
         else:
-            y_series = y_context if not isinstance(y_context, (pd.Series, pd.DataFrame)) else y_context.values.flatten()
+            y_series = y_context
         X, y = self._create_features_targets(y_series, self.lookback_window, self.forecast_horizon)
         print(f"[DEBUG][SVR] Training X shape: {X.shape}, y shape: {y.shape}")
         
-        # Handle NaNs in training data
-        if np.isnan(X).any() or np.isnan(y).any():
-            print("[WARNING][SVR] NaNs found in training data! Attempting to fix...")
-            X = np.nan_to_num(X, nan=0.0)
-            y = np.nan_to_num(y, nan=0.0)
-        
-        try:
-            # Scale features (time index is not used; features are lagged values)
-            self.scaler.fit(X)
-            X_scaled = self.scaler.transform(X)
-            self.model.fit(X_scaled, y)
-            self.is_fitted = True
-        except Exception as e:
-            print(f"[ERROR][SVR] Training failed: {e}")
-            # Try with more robust parameters
-            try:
-                # Use more conservative SVR parameters
-                base_svr = SVR(kernel='rbf', C=1.0, epsilon=0.1, gamma='scale')
-                self.model = MultiOutputRegressor(base_svr)
-                self.scaler.fit(X)
-                X_scaled = self.scaler.transform(X)
-                self.model.fit(X_scaled, y)
-                self.is_fitted = True
-                print("[INFO][SVR] Training succeeded with fallback parameters")
-            except Exception as e2:
-                print(f"[ERROR][SVR] Fallback training also failed: {e2}")
-                raise ValueError(f"SVR training failed: {e}")
+        # Scale features (time index is not used; features are lagged values)
+        self.scaler.fit(X)
+        X_scaled = self.scaler.transform(X)
+        self.model.fit(X_scaled, y)
+        self.is_fitted = True
         
         return self
 
@@ -104,11 +90,7 @@ class SvrModel(BaseModel):
         print(f"[DEBUG][SVR] Initial y_context length: {len(y_context)}, lookback_window: {self.lookback_window}")
         if len(y_context) < self.lookback_window:
             raise ValueError(f"y_context too short: {len(y_context)} < lookback_window {self.lookback_window}")
-        # Convert to numpy array for NaN checking
-        y_context_array = np.array(y_context) if not isinstance(y_context, np.ndarray) else y_context
-        if np.isnan(y_context_array).any():
-            raise ValueError("NaNs in initial y_context!")
-        
+
         preds = []
         context = np.array(y_context).flatten().tolist()
         total_steps = len(y_target)
@@ -116,41 +98,20 @@ class SvrModel(BaseModel):
         
         while steps_done < total_steps:
             steps = min(self.forecast_horizon, total_steps - steps_done)
-            X_pred = np.array(context[-self.lookback_window:]).reshape(1, -1)
+            X_pred = np.array(context[-self.lookback_window:]).reshape(1, -1)              
+            X_pred_scaled = self.scaler.transform(X_pred)
+            pred = self.model.predict(X_pred_scaled).flatten()
             
-            # Check for NaNs and handle them
-            if np.isnan(X_pred).any():
-                print("[WARNING][SVR] NaNs found in prediction input! Attempting to fix...")
-                # Replace NaNs with the last valid value or 0
-                X_pred = np.nan_to_num(X_pred, nan=0.0)
-            
-            try:
-                X_pred_scaled = self.scaler.transform(X_pred)
-                pred = self.model.predict(X_pred_scaled).flatten()
-                
-                # Check for NaNs in predictions and handle them
-                if np.isnan(pred).any():
-                    print("[WARNING][SVR] NaNs in predictions! Replacing with last valid value or 0")
-                    pred = np.nan_to_num(pred, nan=0.0)
-                
-                print(f"[DEBUG][SVR] Rolling predict X_pred shape: {X_pred.shape}, pred shape: {pred.shape}")
-                # Only take as many steps as needed
-                pred = pred[:steps]
-                preds.extend(pred)
-                context.extend(pred)
-                steps_done += steps
-                
-            except Exception as e:
-                print(f"[ERROR][SVR] Prediction failed: {e}")
-                # Fallback: use simple prediction (last value repeated)
-                fallback_pred = [context[-1]] * steps
-                preds.extend(fallback_pred)
-                context.extend(fallback_pred)
-                steps_done += steps
+            print(f"[DEBUG][SVR] Rolling predict X_pred shape: {X_pred.shape}, pred shape: {pred.shape}")
+            # Only take as many steps as needed
+            pred = pred[:steps]
+            preds.extend(pred)
+            context.extend(pred)
+            steps_done += steps
         
         return np.array(preds)
 
-    def predict(self, y_context=None, y_target=None, x_context=None, x_target=None, **kwargs) -> np.ndarray:
+    def predict(self, y_context=None, y_target=None, **kwargs) -> np.ndarray:
         """
         Make direct multi-output predictions using the trained SVR model.
         If y_target is provided, use rolling_predict to predict the entire length autoregressively.
@@ -160,19 +121,13 @@ class SvrModel(BaseModel):
             raise ValueError("Model is not trained yet. Call train() first.")
         if y_context is None:
             raise ValueError("y_context must be provided to determine prediction context.")
-        if y_target is not None:
-            # Use rolling prediction to cover the full test set
-            preds = self.rolling_predict(y_context, y_target)
-            print(f"[DEBUG][SVR] Final rolling preds shape: {preds.shape}")
-            return preds
-        # Use the last lookback_window values as features for a single multi-output prediction
-        if isinstance(y_context, (pd.Series, pd.DataFrame)):
-            y_context = y_context.values.flatten()
-        X_pred = np.array(y_context[-self.lookback_window:]).reshape(1, -1)
-        X_pred_scaled = self.scaler.transform(X_pred)
-        preds = self.model.predict(X_pred_scaled)
-        print(f"[DEBUG][SVR] Single predict X_pred shape: {X_pred.shape}, preds shape: {preds.shape}")
-        return preds  # shape: (1, forecast_horizon)
+        if y_target is None:
+            raise ValueError("y_target is required to determine prediction length. No forecast_horizon fallback allowed.")
+        
+        # Use rolling prediction to cover the full test set
+        preds = self.rolling_predict(y_context, y_target)
+        print(f"[DEBUG][SVR] Final rolling preds shape: {preds.shape}")
+        return preds
 
     def get_params(self) -> Dict[str, Any]:
         """

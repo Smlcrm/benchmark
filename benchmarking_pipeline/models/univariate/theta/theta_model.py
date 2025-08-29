@@ -1,9 +1,7 @@
 """
 Theta model implementation.
 
-#HANDLING: This model needs to be updated to match the new interface with y_context, x_context, y_target, x_target parameters.
-
-Updated : Updated to match the new interface with y_context, x_context, y_target, x_target parameters.
+This model implements the Theta method for time series forecasting using sktime's ThetaForecaster.
 """
 
 import os
@@ -22,12 +20,11 @@ class ThetaModel(BaseModel):
         Args:
             config: Configuration dictionary for model parameters.
                     Example Format:
-                    {'sp': 12, 'loss_function': 'mae', 'forecast_horizon': 10} - for monthly data with yearly seasonality.   
+                    {'sp': 12, 'forecast_horizon': 10} - for monthly data with yearly seasonality.   
             config_file: Path to a JSON configuration file.
         """
         super().__init__(config, config_file)
         self.sp = self.config.get('sp', 1)
-        self.loss_function = self.config.get('loss_function', 'mae')
         # forecast_horizon is inherited from parent class (BaseModel)
         self.model = None
         
@@ -42,11 +39,7 @@ class ThetaModel(BaseModel):
 
     def train(self, 
               y_context: Union[pd.Series, np.ndarray], 
-              x_context: Union[pd.Series, np.ndarray] = None, 
               y_target: Union[pd.Series, np.ndarray] = None, 
-              x_target: Union[pd.Series, np.ndarray] = None, 
-              y_start_date: Optional[str] = None,
-              x_start_date: Optional[str] = None,
               **kwargs
     ) -> 'ThetaModel':
         """
@@ -55,11 +48,7 @@ class ThetaModel(BaseModel):
         
         Args:
             y_context: Historical target time series values (pd.Series or np.ndarray).
-            x_context: Historical exogenous features (ignored by this univariate model).
             y_target: Target values for validation (ignored during training).
-            x_target: Future exogenous features (ignored during training).
-            y_start_date: Start date for y_context (optional).
-            x_start_date: Start date for x_context (optional).
         
         Returns:
             self: The fitted model instance.
@@ -68,30 +57,34 @@ class ThetaModel(BaseModel):
             self._build_model()
             
         if not isinstance(y_context, pd.Series):
+            # Handle both 1D and 2D input data
+            if isinstance(y_context, np.ndarray) and y_context.ndim == 2:
+                # Extract the single column from 2D array
+                y_context = y_context[:, 0]
+            elif hasattr(y_context, 'values') and hasattr(y_context.values, 'ndim') and y_context.values.ndim == 2:
+                # Handle pandas DataFrame or similar
+                y_context = y_context.values[:, 0]
             # sktime works best with Pandas Series with a proper index
             y_context = pd.Series(y_context)
             
-        print(f"Fitting ThetaForecaster with parameters: {self.model.get_params()}...")
-        # Theta is a univariate method, so we only use y_context and ignore x_context
-        self.model.fit(y=y_context, X=x_context)  # X is ignored by ThetaForecaster
+        # Theta is a univariate method, so we only use y_context
+        self.model.fit(y=y_context)  # No exogenous variables
         self.is_fitted = True
-        print("Training complete.")
         return self
         
     def predict(self, 
-                y_context: Optional[Union[pd.Series, np.ndarray]] = None,
-                x_context: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-                x_target: Optional[Union[pd.Series, pd.DataFrame, np.ndarray]] = None,
-                forecast_horizon: Optional[int] = None) -> np.ndarray:
+                y_context: Union[pd.Series, np.ndarray], 
+                y_target: Union[pd.Series, np.ndarray] = None,
+                forecast_horizon: Optional[int] = None,
+                **kwargs) -> np.ndarray:
         """
         Make predictions using the trained Theta model.
         
         Args:
             y_context: Recent/past target values (ignored by Theta - uses training data).
-            x_context: Recent/past exogenous variables (ignored by univariate model).
-            x_target: Future exogenous variables for forecast horizon (ignored by univariate model,
-                     but used to determine forecast length if forecast_horizon not provided).
+            y_target: Used to determine the number of steps to forecast (ignored by Theta).
             forecast_horizon: Number of steps to forecast (defaults to model config if not provided).
+            **kwargs: Additional keyword arguments for compatibility.
             
         Returns:
             np.ndarray: Model predictions with shape (n_samples, forecast_horizon).
@@ -99,13 +92,12 @@ class ThetaModel(BaseModel):
         if not self.is_fitted:
             raise ValueError("Model is not trained yet. Call train() first.")
         
-        # Determine forecast horizon
-        if forecast_horizon is not None:
-            fh = np.arange(1, forecast_horizon + 1)
-        elif x_target is not None:
-            fh = np.arange(1, len(x_target) + 1)
-        else:
-            fh = np.arange(1, self.forecast_horizon + 1)
+        # Determine forecast horizon from y_target
+        if y_target is None:
+            raise ValueError("y_target is required to determine prediction length. No forecast_horizon fallback allowed.")
+        
+        forecast_steps = len(y_target)
+        fh = np.arange(1, forecast_steps + 1)
         
         # The sktime predict method uses the forecasting horizon (fh)
         predictions = self.model.predict(fh=fh)
@@ -118,9 +110,7 @@ class ThetaModel(BaseModel):
         """
         return {
             'sp': self.sp,
-            'loss_function': self.loss_function,
-            'forecast_horizon': self.forecast_horizon,
-            'target_cols': self.target_cols
+            'forecast_horizon': self.forecast_horizon
         }
 
     def set_params(self, **params: Dict[str, Any]) -> 'ThetaModel':
@@ -129,7 +119,10 @@ class ThetaModel(BaseModel):
         """
         model_params_changed = False
         for key, value in params.items():
-            if hasattr(self, key):
+            if key == 'dataset':
+                # Skip dataset parameter - it's not a Theta model parameter
+                continue
+            elif hasattr(self, key):
                 # Check if this is a model parameter that requires refitting
                 if key in ['sp'] and getattr(self, key) != value:
                     model_params_changed = True
@@ -164,9 +157,7 @@ class ThetaModel(BaseModel):
             'model': self.model,
             'config': self.config,
             'sp': self.sp,
-            'loss_function': self.loss_function,
             'forecast_horizon': self.forecast_horizon,
-            'target_cols': self.target_cols,
             'is_fitted': self.is_fitted
         }
             
@@ -190,9 +181,7 @@ class ThetaModel(BaseModel):
         self.model = model_state['model']
         self.config = model_state.get('config', self.config)
         self.sp = model_state.get('sp', self.sp)
-        self.loss_function = model_state.get('loss_function', self.loss_function)
         self.forecast_horizon = model_state.get('forecast_horizon', self.forecast_horizon)
-        self.target_cols = model_state.get('target_cols', self.target_cols)
         self.is_fitted = model_state.get('is_fitted', False)
         
         return self

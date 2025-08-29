@@ -42,8 +42,7 @@ class ExponentialSmoothingModel(BaseModel):
         self.damped_trend = _cast_param('damped_trend', self.config.get('damped_trend', False))
         self.model_ = None
         self.is_fitted = False
-        self.loss_functions = self.config.get('loss_functions', ['mae'])
-        self.primary_loss = self.config.get('primary_loss', self.loss_functions[0])
+        self.training_loss = self.config.get('training_loss', 'mae')
         self.forecast_horizon = _cast_param('forecast_horizon', self.config.get('forecast_horizon', 1))
 
     def train(self, y_context: Union[pd.Series, np.ndarray], y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, np.ndarray] = None, x_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> 'ExponentialSmoothingModel':
@@ -76,7 +75,7 @@ class ExponentialSmoothingModel(BaseModel):
         self.is_fitted = True
         return self
 
-    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, x_context: Union[pd.Series, pd.DataFrame, np.ndarray] = None, x_target: Union[pd.Series, pd.DataFrame, np.ndarray] = None, **kwargs) -> np.ndarray:
+    def predict(self, y_context: Union[pd.Series, np.ndarray] = None, y_target: Union[pd.Series, np.ndarray] = None, **kwargs) -> np.ndarray:
         print(f"[ExponentialSmoothing predict] y_context type: {type(y_context)}, shape: {getattr(y_context, 'shape', 'N/A')}")
         print(f"[ExponentialSmoothing predict] y_target type: {type(y_target)}, shape: {getattr(y_target, 'shape', 'N/A')}")
         if not self.is_fitted:
@@ -85,7 +84,12 @@ class ExponentialSmoothingModel(BaseModel):
             raise ValueError("y_target must be provided to determine prediction length.")
         forecast_steps = len(y_target)
         forecast = self.model_.forecast(steps=forecast_steps)
-        return forecast.reshape(1, -1)
+        # Ensure numpy array for consistent reshaping
+        if hasattr(forecast, 'values'):
+            forecast_array = forecast.values
+        else:
+            forecast_array = np.array(forecast)
+        return forecast_array.reshape(1, -1)
 
     def get_params(self) -> Dict[str, Any]:
         """
@@ -96,8 +100,7 @@ class ExponentialSmoothingModel(BaseModel):
             'seasonal': self.seasonal,
             'seasonal_periods': self.seasonal_periods,
             'damped_trend': self.damped_trend,
-            'loss_functions': self.loss_functions,
-            'primary_loss': self.primary_loss,
+            'training_loss': self.training_loss,
             'forecast_horizon': self.forecast_horizon,
             'is_fitted': self.is_fitted
         }

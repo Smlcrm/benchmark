@@ -1,7 +1,14 @@
 """
-Model Router for handling model routing based on target_cols configuration.
+Model Router for handling model routing based on inferred target count.
 
-This module provides intelligent routing for models based on their location and the number of target columns.
+This module provides routing for models based on their location and whether the dataset
+has one target (univariate) or multiple targets (multivariate).
+All data is treated as multivariate where univariate is just num_targets == 1.
+
+The router automatically discovers models from the folder structure and categorizes them into:
+- anyvariate: Models that can handle both univariate and multivariate data
+- multivariate: Models with separate implementations for univariate/multivariate
+- univariate_only: Models that only support univariate data
 """
 
 import os
@@ -11,16 +18,20 @@ from pathlib import Path
 
 class ModelRouter:
     """
-    Routes model requests to appropriate folders based on target_cols configuration.
+    Routes model requests to appropriate folders based on inferred target count.
     
     Handles three cases:
     1. anyvariate models: Route to anyvariate implementation (handles both variants)
-    2. models with separate implementations: Route to univariate/multivariate based on target_cols count
+    2. models with separate implementations: Automatically detect variant based on target count:
+       - num_targets == 1: Use univariate variant (fails if not available)
+       - num_targets > 1: Use multivariate variant
     3. univariate-only models: Route to univariate implementation
+    
+    All data is treated as multivariate where univariate is just num_targets == 1.
     """
     
     def __init__(self):
-        # Auto-detect available models from folder structure
+        """Initialize the router and discover available models."""
         self.anyvariate_models: Set[str] = set()
         self.multivariate_models: Set[str] = set()
         self.univariate_models: Set[str] = set()
@@ -99,10 +110,11 @@ class ModelRouter:
                 # Check both multivariate and univariate implementations
                 multivariate_path = models_dir / "multivariate" / model_name / f"{model_name}_model.py"
                 univariate_path = models_dir / "univariate" / model_name / f"{model_name}_model.py"
+                
                 if not multivariate_path.exists():
                     raise ValueError(f"Multivariate model '{model_name}' missing required file: {multivariate_path}")
                 if not univariate_path.exists():
-                    raise ValueError(f"Multivariate model '{model_name}' missing required file: {univariate_path}")
+                    raise ValueError(f"Multivariate model '{model_name}' missing univariate implementation: {univariate_path}")
             elif model_name in self.univariate_models:
                 model_path = models_dir / "univariate" / model_name / f"{model_name}_model.py"
                 if not model_path.exists():
@@ -124,93 +136,102 @@ class ModelRouter:
             'arima'
             >>> router.parse_model_spec('chronos')
             'chronos'
-            >>> router.parse_model_spec('prophet')
-            'prophet'
         """
         return model_spec.strip()
     
-    def get_model_path(self, model_name: str, config: Dict[str, Any]) -> Tuple[str, str, str]:
+    def get_model_path_by_target_count(self, model_name: str, num_targets: int) -> Tuple[str, str, str]:
         """
-        Get the appropriate model path, file name, and class name based on target_cols in config.
+        Get the model path, file name, and class name based on target count.
         
         Args:
-            model_name: Name of the model (e.g., 'arima', 'chronos')
-            config: Configuration dictionary containing dataset.target_cols
+            model_name: Name of the model
+            num_targets: Number of targets (1 for univariate, >1 for multivariate)
             
         Returns:
             Tuple of (folder_path, file_name, class_name)
             
-        Examples:
-            >>> router = ModelRouter()
-            >>> router.get_model_path('arima', {'dataset': {'target_cols': ['y']}})
-            ('benchmarking_pipeline/models/univariate/arima', 'arima_model', 'ArimaModel')
-            >>> router.get_model_path('arima', {'dataset': {'target_cols': ['y', 'z']}})
-            ('benchmarking_pipeline/models/multivariate/arima', 'arima_model', 'ArimaModel')
+        Note:
+            All data is treated as multivariate where univariate is just num_targets == 1.
+            The routing logic automatically detects variant:
+            - num_targets == 1: univariate variant (fails if not available)
+            - num_targets > 1: multivariate variant
         """
-        # Validate target_cols is present in dataset config
-        dataset_cfg = config.get('dataset', {})
-        target_cols = dataset_cfg.get('target_cols')
-        if not target_cols:
-            raise ValueError(f"target_cols must be defined in dataset configuration for model '{model_name}'")
+        # Validate num_targets
+        if num_targets < 1:
+            raise ValueError(f"num_targets must be >= 1, got {num_targets}")
         
-        # Auto-detect variant based on target_cols
-        variant = 'multivariate' if len(target_cols) > 1 else 'univariate'
-        
-        # Handle anyvariate models
+        # Handle anyvariate models (can handle both univariate and multivariate)
         if model_name in self.anyvariate_models:
             folder_path = f"benchmarking_pipeline/models/anyvariate/{model_name}"
             file_name = f"{model_name}_model"
-            class_name = self._generate_class_name(model_name)
+            class_name = self._generate_class_name(model_name, 'anyvariate')
             return folder_path, file_name, class_name
         
         # Handle models with separate multivariate implementations
         elif model_name in self.multivariate_models:
-            if variant == 'multivariate':
-                folder_path = f"benchmarking_pipeline/models/multivariate/{model_name}"
+            # Automatically detect variant based on num_targets
+            if num_targets == 1:
+                # Check if univariate implementation exists
+                univariate_path = Path(f"benchmarking_pipeline/models/univariate/{model_name}")
+                if univariate_path.exists() and (univariate_path / f"{model_name}_model.py").exists():
+                    folder_path = f"benchmarking_pipeline/models/univariate/{model_name}"
+                    class_name = self._generate_class_name(model_name, 'univariate')
+                    print(f"[ROUTER] Routing {model_name} with {num_targets} target(s) -> univariate variant")
+                else:
+                    # Fail fast: no fallback to multivariate
+                    raise ValueError(f"Model '{model_name}' requested for univariate data (num_targets=1) but univariate implementation not found at {univariate_path}")
             else:
-                folder_path = f"benchmarking_pipeline/models/univariate/{model_name}"
+                # Use multivariate for actual multivariate data
+                folder_path = f"benchmarking_pipeline/models/multivariate/{model_name}"
+                class_name = self._generate_class_name(model_name, 'multivariate')
+                print(f"[ROUTER] Routing {model_name} with {num_targets} target(s) -> multivariate variant")
             
             file_name = f"{model_name}_model"
-            class_name = self._generate_class_name(model_name)
             return folder_path, file_name, class_name
         
         # Handle univariate-only models
         elif model_name in self.univariate_models:
-            if variant == 'multivariate':
+            # Univariate models only support univariate data
+            if num_targets > 1:
                 raise ValueError(f"Model '{model_name}' does not support multivariate variant. "
                                f"Available variants: univariate")
             
             folder_path = f"benchmarking_pipeline/models/univariate/{model_name}"
             file_name = f"{model_name}_model"
-            class_name = self._generate_class_name(model_name)
+            class_name = self._generate_class_name(model_name, 'univariate')
             return folder_path, file_name, class_name
         
         else:
-            raise ValueError(f"Unknown model '{model_name}'. Available models: "
-                           f"{sorted(self.anyvariate_models | self.multivariate_models | self.univariate_models)}")
+            available_models = sorted(self.anyvariate_models | self.multivariate_models | self.univariate_models)
+            raise ValueError(f"Unknown model '{model_name}'. Available models: {available_models}")
     
-    def _generate_class_name(self, model_name: str) -> str:
+    def _generate_class_name(self, model_name: str, variant: str) -> str:
         """
-        Generate the class name by dynamically discovering it from the model file.
+        Generate the class name for a model by reading the actual model file.
         
         Args:
             model_name: Name of the model
+            variant: The variant to use ('univariate', 'multivariate', or 'anyvariate')
             
         Returns:
-            Class name as defined in the model file
-            
-        Raises:
-            ValueError: If the class name cannot be determined
+            The class name found in the model file
         """
         models_dir = Path(__file__).parent
         
-        # Determine which folder to check based on model category
-        if model_name in self.anyvariate_models:
+        # Determine which file to read based on variant
+        if variant == 'anyvariate' or model_name in self.anyvariate_models:
             model_file = models_dir / "anyvariate" / model_name / f"{model_name}_model.py"
-        elif model_name in self.multivariate_models:
-            # For multivariate models, check the multivariate implementation for class name
+        elif variant == 'multivariate':
+            # Always read from multivariate folder when variant is explicitly multivariate
             model_file = models_dir / "multivariate" / model_name / f"{model_name}_model.py"
+        elif variant == 'univariate':
+            # Always read from univariate folder when variant is explicitly univariate
+            model_file = models_dir / "univariate" / model_name / f"{model_name}_model.py"
+        elif model_name in self.multivariate_models:
+            # For models in multivariate_models set, use the specified variant
+            model_file = models_dir / variant / model_name / f"{model_name}_model.py"
         elif model_name in self.univariate_models:
+            # For models in univariate_models set, default to univariate
             model_file = models_dir / "univariate" / model_name / f"{model_name}_model.py"
         else:
             raise ValueError(f"Unknown model '{model_name}'")
@@ -261,7 +282,7 @@ class ModelRouter:
                 return False
             
             # Check if folder exists
-            folder_path, _, _ = self.get_model_path(model_name, {'dataset': {'target_cols': ['y']}})
+            folder_path, _, _ = self.get_model_path_by_target_count(model_name, 1)
             return os.path.exists(folder_path)
             
         except (ValueError, Exception):
@@ -317,21 +338,20 @@ class ModelRouter:
                 'univariate': f"benchmarking_pipeline/models/univariate/{model_name}"
             }
 
-        
         return info
     
-    def get_model_path_with_auto_detection(self, model_name: str, config: Dict[str, Any]) -> Tuple[str, str, str]:
+    def get_model_path_with_auto_detection(self, model_name: str, num_targets: int) -> Tuple[str, str, str]:
         """
-        Get model path with automatic variant detection based on target_cols in dataset config.
-        
+        Backward-compatible wrapper for automatic variant detection based on inferred num_targets.
+
         Args:
             model_name: Name of the model
-            config: Configuration dictionary containing dataset.target_cols
-            
+            num_targets: Number of target variables in the dataset
+
         Returns:
             Tuple of (folder_path, file_name, class_name)
         """
-        return self.get_model_path(model_name, config)
+        return self.get_model_path_by_target_count(model_name, num_targets)
 
 
 # Global router instance

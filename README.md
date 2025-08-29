@@ -1,130 +1,374 @@
-# Benchmarking Pipeline
+# Time Series Forecasting Benchmarking Pipeline
 
-A flexible and modular benchmarking pipeline for machine learning models.
+A comprehensive framework for benchmarking time series forecasting models, including both traditional statistical models and modern foundation models.
+
+## Overview
+
+This project provides a unified benchmarking framework for evaluating the performance of various time series forecasting models. It supports:
+
+- **Traditional Models**: ARIMA, LSTM, XGBoost, SVR, Prophet, Random Forest, Theta, DeepAR, TabPFN
+- **Foundation Models**: Chronos, LagLlama, Moirai, TimesFM, Tiny Time Mixer, Toto
+- **Univariate and Multivariate Forecasting**: Automatic routing based on data characteristics
+- **Comprehensive Evaluation**: Multiple metrics and visualization tools
+- **Hyperparameter Tuning**: Automated optimization of model parameters
 
 ## Project Structure
 
 ```
 benchmarking_pipeline/
-├── configs/                # YAML/JSON files for experiment configuration (models, datasets, hyperparameters)
-├── datasets/               # Datasets (organized in chunks for time series experiments)
-├── models/                 # Model implementations (each model as a Python class)
-│   ├── arima_model.py          # ARIMA model wrapper
-│   ├── croston_classic_model.py# Croston's method for intermittent demand
-│   ├── exponential_smoothing_model.py # Exponential Smoothing model
-│   ├── lstm_model.py           # LSTM (deep learning) model
-│   ├── prophet_model.py        # Prophet model
-│   ├── random_forest_model.py  # Random Forest regressor
-│   ├── SVR_model.py            # Support Vector Regression
-│   ├── theta_model.py          # Theta model (sktime)
-│   ├── xgboost_model.py        # XGBoost regressor
-│   └── ...                     # Other models
-├── pipeline/                # Core pipeline components
-│   ├── data_loader.py           # Loads datasets, handles chunking and splits
-│   ├── preprocessor.py          # Data preprocessing (normalization, missing values, outliers)
-│   ├── feature_extraction.py    # Feature engineering for ML models
-│   ├── trainer.py               # Model training logic
-│   ├── evaluator.py             # Model evaluation and metrics
-│   └── logger.py                # Logging utilities (TensorBoard, CSV, etc.)
-├── trainer/                 # Hyperparameter tuning and training utilities
-│   └── hyperparameter_tuning.py # Grid/random search, evaluation logic
-├── test_plot.py             # Script to quickly plot a dataset after preprocessing
-├── run_benchmark.py         # Main script: runs the full benchmarking pipeline
-├── cli.py                   # (Optional) Command-line interface for running experiments
-└── ...                      # Other utility scripts and files
+├── __init__.py                 # Package initialization and documentation
+├── cli.py                     # Command-line interface
+├── configs/                   # Configuration files
+│   ├── all_model_multivariate.yaml
+│   ├── all_model_univariate.yaml
+│   └── CONFIG_DOCUMENTATION.md
+├── datasets/                  # Time series datasets
+│   ├── australian_electricity_demand/
+│   ├── azure_vm_traces_2017/
+│   ├── bitcoin_with_missing/
+│   ├── china_air_quality/
+│   ├── covid_deaths/
+│   ├── tourism_monthly/
+│   └── ... (many more)
+├── metrics/                   # Evaluation metrics
+│   ├── __init__.py
+│   ├── crps.py              # Continuous Ranked Probability Score
+│   ├── interval_score.py    # Interval score for prediction intervals
+│   └── ... (other metrics)
+├── models/                    # Model implementations
+│   ├── __init__.py
+│   ├── base_model.py        # Base class for traditional models
+│   ├── foundation_model.py  # Base class for foundation models
+│   ├── model_router.py      # Intelligent model routing
+│   ├── univariate/          # Univariate-only models
+│   │   ├── arima/
+│   │   ├── lstm/
+│   │   ├── prophet/
+│   │   └── ... (other models)
+│   ├── multivariate/        # Models with separate multivariate implementations
+│   │   ├── arima/
+│   │   ├── lstm/
+│   │   ├── xgboost/
+│   │   └── ... (other models)
+│   └── anyvariate/          # Models that handle both univariate and multivariate
+│       ├── chronos/         # Amazon Chronos foundation model
+│       ├── lagllama/        # LagLlama foundation model
+│       ├── moirai/          # Moirai foundation model
+│       └── ... (other models)
+├── pipeline/                  # Core pipeline components
+│   ├── __init__.py
+│   ├── data_loader.py       # Data loading and preprocessing
+│   ├── data_types.py        # Data structures and types
+│   ├── evaluator.py         # Model evaluation
+│   ├── logger.py            # Logging and metrics storage
+│   ├── preprocessor.py      # Data preprocessing
+│   ├── trainer.py           # Model training and hyperparameter tuning
+│   ├── visualizer.py        # Plots and visualizations
+│   └── ... (other components)
+├── trainer/                   # Training utilities
+│   ├── foundation_model_tuning.py
+│   └── hyperparameter_tuning.py
+└── utils/                     # Utility functions
+    ├── __init__.py
+    └── config_validator.py   # Configuration validation
 ```
 
-### Key Files Explained
+## Key Features
 
-- **run_benchmark.py**: Main entry point for running the benchmarking pipeline. Loads config, runs models, logs results.
-- **test_plot.py**: Standalone script to visualize a dataset (after preprocessing) for quick inspection.
-- **configs/**: Contains YAML/JSON files specifying which models to run, their hyperparameters, and dataset details.
-- **models/**: Contains Python classes for each supported model. Each model implements a common interface for training and prediction.
-- **pipeline/data_loader.py**: Loads datasets, handles chunking, and splits into train/val/test.
-- **pipeline/preprocessor.py**: Handles normalization, missing value imputation, and outlier removal.
-- **pipeline/feature_extraction.py**: Creates features for ML models (e.g., lagged values for XGBoost, Random Forest).
-- **pipeline/trainer.py**: Contains logic for training models on the data.
-- **pipeline/evaluator.py**: Evaluates model predictions and computes metrics.
-- **pipeline/logger.py**: Handles logging of metrics and results (e.g., to TensorBoard).
-- **trainer/hyperparameter_tuning.py**: Implements grid/random search for hyperparameter optimization and final evaluation.
+### 1. Intelligent Model Routing
 
-For more details, see the docstrings in each file or explore the example configs in `benchmarking_pipeline/configs/`.
+The `ModelRouter` automatically discovers available models and routes requests based on:
+- **Data characteristics** (univariate vs multivariate)
+- **Model capabilities** (univariate-only, multivariate-only, or anyvariate)
+- **Folder structure** (automatic discovery)
+
+```python
+from benchmarking_pipeline.models import model_router
+
+# Get available models
+available = model_router.get_available_models()
+print(available)
+# Output: {'anyvariate': ['chronos', 'lagllama', 'moirai'], 
+#          'multivariate': ['arima', 'lstm', 'xgboost'], 
+#          'univariate_only': ['prophet', 'theta']}
+
+# Get model path for specific data
+folder_path, file_name, class_name = model_router.get_model_path_by_target_count(
+    'arima', num_targets=3, variant='multivariate'
+)
+```
+
+### 2. Unified Model Interface
+
+All models implement a consistent interface through base classes:
+
+- **`BaseModel`**: For traditional statistical and ML models
+- **`FoundationModel`**: For large pre-trained foundation models
+
+```python
+from benchmarking_pipeline.models import BaseModel, FoundationModel
+
+# Traditional model
+class MyModel(BaseModel):
+    def train(self, y_context, x_context=None, **kwargs):
+        # Implementation
+        pass
+    
+    def predict(self, y_context=None, x_target=None, **kwargs):
+        # Implementation
+        pass
+
+# Foundation model
+class MyFoundationModel(FoundationModel):
+    def train(self, y_context, **kwargs):
+        # Initialize pre-trained model
+        pass
+    
+    def predict(self, y_context, **kwargs):
+        # Generate predictions
+        pass
+```
+
+### 3. Comprehensive Data Handling
+
+The pipeline automatically handles:
+- **Multiple data formats** (CSV chunks with metadata)
+- **Automatic splitting** (train/validation/test)
+- **Missing data handling** (interpolation, deletion)
+- **Data normalization** (optional)
+- **Frequency alignment** (automatic detection)
+
+```python
+from benchmarking_pipeline.pipeline import DataLoader
+
+# Load data
+data_loader = DataLoader(config)
+datasets = data_loader.load_several_chunks(3)
+
+# Each dataset contains train/validation/test splits
+for dataset in datasets:
+    print(f"Train: {len(dataset.train.targets)} samples")
+    print(f"Validation: {len(dataset.validation.targets)} samples")
+    print(f"Test: {len(dataset.test.targets)} samples")
+```
+
+### 4. Flexible Configuration
+
+Configuration files support:
+- **Model-specific parameters** (hyperparameter grids)
+- **Dataset configuration** (paths, frequencies, split ratios)
+- **Evaluation settings** (metrics, validation strategies)
+- **Training parameters** (batch sizes, learning rates, epochs)
+
+```yaml
+# Example configuration
+test_type: deterministic
+dataset:
+  name: china_air_quality
+  path: datasets/china_air_quality
+  frequency: H
+  forecast_horizon: [10, 25, 50]
+  split_ratio: [0.8, 0.1, 0.1]
+  normalize: false
+  handle_missing: interpolate
+
+model:
+  # Foundation models
+  chronos:
+    model_size: ['small', 'base']
+    context_length: [8, 16]
+    num_samples: [5, 10]
+  
+  # Traditional models
+  arima:
+    p: [0, 1, 2]
+    d: [0, 1]
+    q: [0, 1, 2]
+    s: [2, 4]
+
+evaluation:
+  type: deterministic
+  metrics: [mae, rmse, mape]
+```
 
 ## Installation
 
-1. Clone the repository:
-```bash
-git clone https://github.com/Smlcrm/benchmark.git
-cd benchmark
-```
+### Prerequisites
 
-2. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+- Python 3.8+
+- Conda (recommended for environment management)
+
+### Setup
+
+1. **Clone the repository**:
+   ```bash
+   git clone <repository-url>
+   cd benchmark
+   ```
+
+2. **Install dependencies**:
+   ```bash
+   # Create conda environment
+   conda create -n sim.benchmarks python=3.9
+   conda activate sim.benchmarks
+   
+   # Install the package
+   pip install -e .
+   ```
+
+3. **Verify installation**:
+   ```bash
+   python -c "from benchmarking_pipeline import model_router; print('Installation successful!')"
+   ```
 
 ## Usage
 
-1. Create or modify a configuration file in the `configs/` directory.
+### Basic Usage
 
-2. Run the benchmark using the CLI:
-```bash
-python benchmarking_pipeline/cli.py --config benchmarking_pipeline/configs/all_model_test.yaml
+```python
+from benchmarking_pipeline.pipeline import DataLoader, Trainer
+from benchmarking_pipeline.models import model_router
+
+# Load configuration
+import yaml
+with open('configs/all_model_multivariate.yaml', 'r') as f:
+    config = yaml.safe_load(f)
+
+# Load data
+data_loader = DataLoader(config)
+datasets = data_loader.load_several_chunks(3)
+
+# Train and evaluate models
+trainer = Trainer(config)
+results = trainer.run_benchmark(datasets)
 ```
 
-## How to Run the Benchmarking Pipeline
-
-To run the benchmarking pipeline with a specific configuration file:
+### Command Line Interface
 
 ```bash
-python benchmarking_pipeline/run_benchmark.py --config benchmarking_pipeline/configs/all_model_test.yaml
+# Run benchmark with default configuration
+python -m benchmarking_pipeline.cli
+
+# Run with custom configuration
+python -m benchmarking_pipeline.cli --config configs/my_config.yaml
+
+# Specify output directory
+python -m benchmarking_pipeline.cli --output-dir results/
 ```
 
-- Replace `your_config.yaml` with the path to your desired YAML config file.
-- The config file controls which models are run, their hyperparameters, and the dataset used.
-- Results and TensorBoard logs will be saved in the `runs/` and `results/` directories.
+### Adding New Models
 
-## How to Plot a Dataset
+1. **Create model directory**:
+   ```
+   models/univariate/my_model/
+   ├── my_model_model.py
+   └── requirements.txt
+   ```
 
-To quickly visualize a dataset (after preprocessing) using the provided script:
+2. **Implement model class**:
+   ```python
+   from benchmarking_pipeline.models.base_model import BaseModel
+   
+   class MyModelModel(BaseModel):
+       def __init__(self, config=None, config_file=None):
+           super().__init__(config, config_file)
+           # Initialize model-specific parameters
+       
+       def train(self, y_context, **kwargs):
+           # Training implementation
+           pass
+       
+       def predict(self, **kwargs):
+           # Prediction implementation
+           pass
+   ```
 
-```bash
-python test_plot.py --dataset_path benchmarking_pipeline/datasets/your_dataset_folder
-```
+3. **Add to configuration**:
+   ```yaml
+   model:
+     my_model:
+       param1: [value1, value2]
+       param2: [value3, value4]
+   ```
 
-- Replace `your_dataset_folder` with the path to your dataset directory.
-- Optionally, you can pass a custom config for preprocessing:
+## Model Categories
 
-```bash
-python test_plot.py --dataset_path benchmarking_pipeline/datasets/your_dataset_folder --config benchmarking_pipeline/configs/all_model_test.yaml
-```
+### Traditional Models
 
-This will display a plot of the full time series after preprocessing.
+- **Statistical Models**: ARIMA, Theta, Seasonal Naive
+- **Machine Learning**: XGBoost, Random Forest, SVR
+- **Deep Learning**: LSTM, DeepAR
+- **Ensemble**: TabPFN
 
----
+### Foundation Models
 
-For more details on configuration options and model-specific settings, see the consolidated configuration file in `benchmarking_pipeline/configs/all_model_test.yaml` and the `CONFIG_DOCUMENTATION.md` for detailed parameter explanations.
+- **Chronos**: Amazon's time series foundation model
+- **LagLlama**: Large language model for time series
+- **Moirai**: Microsoft's foundation model for forecasting
+- **TimesFM**: Google's time series foundation model
+- **Tiny Time Mixer**: Lightweight transformer model
+- **Toto**: Multi-modal foundation model
 
-## Configuration
+## Evaluation Metrics
 
-The pipeline is configured using a single consolidated YAML file in the `configs/` directory. See `benchmarking_pipeline/configs/all_model_test.yaml` for the complete configuration.
+The framework supports various evaluation metrics:
 
-## Features
-
-- Flexible model benchmarking pipeline
-- Support for HuggingFace datasets
-- Modular preprocessing and feature extraction
-- Comprehensive logging and metrics tracking
-- Configurable model training and evaluation
+- **Point Forecast Metrics**: MAE, RMSE, MAPE, SMAPE
+- **Probabilistic Metrics**: CRPS, Interval Score
+- **Custom Metrics**: Easy to add new evaluation functions
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+1. **Follow the project structure** for consistency
+2. **Add comprehensive documentation** for new features
+3. **Include tests** for new functionality
+4. **Use type hints** for better code quality
+5. **Follow PEP 8** style guidelines
+
+## Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run specific test categories
+pytest tests/unit/
+pytest tests/integration/
+pytest tests/e2e/
+
+# Run with coverage
+pytest --cov=benchmarking_pipeline
+```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+[Add your license information here]
+
+## Citation
+
+If you use this framework in your research, please cite:
+
+```bibtex
+@software{benchmarking_pipeline,
+  title={Time Series Forecasting Benchmarking Pipeline},
+  author={[Your Name/Organization]},
+  year={2024},
+  url={[Repository URL]}
+}
+```
+
+## Support
+
+For questions and support:
+- Create an issue on GitHub
+- Check the documentation in `configs/CONFIG_DOCUMENTATION.md`
+- Review the test examples for usage patterns
+
+## Roadmap
+
+- [ ] Support for more foundation models
+- [ ] Advanced hyperparameter optimization
+- [ ] Distributed training capabilities
+- [ ] Real-time forecasting pipeline
+- [ ] Model interpretability tools
+- [ ] Automated model selection
