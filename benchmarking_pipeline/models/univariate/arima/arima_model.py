@@ -158,6 +158,12 @@ class ArimaModel(BaseModel):
         # Generate forecast
         forecast = self.model_.forecast(steps=forecast_steps, exog=exog)
         
+        # DEBUG: Show actual forecast values and compare with true values
+        print(f"[ARIMA DEBUG] Forecast type: {type(forecast)}")
+        print(f"[ARIMA DEBUG] Forecast length: {len(forecast) if hasattr(forecast, '__len__') else 'no len'}")
+        print(f"[ARIMA DEBUG] Forecast first 10 values: {forecast[:10] if hasattr(forecast, '__getitem__') else forecast}")
+        print(f"[ARIMA DEBUG] y_target first 10 values: {y_target[:10] if hasattr(y_target, '__getitem__') else y_target}")
+        
         # Store predictions and true values for evaluation (simplified like working version)
         # Convert forecast to numpy array if it's a pandas Series
         if hasattr(forecast, 'values'):
@@ -168,6 +174,12 @@ class ArimaModel(BaseModel):
         self._last_y_pred = forecast_array.reshape(1, -1)
         if y_target is not None:
             self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
+        
+        # DEBUG: Show final stored values
+        print(f"[ARIMA DEBUG] Final _last_y_pred shape: {self._last_y_pred.shape}")
+        print(f"[ARIMA DEBUG] Final _last_y_true shape: {self._last_y_true.shape}")
+        print(f"[ARIMA DEBUG] Final _last_y_pred first 5 values: {self._last_y_pred.flatten()[:5]}")
+        print(f"[ARIMA DEBUG] Final _last_y_true first 5 values: {self._last_y_true.flatten()[:5]}")
         
         return self._last_y_pred
         
