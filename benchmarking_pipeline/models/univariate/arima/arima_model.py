@@ -152,7 +152,13 @@ class ArimaModel(BaseModel):
         forecast = self.model_.forecast(steps=forecast_steps, exog=exog)
         
         # Store predictions and true values for evaluation (simplified like working version)
-        self._last_y_pred = forecast.reshape(1, -1)
+        # Convert forecast to numpy array if it's a pandas Series
+        if hasattr(forecast, 'values'):
+            forecast_array = forecast.values
+        else:
+            forecast_array = np.array(forecast)
+            
+        self._last_y_pred = forecast_array.reshape(1, -1)
         if y_target is not None:
             self._last_y_true = y_target.reshape(1, -1) if hasattr(y_target, 'reshape') else np.array(y_target).reshape(1, -1)
         
