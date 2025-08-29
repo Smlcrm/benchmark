@@ -140,9 +140,14 @@ class ArimaModel(BaseModel):
         if y_target is None:
             raise ValueError("y_target is required to determine prediction length. No forecast_horizon fallback allowed.")
         
-        # ARIMA should forecast into the future based on training data, not match existing y_target
-        # Use the configured forecast_horizon for the number of steps to predict
-        forecast_steps = self.forecast_horizon
+        # DEBUG: See what y_target actually contains
+        print(f"[ARIMA DEBUG] y_target type: {type(y_target)}")
+        print(f"[ARIMA DEBUG] y_target length: {len(y_target)}")
+        print(f"[ARIMA DEBUG] y_target shape: {y_target.shape if hasattr(y_target, 'shape') else 'no shape'}")
+        print(f"[ARIMA DEBUG] y_target first 5 values: {y_target[:5] if hasattr(y_target, '__getitem__') else y_target}")
+        
+        # Use y_target length to determine forecast steps (like working version from commit 912fceba)
+        forecast_steps = len(y_target)
         
         if forecast_steps <= 0:
             raise ValueError("Forecast horizon must be positive.")
